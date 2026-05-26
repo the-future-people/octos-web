@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { confirmPayment } from '../../api/cashier'
+import ReceiptModal from './ReceiptModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -45,12 +46,14 @@ export default function PaymentModal({ job, onClose }) {
     setError('')
   }, [job?.id])
 
+  const [receipt, setReceipt] = useState(null)
+
   const { mutate, isPending } = useMutation({
     mutationFn: (payload) => confirmPayment(job.id, payload),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
       queryClient.invalidateQueries({ queryKey: ['cashierSummary'] })
-      onClose()
+      setReceipt(res.data)
     },
     onError: (err) => {
       setError(err.response?.data?.detail || 'Payment failed. Please try again.')
@@ -102,6 +105,10 @@ export default function PaymentModal({ job, onClose }) {
   }
 
   if (!job) return null
+
+  if (receipt) {
+    return <ReceiptModal result={receipt} onClose={onClose} />
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
