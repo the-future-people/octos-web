@@ -19,18 +19,30 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
+      // Step 1 — get tokens
       const tokens = await apiLogin(email, password)
-      const user   = await getMe()
 
+      // Step 2 — save tokens to localStorage BEFORE calling getMe
+      // so the Axios interceptor can attach the token to the next request
+      localStorage.setItem('access_token',  tokens.access)
+      localStorage.setItem('refresh_token', tokens.refresh)
+
+      // Step 3 — fetch user profile
+      const user = await getMe()
+
+      // Step 4 — set global auth state
       login(tokens, user)
 
-      // Role-based redirect
+      // Step 5 — redirect based on role
       const role = user.role_name
-      if (role === 'CASHIER')        navigate('/cashier')
+      if (role === 'CASHIER')             navigate('/cashier')
       else if (role === 'BRANCH_MANAGER') navigate('/bm')
       else navigate('/')
 
     } catch (err) {
+      // Clear any partial tokens on failure
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
       setError(
         err.response?.data?.detail ||
         'Invalid email or password.'
