@@ -23,7 +23,7 @@ export default function SummaryStrip() {
   })
 
   return (
-    <div className="grid grid-cols-4 gap-4 px-6 py-4 bg-[var(--bg)] border-b border-[var(--border)] shrink-0">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-5 py-3 bg-[var(--bg)]">
       {CARDS.map(card => {
         const entry  = data?.[card.key]
         const amount = entry?.total ?? 0
