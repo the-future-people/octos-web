@@ -7,6 +7,6 @@ export const login = async (email, password) => {
 }
 
 export const getMe = async () => {
-  const { data } = await client.get('/api/v1/auth/me/')
+  const { data } = await client.get('/api/v1/accounts/me/')
   return data
 }

@@ -40,3 +40,26 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Dark mode */
+[data-theme="dark"] {
+  --bg: #141414;
+  --panel: #1c1c1c;
+  --border: #2a2a2a;
+  --border-dark: #3a3a3a;
+  --text: #f0f0ef;
+  --text-2: #a8a8a6;
+  --text-3: #6b6b69;
+  --green-bg: #0d2b1a;
+  --green-border: #1a4a2e;
+  --green-text: #4ade80;
+  --amber-bg: #2b1f0a;
+  --amber-border: #4a3510;
+  --amber-text: #fbbf24;
+  --red-bg: #2b0f0f;
+  --red-border: #4a1a1a;
+  --red-text: #f87171;
+  --blue-bg: #0f1f2b;
+  --blue-border: #1a3a4a;
+  --blue-text: #60a5fa;
+}

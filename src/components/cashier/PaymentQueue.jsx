@@ -2,7 +2,9 @@
 // Lists jobs waiting for payment. Polls every 15s.
 
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { getPaymentQueue } from '../../api/cashier'
+import PaymentModal from './PaymentModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -17,6 +19,7 @@ function timeAgo(dateStr) {
 }
 
 export default function PaymentQueue() {
+  const [activeJob, setActiveJob] = useState(null)
   const { data, isLoading } = useQuery({
     queryKey: ['paymentQueue'],
     queryFn: () => getPaymentQueue().then(r => r.data),
@@ -115,7 +118,7 @@ export default function PaymentQueue() {
                 <button
                   className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
                     rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap"
-                  onClick={() => {/* TODO: open payment modal */}}
+                  onClick={() => setActiveJob(job)}
                 >
                   Collect Payment
                 </button>
@@ -123,6 +126,12 @@ export default function PaymentQueue() {
             </div>
           ))}
         </div>
+      )}
+    {activeJob && (
+        <PaymentModal
+          job={activeJob}
+          onClose={() => setActiveJob(null)}
+        />
       )}
     </div>
   )

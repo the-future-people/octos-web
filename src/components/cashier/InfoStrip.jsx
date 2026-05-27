@@ -16,14 +16,16 @@ export default function InfoStrip() {
   })
 
   const sheetNumber  = data?.sheet_number  || '—'
-  const date         = data?.date          || '—'
+  const date         = data?.has_shift
+    ? new Date().toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
+    : '—'
   const shiftEnd     = data?.shift_end     || '—'
   const openingFloat = data?.opening_float != null ? fmt(data.opening_float) : '—'
   const timeLeft     = data?.time_remaining_label || null
 
   return (
-    <div className="bg-[var(--panel)] border-b border-[var(--border)] px-6 py-3
-      flex items-center gap-6 text-sm shrink-0">
+    <div className="bg-[var(--panel)] px-5 py-2.5
+      flex items-center gap-4 text-sm flex-wrap">
 
       <div className="flex flex-col">
         <span className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Sheet</span>

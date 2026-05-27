@@ -28,6 +28,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('access_token',  tokens.access)
     localStorage.setItem('refresh_token', tokens.refresh)
     setUser(userData)
+    setLoading(false)
   }
 
   const logout = () => {
