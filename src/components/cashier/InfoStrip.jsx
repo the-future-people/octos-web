@@ -16,7 +16,9 @@ export default function InfoStrip() {
   })
 
   const sheetNumber  = data?.sheet_number  || '—'
-  const date         = data?.date          || '—'
+  const date         = data?.has_shift
+    ? new Date().toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
+    : '—'
   const shiftEnd     = data?.shift_end     || '—'
   const openingFloat = data?.opening_float != null ? fmt(data.opening_float) : '—'
   const timeLeft     = data?.time_remaining_label || null

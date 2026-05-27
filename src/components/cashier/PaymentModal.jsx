@@ -28,6 +28,9 @@ export default function PaymentModal({ job, onClose }) {
   const [splitRef1,    setSplitRef1]    = useState('')
   const [splitMethod2, setSplitMethod2] = useState('CASH')
   const [error,      setError]      = useState('')
+  const [company,    setCompany]    = useState('')
+  const [phone,      setPhone]      = useState('')
+  const [notes,      setNotes]      = useState('')
 
   const amountDue = job ? (parseFloat(job.estimated_cost || 0) * deposit / 100) : 0
   const change    = method === 'CASH' ? Math.max(0, parseFloat(cash || 0) - amountDue) : 0
@@ -44,6 +47,9 @@ export default function PaymentModal({ job, onClose }) {
     setSplitAmount1('')
     setSplitRef1('')
     setError('')
+    setCompany('')
+    setPhone('')
+    setNotes('')
   }, [job?.id])
 
   const [receipt, setReceipt] = useState(null)
@@ -300,6 +306,51 @@ export default function PaymentModal({ job, onClose }) {
             </div>
           )}
 
+        </div>
+
+        {/* Receipt extras */}
+        <div className="px-6 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+              Company / Sender <span className="text-[var(--text-3)] font-normal normal-case">(optional — shown on receipt)</span>
+            </label>
+            <input
+              type="text"
+              value={company}
+              onChange={e => setCompany(e.target.value)}
+              placeholder="e.g. ABC Ltd, University of Ghana…"
+              className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 pb-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+                Phone <span className="text-[var(--text-3)] font-normal normal-case">(for receipt)</span>
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="0244123456"
+                className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                  rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+                Notes <span className="text-[var(--text-3)] font-normal normal-case">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any additional context…"
+                className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                  rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

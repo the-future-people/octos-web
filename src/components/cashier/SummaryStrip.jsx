@@ -32,16 +32,16 @@ export default function SummaryStrip() {
         return (
           <div
             key={card.key}
-            className={`bg-[var(--panel)] border border-[var(--border)] border-t-4
-              ${card.color} rounded-xl p-4`}
+            className={`bg-[var(--panel)] border border-[var(--border)] border-t-2
+              ${card.color} rounded-xl p-3`}
           >
-            <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
               {card.label}
             </div>
-            <div className={`font-mono font-black text-xl ${card.textColor}`}>
+            <div className={`font-mono font-black text-base ${card.textColor}`}>
               {fmt(amount)}
             </div>
-            <div className="text-xs text-[var(--text-3)] mt-1">
+            <div className="text-[10px] text-[var(--text-3)] mt-0.5">
               {count} transaction{count !== 1 ? 's' : ''}
             </div>
           </div>

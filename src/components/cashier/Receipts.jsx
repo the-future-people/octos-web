@@ -131,10 +131,10 @@ export default function Receipts() {
           {filtered.map((receipt, idx) => (
             <div key={receipt.id}
               className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-                px-4 py-3 flex items-center gap-4">
+                px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
 
               {/* Index */}
-              <div className="w-6 text-xs font-bold text-[var(--text-3)] shrink-0 text-right">
+              <div className="hidden sm:block w-6 text-xs font-bold text-[var(--text-3)] shrink-0 text-right">
                 {filtered.length - idx}
               </div>
 
@@ -169,7 +169,8 @@ export default function Receipts() {
                 </div>
               </div>
 
-              {/* Type + Method badges */}
+              {/* Badges + amount + print — row on all screens */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
               <div className="flex items-center gap-1.5 shrink-0">
                 <div className="px-2 py-0.5 rounded border text-[10px] font-bold
                   uppercase tracking-wider bg-[var(--bg)] text-[var(--text-3)]
@@ -208,6 +209,7 @@ export default function Receipts() {
                   <rect x="6" y="14" width="12" height="8"/>
                 </svg>
               </button>
+              </div>{/* /badges row */}
 
             </div>
           ))}
