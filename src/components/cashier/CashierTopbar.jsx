@@ -1,6 +1,7 @@
 // src/components/cashier/CashierTopbar.jsx
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
+import NotificationBell from './NotificationBell'
 
 export default function CashierTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const { theme, toggle } = useTheme()
@@ -66,6 +67,9 @@ export default function CashierTopbar({ user, onLogout, onMenuToggle, showMenu }
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--green-text)] animate-pulse" />
             <span className="hidden sm:inline">Live</span>
           </div>
+
+          {/* Notification bell */}
+          <NotificationBell />
 
           {/* Profile button + dropdown */}
           <div className="relative pl-3 border-l border-[var(--border)]" ref={dropdownRef}>

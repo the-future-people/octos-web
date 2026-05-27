@@ -44,6 +44,33 @@ export default function Receipts() {
     r.job_number?.toLowerCase().includes(search.toLowerCase())
   )
 
+  const handlePrint = async (receiptId) => {
+    try {
+      const res = await fetch(
+        `http://localhost:8000/api/v1/finance/receipts/${receiptId}/thermal/`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } }
+      )
+      const data = await res.json()
+      const text = data.text || ''
+
+      const win = window.open('', '_blank', 'width=400,height=600')
+      win.document.write(`
+        <html><head><title>Receipt</title>
+        <style>
+          body { font-family: 'Courier New', monospace; font-size: 12px;
+            white-space: pre; margin: 10px; }
+        </style></head>
+        <body>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</body>
+        </html>`)
+      win.document.close()
+      win.focus()
+      win.print()
+      win.close()
+    } catch (err) {
+      console.error('Print failed:', err)
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -113,25 +140,47 @@ export default function Receipts() {
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+                {/* Line 1 — receipt + job number */}
+                <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-[var(--text)]">
                     {receipt.receipt_number}
                   </span>
                   <span className="text-[10px] text-[var(--text-3)]">·</span>
-                  <span className="text-xs text-[var(--text-3)]">
+                  <span className="font-mono text-xs text-[var(--text-3)]">
                     {receipt.job_number}
                   </span>
                 </div>
+                {/* Line 2 — services */}
                 <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
-                  {receipt.job_title || 'Instant job'} · {receipt.intake_by_name || '—'}
+                  {receipt.job_title || '—'}
+                </div>
+                {/* Line 3 — attendant + customer */}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`text-[11px] font-medium
+                    ${receipt.customer_name
+                      ? 'text-[var(--text)] font-semibold'
+                      : 'text-[var(--text-3)]'}`}>
+                    {receipt.customer_name || 'Walk-in Customer'}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-3)]">·</span>
+                  <span className="text-[11px] text-[var(--text-3)]">
+                    by {receipt.intake_by_name || '—'}
+                  </span>
                 </div>
               </div>
 
-              {/* Method badge */}
-              <div className={`px-2 py-0.5 rounded border text-[10px] font-bold
-                uppercase tracking-wider shrink-0
-                ${METHOD_COLORS[receipt.payment_method] || METHOD_COLORS.SPLIT}`}>
-                {receipt.payment_method}
+              {/* Type + Method badges */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="px-2 py-0.5 rounded border text-[10px] font-bold
+                  uppercase tracking-wider bg-[var(--bg)] text-[var(--text-3)]
+                  border-[var(--border)]">
+                  {receipt.job_type || 'INSTANT'}
+                </div>
+                <div className={`px-2 py-0.5 rounded border text-[10px] font-bold
+                  uppercase tracking-wider
+                  ${METHOD_COLORS[receipt.payment_method] || METHOD_COLORS.SPLIT}`}>
+                  {receipt.payment_method}
+                </div>
               </div>
 
               {/* Amount */}
@@ -146,10 +195,7 @@ export default function Receipts() {
 
               {/* Print */}
               <button
-                onClick={() => window.open(
-                  `http://localhost:8000/api/v1/finance/receipts/${receipt.id}/thermal/`,
-                  '_blank'
-                )}
+                onClick={() => handlePrint(receipt.id)}
                 title="Print receipt"
                 className="shrink-0 w-7 h-7 flex items-center justify-center
                   rounded-lg hover:bg-[var(--bg)] text-[var(--text-3)]
