@@ -6,6 +6,8 @@ import InfoStrip from '../../components/cashier/InfoStrip'
 import SummaryStrip from '../../components/cashier/SummaryStrip'
 import PaymentQueue from '../../components/cashier/PaymentQueue'
 import Receipts from '../../components/cashier/Receipts'
+import TodaysLog from '../../components/cashier/TodaysLog'
+import CreditAccounts from '../../components/cashier/CreditAccounts'
 
 const TABS = [
   {
@@ -174,8 +176,8 @@ export default function CashierPortal() {
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {activeTab === 'queue' && <PaymentQueue />}
               {activeTab === 'receipts' && <Receipts />}
-              {activeTab === 'log' && <Placeholder label="Today's Log" />}
-              {activeTab === 'credit' && <Placeholder label="Credit Accounts" />}
+              {activeTab === 'log' && <TodaysLog />}
+              {activeTab === 'credit' && <CreditAccounts />}
             </div>
 
           </div>

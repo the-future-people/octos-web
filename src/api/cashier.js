@@ -17,7 +17,7 @@ export const getReceipts = (params) =>
   client.get('/api/v1/finance/receipts/', { params })
 
 export const getCreditAccounts = () =>
-  client.get('/api/v1/finance/credit-accounts/')
+  client.get('/api/v1/finance/credit/')
 
 export const settleCreditAccount = (accountId, payload) =>
   client.post(`/api/v1/finance/credit-accounts/${accountId}/settle/`, payload)
