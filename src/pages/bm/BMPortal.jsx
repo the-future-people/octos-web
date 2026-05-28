@@ -7,6 +7,7 @@ import BMInfoStrip from '../../components/bm/BMInfoStrip'
 import Overview from '../../components/bm/Overview'
 import DaySheet from '../../components/bm/DaySheet'
 import Jobs from '../../components/bm/Jobs'
+import Customers from '../../components/bm/Customers'
 
 const SECTIONS = [
   {
@@ -45,7 +46,8 @@ export default function BMPortal() {
     switch (activeSection) {
       case 'overview': return <Overview onNavigate={handleNav} />
       case 'daysheet': return <DaySheet />
-      case 'jobs':     return <Jobs />
+      case 'jobs':       return <Jobs />
+      case 'customers':  return <Customers />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
