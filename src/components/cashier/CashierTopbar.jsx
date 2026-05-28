@@ -1,7 +1,7 @@
 // src/components/cashier/CashierTopbar.jsx
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
-import NotificationBell from './NotificationBell'
+import NotificationBell from '../cashier/NotificationBell'
 
 export default function CashierTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const { theme, toggle } = useTheme()

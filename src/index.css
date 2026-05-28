@@ -63,3 +63,16 @@ body {
   --blue-border: #1a3a4a;
   --blue-text: #60a5fa;
 }
+/* Modal animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.animate-fadeIn  { animation: fadeIn  0.15s ease-out forwards; }
+.animate-slideUp { animation: slideUp 0.2s  ease-out forwards; }

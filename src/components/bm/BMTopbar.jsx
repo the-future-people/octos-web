@@ -1,6 +1,7 @@
 // src/components/bm/BMTopbar.jsx
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
+import NotificationBell from '../cashier/NotificationBell'
 import { useQuery } from '@tanstack/react-query'
 import { getLockStatus } from '../../api/bm'
 
@@ -30,10 +31,10 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
     : '??'
 
   const minsToClose = lockData?.mins_to_close
-  const timeLabel   = minsToClose != null
-    ? minsToClose <= 30
-      ? `${minsToClose}m to close`
-      : null
+  const timeLabel   = minsToClose != null && minsToClose > 0 && minsToClose <= 30
+    ? `${minsToClose}m to close`
+    : minsToClose != null && minsToClose <= 0
+    ? 'Closing now'
     : null
 
   return (
@@ -81,6 +82,9 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--green-text)] animate-pulse" />
             <span className="hidden sm:inline">Active</span>
           </div>
+
+          {/* Notification bell */}
+          <NotificationBell />
 
           {/* Close warning */}
           {timeLabel && (

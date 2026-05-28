@@ -1,6 +1,8 @@
 // src/components/bm/Overview.jsx
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getJobStats, getJobs } from '../../api/bm'
+import { getJobStats, getJobs, getTodaySummary } from '../../api/bm'
+import NewJobModal from './NewJobModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -29,16 +31,29 @@ const STATUS_COLORS = {
   CANCELLED:       'bg-zinc-50 text-zinc-400 border-zinc-200',
 }
 
+
 export default function Overview({ onNavigate }) {
+  const [showNewJob, setShowNewJob] = useState(false)
+
+  const { data: summaryData } = useQuery({
+    queryKey: ['todaySummary'],
+    queryFn:  () => getTodaySummary().then(r => r.data),
+    refetchInterval: 60_000,
+  })
+
+  const sheetId = summaryData?.meta?.sheet_id
+
   const { data: statsData } = useQuery({
-    queryKey: ['jobStats'],
-    queryFn:  () => getJobStats().then(r => r.data),
+    queryKey: ['jobStats', sheetId],
+    queryFn:  () => getJobStats({ daily_sheet: sheetId }).then(r => r.data),
+    enabled:  !!sheetId,
     refetchInterval: 30_000,
   })
 
   const { data: jobsData } = useQuery({
-    queryKey: ['recentJobs'],
-    queryFn:  () => getJobs({ page_size: 6 }).then(r => r.data),
+    queryKey: ['recentJobs', sheetId],
+    queryFn:  () => getJobs({ page_size: 6, daily_sheet: sheetId }).then(r => r.data),
+    enabled:  !!sheetId,
     refetchInterval: 30_000,
   })
 
@@ -51,7 +66,7 @@ export default function Overview({ onNavigate }) {
       {/* Hero buttons */}
       <div className="grid grid-cols-2 gap-3 mb-6">
         <button
-          onClick={() => onNavigate('jobs')}
+          onClick={() => setShowNewJob(true)}
           className="flex items-center gap-3 px-5 py-4 bg-[var(--text)] text-white
             rounded-xl font-bold text-sm hover:opacity-90 transition-opacity"
         >
@@ -216,6 +231,12 @@ export default function Overview({ onNavigate }) {
         </div>
       </div>
 
+    {showNewJob && (
+        <NewJobModal
+          onClose={() => setShowNewJob(false)}
+          onSuccess={() => setShowNewJob(false)}
+        />
+      )}
     </div>
   )
 }

@@ -6,7 +6,9 @@ import {
   getUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
-} from '../../api/cashier'
+} from '../../api/notifications'
+
+// Re-export from bm api if needed — both use same endpoints
 
 export default function NotificationBell() {
   const [open,    setOpen]    = useState(false)
