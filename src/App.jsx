@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import LoginPage from './pages/auth/LoginPage'
 import CashierPortal from './pages/cashier/CashierPortal'
+import BMPortal from './pages/bm/BMPortal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,8 +35,14 @@ export default function App() {
               }
             />
 
-            {/* More portals added here as we build them */}
-            {/* <Route path="/bm/*" element={<ProtectedRoute allowedRoles={['BRANCH_MANAGER']}><BMPortal /></ProtectedRoute>} /> */}
+            <Route
+              path="/bm/*"
+              element={
+                <ProtectedRoute allowedRoles={['BRANCH_MANAGER']}>
+                  <BMPortal />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
