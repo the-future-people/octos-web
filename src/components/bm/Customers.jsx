@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getCustomers } from '../../api/bm'
 import NewCustomerModal from './NewCustomerModal'
+import CustomerProfileModal from './CustomerProfileModal'
 
 function timeAgo(dateStr) {
   if (!dateStr) return '—'
@@ -22,7 +23,7 @@ const TIER_COLORS = {
 
 const TYPE_COLORS = {
   INDIVIDUAL:  'bg-[var(--bg)] text-[var(--text-3)] border-[var(--border)]',
-  CORPORATE:   'bg-blue-50 text-blue-700 border-blue-200',
+  BUSINESS:    'bg-blue-50 text-blue-700 border-blue-200',
   INSTITUTION: 'bg-violet-50 text-violet-700 border-violet-200',
 }
 
@@ -30,7 +31,7 @@ export default function Customers() {
   const [tab,             setTab]             = useState('all')
   const [search,          setSearch]          = useState('')
   const [page,            setPage]            = useState(1)
-  const [selected,        setSelected]        = useState(null)
+  const [profileId,       setProfileId]       = useState(null)   // which customer's profile is open
   const [showNewCustomer, setShowNewCustomer] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -47,8 +48,8 @@ export default function Customers() {
     placeholderData: (previousData) => previousData,
   })
 
-  const customers = Array.isArray(data) ? data : (data?.results || [])
-  const count     = data?.count || 0
+  const customers  = Array.isArray(data) ? data : (data?.results || [])
+  const count      = data?.count || 0
   const totalPages = Math.ceil(count / 15)
 
   return (
@@ -84,7 +85,7 @@ export default function Customers() {
           { key: 'institutions', label: 'Institutions' },
         ].map(t => (
           <button key={t.key}
-            onClick={() => { setTab(t.key); setPage(1); setSelected(null) }}
+            onClick={() => { setTab(t.key); setPage(1) }}
             className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors
               ${tab === t.key
                 ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
@@ -138,7 +139,7 @@ export default function Customers() {
           <div className="space-y-1.5">
             {customers.map(c => (
               <div key={c.id}
-                onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                onClick={() => setProfileId(c.id)}
                 className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
                   px-4 py-3 cursor-pointer hover:border-[var(--border-dark)]
                   transition-colors">
@@ -201,41 +202,6 @@ export default function Customers() {
                   </div>
                 </div>
 
-                {/* Expanded detail */}
-                {selected?.id === c.id && (
-                  <div className="mt-3 pt-3 border-t border-[var(--border)]
-                    grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                        tracking-wider mb-1">Gender</div>
-                      <div className="text-sm text-[var(--text)]">{c.gender || '—'}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                        tracking-wider mb-1">Confidence</div>
-                      <div className="text-sm font-mono font-bold text-[var(--text)]">
-                        {c.confidence_score}%
-                      </div>
-                    </div>
-                    {c.secondary_phone && (
-                      <div>
-                        <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                          tracking-wider mb-1">Alt Phone</div>
-                        <div className="text-sm font-mono text-[var(--text)]">
-                          {c.secondary_phone}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                        tracking-wider mb-1">Priority</div>
-                      <div className={`text-sm font-bold
-                        ${c.is_priority ? 'text-amber-600' : 'text-[var(--text-3)]'}`}>
-                        {c.is_priority ? 'Yes' : 'No'}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -268,12 +234,23 @@ export default function Customers() {
           )}
         </>
       )}
+
+      {/* New customer modal */}
       {showNewCustomer && (
         <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
           onSuccess={() => setShowNewCustomer(false)}
         />
       )}
+
+      {/* Customer profile drawer — rendered outside the list so it overlays everything */}
+      {profileId && (
+        <CustomerProfileModal
+          customerId={profileId}
+          onClose={() => setProfileId(null)}
+        />
+      )}
+
     </div>
   )
 }

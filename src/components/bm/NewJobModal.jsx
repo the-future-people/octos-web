@@ -8,6 +8,14 @@ function fmt(n) {
   return `GHS ${parseFloat(n || 0).toFixed(2)}`
 }
 
+function normalisePhone(val) {
+  if (!val) return val
+  val = val.trim().replace(/[\s\-().]/g, '')
+  if (val.startsWith('+233')) return '0' + val.slice(4)
+  if (val.startsWith('233') && val.length >= 12) return '0' + val.slice(3)
+  return val
+}
+
 const JOB_TYPE_THEME = {
   INSTANT:    { accent: 'bg-zinc-900',   tab: 'bg-zinc-900',   tint: 'bg-zinc-50'   },
   PRODUCTION: { accent: 'bg-blue-600',   tab: 'bg-blue-600',   tint: 'bg-blue-50'   },
@@ -69,7 +77,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const { data: custResults = [] } = useQuery({
     queryKey: ['custLookup', custSearch],
-    queryFn:  () => getCustomers({ search: custSearch, page_size: 5 }).then(r => {
+    queryFn:  () => getCustomers({ search: normalisePhone(custSearch), page_size: 5 }).then(r => {
       const d = r.data
       return Array.isArray(d) ? d : (d?.results || [])
     }),
@@ -87,11 +95,12 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const addToCart = () => {
     if (!selected) return
+    console.log('ADDING TO CART — selQty:', selQty, 'selPages:', selPages)
     setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
-      quantity: selPages,
-      pages:    selQty,
+      quantity: selQty,
+      pages:    selPages,
       ring_size:   selRingSize,
       output_mode: selOutputMode,
       _price:  selPrice?.total || 0,
@@ -116,22 +125,27 @@ export default function NewJobModal({ onClose, onSuccess }) {
   })
 
   const handleSubmit = () => {
+    if (isPending) return
     setError('')
     if (cart.length === 0) { setError('Add at least one service.'); return }
-    mutate({
+    const payload = {
       job_type:           jobType,
       branch:             user?.branch || 2,
       intake_channel:     'WALK_IN',
       deposit_percentage: 100,
       line_items: cart.map(item => ({
-        service:  item.service.id,
-        quantity: item.quantity,
-        pages:    item.pages,
-        is_color: false,
-        sets:     1,
+        service:     item.service.id,
+        quantity:    item.quantity,
+        pages:       item.pages,
+        is_color:    item.service.smart_defaults?.is_color ?? false,
+        sets:        item.quantity,
+        ...(item.ring_size   ? { ring_size:   item.ring_size   } : {}),
+        ...(item.output_mode ? { output_mode: item.output_mode } : {}),
       })),
       ...(customer ? { customer: customer.id } : {}),
-    })
+    }
+    console.log('JOB PAYLOAD:', JSON.stringify(payload, null, 2))
+    mutate(payload)
   }
 
   return (

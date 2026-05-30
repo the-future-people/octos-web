@@ -74,5 +74,22 @@ body {
   to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
-.animate-fadeIn  { animation: fadeIn  0.15s ease-out forwards; }
-.animate-slideUp { animation: slideUp 0.2s  ease-out forwards; }
+.animate-fadeIn   { animation: fadeIn      0.15s ease-out forwards; }
+.animate-slideUp  { animation: slideUp     0.2s  ease-out forwards; }
+.animate-pageFade { animation: pageFade    0.18s ease-out forwards; }
+.animate-tabFade  { animation: tabFade     0.15s ease-out forwards; }
+
+@keyframes pageFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes tabFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

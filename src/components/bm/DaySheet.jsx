@@ -47,6 +47,7 @@ export default function DaySheet() {
   const minsToClose   = lockData?.mins_to_close ?? 999
   const canClose      = lockData?.can_close_sheet
   const showCloseBtn  = minsToClose <= 30
+  const isClosed      = meta.status === 'CLOSED' || meta.status === 'AUTO_CLOSED'
   const lowStockItems = inventory.filter(i => i.is_low)
 
   return (
@@ -60,7 +61,21 @@ export default function DaySheet() {
             {meta.sheet_number} · {meta.date} · {meta.status}
           </p>
         </div>
-        {showCloseBtn && (
+        {isClosed ? (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50
+            border border-emerald-200 rounded-xl">
+            <span className="w-5 h-5 bg-emerald-100 rounded-full flex items-center
+              justify-center text-emerald-600 text-xs shrink-0">✓</span>
+            <div>
+              <div className="text-xs font-black text-emerald-800">Sheet Closed</div>
+              <div className="text-[10px] text-emerald-600 font-semibold">
+                {meta.closed_at
+                  ? new Date(meta.closed_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })
+                  : 'Today'}
+              </div>
+            </div>
+          </div>
+        ) : showCloseBtn ? (
           <button
             disabled={!canClose}
             onClick={() => canClose && setShowCloseModal(true)}
@@ -81,7 +96,7 @@ export default function DaySheet() {
             </svg>
             {canClose ? 'Close Day Sheet' : 'Waiting for cashier sign-off'}
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* Alerts */}
@@ -244,35 +259,38 @@ export default function DaySheet() {
         <div>
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
             tracking-widest mb-2">Low Stock ({lowStockItems.length} items)</div>
-          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-            <div className="hidden sm:grid grid-cols-12 px-4 py-2 border-b border-[var(--border)]
-              text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-              <span className="col-span-5">Item</span>
-              <span className="col-span-2 text-right">Opening</span>
-              <span className="col-span-2 text-right">Consumed</span>
-              <span className="col-span-2 text-right">Closing</span>
-              <span className="col-span-1 text-right">Reorder</span>
-            </div>
-            {lowStockItems.map((item, i) => (
-              <div key={i}
-                className="grid grid-cols-12 px-4 py-2.5 border-b border-[var(--border)]
-                  last:border-0 items-center">
-                <div className="col-span-5">
-                  <div className="text-xs font-semibold text-[var(--text)]">{item.consumable}</div>
-                  <div className="text-[10px] text-[var(--text-3)]">{item.category} · {item.unit}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {lowStockItems.map((item, i) => {
+              const closing = parseFloat(item.closing ?? 0)
+              const isCritical = closing <= 0
+              return (
+                <div key={i}
+                  className={`bg-[var(--panel)] border rounded-xl px-3 py-2.5
+                    ${isCritical ? 'border-[var(--red-border)]' : 'border-[var(--border)]'}`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-[var(--text)] leading-tight truncate">
+                        {item.consumable}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                        {item.category} · {item.unit}
+                      </div>
+                    </div>
+                    <span className={`font-mono font-black text-sm shrink-0
+                      ${isCritical ? 'text-[var(--red-text)]' : 'text-amber-500'}`}>
+                      {item.closing}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-[var(--text-3)]">
+                    <span>{item.opening} open</span>
+                    <span className="text-[var(--border-dark)]">·</span>
+                    <span>-{item.consumed} used</span>
+                    <span className="text-[var(--border-dark)]">·</span>
+                    <span>min {item.reorder_point}</span>
+                  </div>
                 </div>
-                <div className="col-span-2 text-right text-xs text-[var(--text-2)]">{item.opening}</div>
-                <div className="col-span-2 text-right text-xs text-[var(--text-2)]">{item.consumed}</div>
-                <div className="col-span-2 text-right">
-                  <span className="font-mono font-bold text-xs text-[var(--red-text)]">
-                    {item.closing}
-                  </span>
-                </div>
-                <div className="col-span-1 text-right text-[10px] text-[var(--text-3)]">
-                  {item.reorder_point}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

@@ -1,6 +1,8 @@
 // src/pages/cashier/CashierPortal.jsx
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
+import { getShiftStatus } from '../../api/cashier'
 import CashierTopbar from '../../components/cashier/CashierTopbar'
 import InfoStrip from '../../components/cashier/InfoStrip'
 import SummaryStrip from '../../components/cashier/SummaryStrip'
@@ -8,6 +10,9 @@ import PaymentQueue from '../../components/cashier/PaymentQueue'
 import Receipts from '../../components/cashier/Receipts'
 import TodaysLog from '../../components/cashier/TodaysLog'
 import CreditAccounts from '../../components/cashier/CreditAccounts'
+import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
+import ShiftEndingModal from '../../components/cashier/ShiftEndingModal'
+import SignOffWizard from '../../components/cashier/SignOffWizard'
 
 const TABS = [
   {
@@ -56,15 +61,69 @@ const TABS = [
 
 export default function CashierPortal() {
   const { user, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState('queue')
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [activeTab,          setActiveTab]          = useState('queue')
+  const [mobileOpen,         setMobileOpen]         = useState(false)
+  const [shiftPromptShown,   setShiftPromptShown]   = useState(false)
+  const [showShiftEnding,    setShowShiftEnding]     = useState(false)
+  const [showSignOff,        setShowSignOff]         = useState(false)
+  const [pendingJobs,        setPendingJobs]         = useState(0)
+  const promptedMinutes      = useRef(null)
+
+  // Poll shift status every 60s
+  const { data: shiftData } = useQuery({
+    queryKey: ['shiftStatus'],
+    queryFn:  () => getShiftStatus().then(r => r.data),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  })
+
+  const floatStatus      = shiftData?.float_status
+  const floatId          = shiftData?.float_id
+  const shouldPrompt     = shiftData?.should_prompt
+  const shouldLock       = shiftData?.should_lock
+  const minutesRemaining = shiftData?.minutes_remaining
+  const expectedCash     = shiftData?.expected_cash   || 0
+  const openingFloat     = shiftData?.opening_float   || 0
+
+  // Show float acknowledge modal — fires on PENDING_ACK (morning)
+  const showFloatAck = floatStatus === 'PENDING_ACK' && !!floatId
+
+  // Show shift ending warning — fires once when should_prompt first becomes true
+  useEffect(() => {
+    if (shouldPrompt && !shiftPromptShown && minutesRemaining !== promptedMinutes.current) {
+      setShowShiftEnding(true)
+      setShiftPromptShown(true)
+      promptedMinutes.current = minutesRemaining
+    }
+  }, [shouldPrompt, shiftPromptShown, minutesRemaining])
+
+  const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
+
+  // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
+  useEffect(() => {
+    if ((shouldLock || floatStatus === 'PENDING_SIGNOFF') && !showSignOff && floatId && !isSignedOff) {
+      setShowSignOff(true)
+    }
+  }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff])
+
+  // Fetch pending job count for sign-off step 1
+  useEffect(() => {
+    if (showSignOff && shiftData?.sheet_id) {
+      import('../../api/cashier').then(({ getCashierQueue }) => {
+        getCashierQueue().then(r => {
+          const data = r.data
+          const items = Array.isArray(data) ? data : (data?.results || [])
+          setPendingJobs(items.length)
+        }).catch(() => setPendingJobs(0))
+      })
+    }
+  }, [showSignOff, shiftData?.sheet_id])
 
   const handleTabClick = (id) => {
     setActiveTab(id)
     setMobileOpen(false)
   }
 
-  // Shared tab button used in both mobile overlay and desktop sidebar
   const TabButton = ({ tab, collapsed = false }) => (
     <button
       key={tab.id}
@@ -103,10 +162,8 @@ export default function CashierPortal() {
           {/* Mobile overlay sidebar */}
           {mobileOpen && (
             <>
-              <div
-                className="fixed inset-0 bg-black/30 z-20 sm:hidden"
-                onClick={() => setMobileOpen(false)}
-              />
+              <div className="fixed inset-0 bg-black/30 z-20 sm:hidden"
+                onClick={() => setMobileOpen(false)} />
               <div className="fixed top-14 left-0 bottom-0 w-52 bg-[var(--panel)]
                 border-r border-[var(--border)] z-30 sm:hidden overflow-y-auto pt-2">
                 {['STATION', 'COLLECTIONS'].map(section => (
@@ -130,24 +187,19 @@ export default function CashierPortal() {
             border-r border-[var(--border)] flex-col pt-3 overflow-y-auto">
             {['STATION', 'COLLECTIONS'].map(section => (
               <div key={section}>
-                {/* Section label — full sidebar only */}
                 <div className="md:block hidden px-4 pt-3 pb-1">
                   <span className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-widest">
                     {section}
                   </span>
                 </div>
-                {/* Divider — collapsed sidebar only */}
                 <div className="md:hidden px-3 pt-3 pb-1">
                   <div className="h-px bg-[var(--border)]" />
                 </div>
-
                 {TABS.filter(t => t.section === section).map(tab => (
                   <div key={tab.id}>
-                    {/* Full label version — md+ */}
                     <div className="hidden md:block">
                       <TabButton tab={tab} collapsed={false} />
                     </div>
-                    {/* Icon only version — sm collapsed */}
                     <div className="md:hidden">
                       <TabButton tab={tab} collapsed={true} />
                     </div>
@@ -159,39 +211,58 @@ export default function CashierPortal() {
 
           {/* Main content */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-            {/* Info strip — always visible */}
             <div className="shrink-0 bg-[var(--panel)] border-b border-[var(--border)]">
               <InfoStrip />
             </div>
-
-            {/* Summary strip — payment queue only */}
             {activeTab === 'queue' && (
               <div className="shrink-0 border-b border-[var(--border)]">
                 <SummaryStrip />
               </div>
             )}
-
-            {/* Tab content */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-              {activeTab === 'queue' && <PaymentQueue />}
+              {activeTab === 'queue'    && <PaymentQueue />}
               {activeTab === 'receipts' && <Receipts />}
-              {activeTab === 'log' && <TodaysLog />}
-              {activeTab === 'credit' && <CreditAccounts />}
+              {activeTab === 'log'      && <TodaysLog />}
+              {activeTab === 'credit'   && <CreditAccounts />}
             </div>
-
           </div>
 
         </div>
       </div>
-    </div>
-  )
-}
 
-function Placeholder({ label }) {
-  return (
-    <div className="flex items-center justify-center h-40 text-sm text-[var(--text-3)]">
-      {label} — coming soon
+      {/* ── Modals ── */}
+
+      {/* Float acknowledgement — morning, blocks until done */}
+      {showFloatAck && (
+        <FloatAcknowledgeModal
+          floatId={floatId}
+          openingFloat={openingFloat}
+          onSuccess={() => {
+            // shiftStatus will refetch automatically via invalidation
+          }}
+        />
+      )}
+
+      {/* Shift ending warning — dismissable, auto-dismiss after 15s */}
+      {showShiftEnding && !showSignOff && !showFloatAck && (
+        <ShiftEndingModal
+          shiftEnd={shiftData?.shift_end}
+          minutesRemaining={minutesRemaining}
+          onDismiss={() => setShowShiftEnding(false)}
+        />
+      )}
+
+      {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF */}
+      {showSignOff && !showFloatAck && floatId && !isSignedOff && (
+        <SignOffWizard
+          floatId={floatId}
+          expectedCash={expectedCash}
+          openingFloat={openingFloat}
+          pendingJobs={pendingJobs}
+          onSuccess={() => setShowSignOff(false)}
+        />
+      )}
+
     </div>
   )
 }

@@ -8,6 +8,7 @@ import Overview from '../../components/bm/Overview'
 import DaySheet from '../../components/bm/DaySheet'
 import Jobs from '../../components/bm/Jobs'
 import Customers from '../../components/bm/Customers'
+import Reports   from '../../components/bm/Reports'
 
 const SECTIONS = [
   {
@@ -48,6 +49,7 @@ export default function BMPortal() {
       case 'daysheet': return <DaySheet />
       case 'jobs':       return <Jobs />
       case 'customers':  return <Customers />
+      case 'reports':    return <Reports />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
@@ -82,7 +84,9 @@ export default function BMPortal() {
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             <BMInfoStrip user={user} />
             <div className="flex-1 overflow-y-auto">
-              {renderContent()}
+              <div key={activeSection} className="animate-pageFade">
+                {renderContent()}
+              </div>
             </div>
           </main>
 

@@ -11,7 +11,7 @@ export const getLockStatus    = () =>
   client.get('/api/v1/finance/lock-status/')
 
 export const closeSheet       = (sheetId, payload) =>
-  client.post(`/api/v1/finance/sheets/${sheetId}/close/`, payload)
+  client.post(`/api/v1/finance/sheets/${sheetId}/close/`, payload, { timeout: 30000 })
 
 export const getSheetSummary  = (sheetId) =>
   client.get(`/api/v1/finance/sheets/${sheetId}/summary/`)
