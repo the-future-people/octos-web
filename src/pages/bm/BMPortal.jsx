@@ -10,6 +10,7 @@ import Jobs from '../../components/bm/Jobs'
 import Customers from '../../components/bm/Customers'
 import Reports    from '../../components/bm/Reports'
 import Inventory  from '../../components/bm/Inventory'
+import Catalogue  from '../../components/bm/Catalogue'
 
 const SECTIONS = [
   {
@@ -52,6 +53,7 @@ export default function BMPortal() {
       case 'customers':  return <Customers />
       case 'reports':    return <Reports />
       case 'inventory':  return <Inventory />
+      case 'catalogue':  return <Catalogue />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
