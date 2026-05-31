@@ -65,8 +65,8 @@ export const getStock         = () =>
 export const receiveStock     = (payload) =>
   client.post('/api/v1/inventory/stock/receive/', payload)
 
-export const getStockMovements = () =>
-  client.get('/api/v1/inventory/movements/')
+export const getStockMovements = (params) =>
+  client.get('/api/v1/inventory/movements/', { params })
 
 // ── Communications (Inbox) ────────────────────────────────────────
 export const getInbox         = (params) =>

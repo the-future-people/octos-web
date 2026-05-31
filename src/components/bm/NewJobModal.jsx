@@ -120,7 +120,14 @@ export default function NewJobModal({ onClose, onSuccess }) {
       onClose()
     },
     onError: (err) => {
-      setError(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Failed to create job.')
+      const d = err.response?.data
+      if (!d) { setError('Failed to create job.'); return }
+      if (typeof d === 'string') { setError(d); return }
+      if (d.detail) { setError(d.detail); return }
+      if (d.non_field_errors) { setError(Array.isArray(d.non_field_errors) ? d.non_field_errors[0] : d.non_field_errors); return }
+      // Field errors — pick the first one
+      const first = Object.values(d).flat().find(v => typeof v === 'string')
+      setError(first || 'Failed to create job.')
     },
   })
 

@@ -1,5 +1,6 @@
 // src/components/bm/Reports.jsx
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
@@ -243,8 +244,9 @@ function WeeklyTab() {
         </div>
       )}
 
-      {submitId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
+      {submitId && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 animate-fadeIn"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md animate-slideUp p-6">
             <h3 className="text-lg font-black text-[var(--text)] mb-1">Submit Weekly Filing</h3>
             <p className="text-xs text-[var(--text-3)] mb-4">This will lock the report. You will not be able to edit it after submission.</p>
@@ -257,7 +259,8 @@ function WeeklyTab() {
               <button onClick={()=>submitMut.mutate({id:submitId,notes:submitNotes})} disabled={submitMut.isPending} className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{submitMut.isPending?'Submitting…':'Submit & Lock'}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -296,13 +299,13 @@ function MonthlyTab() {
   const isOpen    = close?.status === 'OPEN'
   const integrity = close?.integrity || {}
   const checks    = integrity.checks || {}
-  const snap      = snapshot || close?.summary_snapshot
+  const snap      = snapshot || (close?.status !== 'OPEN' ? close?.summary_snapshot : null)
   const isFuture  = year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth()+1)
 
   const STATUS_COLOR = { OPEN:'bg-zinc-100 text-zinc-600', SUBMITTED:'bg-blue-100 text-blue-700', FINANCE_REVIEWING:'bg-amber-100 text-amber-700', FINANCE_CLEARED:'bg-violet-100 text-violet-700', ENDORSED:'bg-emerald-100 text-emerald-700', LOCKED:'bg-emerald-100 text-emerald-700', REJECTED:'bg-red-100 text-red-700' }
 
-  const prevMonth = () => { if(month===1){setMonth(12);setYear(y=>y-1)}else setMonth(m=>m-1) }
-  const nextMonth = () => { if(month===12){setMonth(1);setYear(y=>y+1)}else setMonth(m=>m+1) }
+  const prevMonth = () => { setSnapshot(null); if(month===1){setMonth(12);setYear(y=>y-1)}else setMonth(m=>m-1) }
+  const nextMonth = () => { setSnapshot(null); if(month===12){setMonth(1);setYear(y=>y+1)}else setMonth(m=>m+1) }
 
   return (
     <div>
@@ -363,8 +366,9 @@ function MonthlyTab() {
         </div>
       )}
 
-      {showSubmitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
+      {showSubmitModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 animate-fadeIn"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp p-6">
             <h3 className="text-lg font-black text-[var(--text)] mb-1">Submit Monthly Close — {MONTH_NAMES[month]} {year}</h3>
             <p className="text-xs text-[var(--text-3)] mb-5">This will lock all weekly reports and send the close to Finance for review. This cannot be undone.</p>
@@ -387,13 +391,14 @@ function MonthlyTab() {
               <button onClick={()=>submitMut.mutate()} disabled={submitMut.isPending} className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{submitMut.isPending?'Submitting…':'Submit Monthly Close'}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
 }
 
-// ── Yearly Tab — table layout matching old design ─────────────────────────────
+// ── Yearly Tab— table layout matching old design ─────────────────────────────
 
 function YearlyTab() {
   const now  = new Date()
