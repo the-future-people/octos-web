@@ -150,7 +150,7 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          {isLoading ? (
+          {isLoading && !data ? (
             <div className="space-y-4">
               {[1,2,3,4].map(i => <div key={i} className="h-24 bg-[var(--bg)] rounded-2xl animate-pulse"/>)}
             </div>

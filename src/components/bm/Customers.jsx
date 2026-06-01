@@ -115,7 +115,7 @@ export default function Customers() {
       </div>
 
       {/* List */}
-      {isLoading ? (
+      {isLoading && !data ? (
         <div className="space-y-2">
           {[1,2,3,4,5].map(i => (
             <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)]

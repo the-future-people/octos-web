@@ -111,7 +111,7 @@ export default function NotificationBell() {
 
           {/* List */}
           <div className="overflow-y-auto max-h-[360px]">
-            {isLoading ? (
+            {isLoading && !data ? (
               <div className="p-6 text-center text-sm text-[var(--text-3)]">
                 Loading…
               </div>

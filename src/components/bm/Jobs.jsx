@@ -112,7 +112,7 @@ function JobDetailPanel({ jobId, onClose }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {isLoading ? (
+          {isLoading && !data ? (
             <div className="space-y-3">
               {[1,2,3].map(i => <div key={i} className="h-20 bg-[var(--bg)] rounded-xl animate-pulse" />)}
             </div>
@@ -389,7 +389,7 @@ export default function Jobs() {
       </div>
 
       {/* Job list */}
-      {isLoading ? (
+      {isLoading && !data ? (
         <div className="space-y-2">
           {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
         </div>

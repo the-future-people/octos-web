@@ -5,7 +5,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 
 const DENOMS = [
-  { label: 'GHS 200', value: 200 },
   { label: 'GHS 100', value: 100 },
   { label: 'GHS 50',  value: 50  },
   { label: 'GHS 20',  value: 20  },
@@ -13,8 +12,6 @@ const DENOMS = [
   { label: 'GHS 5',   value: 5   },
   { label: 'GHS 2',   value: 2   },
   { label: 'GHS 1',   value: 1   },
-  { label: '50p',     value: 0.5 },
-  { label: '20p',     value: 0.2 },
 ]
 
 function fmt(n) {
@@ -59,7 +56,7 @@ export default function FloatAcknowledgeModal({ floatId, openingFloat, onSuccess
   const modal = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 animate-fadeIn"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-slideUp">
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-slideUp">
 
         {/* Header */}
         <div className="px-6 py-5 border-b border-[var(--border)] bg-blue-50">
@@ -77,7 +74,7 @@ export default function FloatAcknowledgeModal({ floatId, openingFloat, onSuccess
         </div>
 
         {/* Denomination grid */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="overflow-y-auto px-6 py-4" style={{ maxHeight: 'calc(90vh - 200px)' }}>
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-3">
             Denomination Count
           </div>

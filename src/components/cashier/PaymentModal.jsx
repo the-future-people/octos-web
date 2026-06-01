@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { confirmPayment } from '../../api/cashier'
 import ReceiptModal from './ReceiptModal'
+import { createPortal } from 'react-dom'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -81,9 +82,14 @@ export default function PaymentModal({ job, onClose }) {
 
   const handleSubmit = () => {
     setError('')
+    
+    // Add notes and customer info to the body
     const body = {
       deposit_percentage: deposit,
       payment_method: method,
+      company_name: company || undefined,
+      customer_phone: phone || undefined,
+      notes: notes || undefined,
     }
 
     if (method === 'CASH') {
@@ -116,30 +122,74 @@ export default function PaymentModal({ job, onClose }) {
     return <ReceiptModal result={receipt} onClose={onClose} />
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md mx-auto
+        max-h-[92vh] flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
-          <div>
-            <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">
-              Collect Payment
-            </div>
-            <div className="font-mono text-sm font-bold text-[var(--text)] mt-0.5">
-              {job.job_number}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full
-              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors"
-          >
+        <div className="relative px-6 pt-5 pb-3 border-b border-[var(--border)] text-center">
+          <button onClick={onClose}
+            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center
+              rounded-full hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">
             ✕
           </button>
+          <div className="font-black text-base text-[var(--text)]">Farhat Printing Press</div>
+          <div className="text-xs text-[var(--text-3)] mt-0.5">
+            {job.branch_name}{job.branch_phone ? ` · ${job.branch_phone}` : ''}
+          </div>
+          {job.branch_address && (
+            <div className="text-xs text-[var(--text-3)]">{job.branch_address}</div>
+          )}
+          <div className="flex items-center justify-center gap-2 mt-2 flex-wrap text-[10px] text-[var(--text-3)]">
+            <span>ATTENDANT <strong className="text-[var(--text-2)]">{job.intake_by_name}</strong></span>
+            <span>·</span>
+            <span>TYPE <strong className="text-[var(--text-2)]">{job.job_type}</strong></span>
+            <span>·</span>
+            <span>CUSTOMER <strong className="text-[var(--text-2)]">{job.customer_name || 'Walk-in'}</strong></span>
+            <span>·</span>
+            <span>REF <strong className="font-mono text-[var(--text-2)]">{job.job_number}</strong></span>
+          </div>
         </div>
 
-        <div className="px-6 py-4 space-y-5">
+        <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1">
+
+          {/* Line items */}
+          {job.line_items?.length > 0 && (
+            <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+              <div className="grid grid-cols-12 px-3 py-2 bg-[var(--bg)]
+                text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                <span className="col-span-7">Item</span>
+                <span className="col-span-2 text-center">Qty</span>
+                <span className="col-span-3 text-right">Amount</span>
+              </div>
+              {job.line_items.map((li, i) => (
+                <div key={i} className="grid grid-cols-12 px-3 py-2.5 border-t border-[var(--border)] items-center">
+                  <div className="col-span-7 min-w-0">
+                    <div className="text-xs font-semibold text-[var(--text)] truncate">
+                      {li.label || li.service_name}
+                    </div>
+                    <div className="text-[10px] text-[var(--text-3)]">
+                      {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'}
+                    </div>
+                  </div>
+                  <div className="col-span-2 text-center text-xs font-mono text-[var(--text-2)]">
+                    {li.quantity}
+                  </div>
+                  <div className="col-span-3 text-right text-xs font-mono font-bold text-[var(--text)]">
+                    {fmt(li.line_total)}
+                  </div>
+                </div>
+              ))}
+              <div className="grid grid-cols-12 px-3 py-2.5 border-t border-[var(--border)] bg-[var(--bg)]">
+                <span className="col-span-9 text-xs font-bold text-[var(--text)]">TOTAL</span>
+                <span className="col-span-3 text-right text-sm font-mono font-black text-[var(--text)]">
+                  {fmt(job.estimated_cost)}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Amount due */}
           <div className="flex items-center justify-between">
@@ -198,6 +248,8 @@ export default function PaymentModal({ job, onClose }) {
               </label>
               <input
                 type="number"
+                min="0"
+                step="0.01"
                 value={cash}
                 onChange={e => setCash(e.target.value)}
                 placeholder="0.00"
@@ -205,7 +257,7 @@ export default function PaymentModal({ job, onClose }) {
                   rounded-lg text-sm font-mono outline-none focus:border-[var(--border-dark)]"
               />
               {parseFloat(cash || 0) >= amountDue && (
-                <div className="mt-2 text-sm font-bold text-[var(--green-text)]">
+                <div className="mt-2 text-sm font-bold text-emerald-600">
                   Change: {fmt(change)}
                 </div>
               )}
@@ -221,7 +273,7 @@ export default function PaymentModal({ job, onClose }) {
               <input
                 type="text"
                 value={momoRef}
-                onChange={e => setMomoRef(e.target.value)}
+                onChange={e => setMomoRef(e.target.value.replace(/\D/g, ''))}
                 placeholder="11-digit reference"
                 maxLength={11}
                 className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
@@ -252,6 +304,8 @@ export default function PaymentModal({ job, onClose }) {
                   </select>
                   <input
                     type="number"
+                    min="0"
+                    step="0.01"
                     value={splitAmount1}
                     onChange={e => setSplitAmount1(e.target.value)}
                     placeholder="Amount"
@@ -263,7 +317,7 @@ export default function PaymentModal({ job, onClose }) {
                   <input
                     type="text"
                     value={splitRef1}
-                    onChange={e => setSplitRef1(e.target.value)}
+                    onChange={e => setSplitRef1(e.target.value.replace(/\D/g, ''))}
                     placeholder="MoMo reference (11 digits)"
                     maxLength={11}
                     className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
@@ -290,13 +344,60 @@ export default function PaymentModal({ job, onClose }) {
                     type="number"
                     value={split2Amount}
                     readOnly
+                    disabled
                     className="px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
-                      rounded-lg text-sm font-mono opacity-60"
+                      rounded-lg text-sm font-mono opacity-60 cursor-not-allowed"
                   />
                 </div>
               </div>
             </div>
           )}
+
+          {/* Receipt extras - moved before error */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+                Company / Sender <span className="text-[var(--text-3)] font-normal normal-case">(optional — shown on receipt)</span>
+              </label>
+              <input
+                type="text"
+                value={company}
+                onChange={e => setCompany(e.target.value)}
+                placeholder="e.g. ABC Ltd, University of Ghana…"
+                className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                  rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+                  Phone <span className="text-[var(--text-3)] font-normal normal-case">(for receipt)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder="0244123456"
+                  maxLength={10}
+                  className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                    rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+                  Notes <span className="text-[var(--text-3)] font-normal normal-case">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Any additional context…"
+                  className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                    rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Error */}
           {error && (
@@ -308,64 +409,20 @@ export default function PaymentModal({ job, onClose }) {
 
         </div>
 
-        {/* Receipt extras */}
-        <div className="px-6 space-y-3">
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
-              Company / Sender <span className="text-[var(--text-3)] font-normal normal-case">(optional — shown on receipt)</span>
-            </label>
-            <input
-              type="text"
-              value={company}
-              onChange={e => setCompany(e.target.value)}
-              placeholder="e.g. ABC Ltd, University of Ghana…"
-              className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
-                rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3 pb-4">
-            <div>
-              <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
-                Phone <span className="text-[var(--text-3)] font-normal normal-case">(for receipt)</span>
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="0244123456"
-                className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
-                  rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
-                Notes <span className="text-[var(--text-3)] font-normal normal-case">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Any additional context…"
-                className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
-                  rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Footer */}
         <div className="px-6 pb-6">
           <button
             onClick={handleSubmit}
             disabled={!isReady() || isPending}
             className="w-full py-3 bg-[var(--text)] text-white text-sm font-bold
-              rounded-xl transition-opacity disabled:opacity-40"
+              rounded-xl transition-opacity disabled:opacity-40 hover:opacity-90"
           >
             {isPending ? 'Processing…' : 'Confirm Payment'}
           </button>
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
