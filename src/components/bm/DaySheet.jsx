@@ -48,7 +48,8 @@ export default function DaySheet() {
   const canClose      = lockData?.can_close_sheet
   const showCloseBtn  = minsToClose <= 30
   const isClosed      = meta.status === 'CLOSED' || meta.status === 'AUTO_CLOSED'
-  const lowStockItems = inventory.filter(i => i.is_low)
+  const lowStockItems   = inventory.filter(i => i.is_low)
+  const consumedToday   = inventory.filter(i => parseFloat(i.consumed || 0) > 0)
 
   return (
     <div className="p-5 sm:p-6 space-y-5">
@@ -255,12 +256,17 @@ export default function DaySheet() {
       </div>
 
       {/* Inventory */}
-      {lowStockItems.length > 0 && (
+      {(consumedToday.length > 0 || lowStockItems.length > 0) && (
         <div>
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-widest mb-2">Low Stock ({lowStockItems.length} items)</div>
+            tracking-widest mb-2">
+            Consumed Today ({consumedToday.length} items)
+            {lowStockItems.length > 0 && (
+              <span className="ml-2 text-amber-600">· {lowStockItems.length} low stock</span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {lowStockItems.map((item, i) => {
+            {(consumedToday.length > 0 ? consumedToday : lowStockItems).map((item, i) => {
               const closing = parseFloat(item.closing ?? 0)
               const isCritical = closing <= 0
               return (

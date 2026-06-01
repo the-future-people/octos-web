@@ -11,6 +11,11 @@ export default function ShiftEndingModal({ shiftEnd, minutesRemaining, onDismiss
     return () => clearTimeout(t)
   }, [countdown, onDismiss])
 
+  useEffect(() => {
+    const handler = () => setShowSignOff(true)
+    window.addEventListener('cashier:start-signoff', handler)
+    return () => window.removeEventListener('cashier:start-signoff', handler)
+  }, [])
   const fmtTime = (t) => {
     if (!t) return '—'
     if (typeof t === 'string') return t
@@ -52,11 +57,21 @@ export default function ShiftEndingModal({ shiftEnd, minutesRemaining, onDismiss
 
         <p className="text-xs text-zinc-400 mb-4">Auto-dismissing in {countdown}s</p>
 
-        <button onClick={onDismiss}
-          className="px-6 py-2.5 border border-zinc-200 rounded-xl text-sm font-semibold
-            text-zinc-600 hover:bg-zinc-50 transition-colors">
-          Dismiss
-        </button>
+        <div className="flex gap-3">
+          <button onClick={onDismiss}
+            className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-xl text-sm font-semibold
+              text-zinc-600 hover:bg-zinc-50 transition-colors">
+            Dismiss
+          </button>
+          <button onClick={() => {
+            onDismiss()
+            window.dispatchEvent(new CustomEvent('cashier:start-signoff'))
+          }}
+            className="flex-1 px-4 py-2.5 bg-zinc-900 text-white text-sm font-bold
+              rounded-xl hover:opacity-90 transition-opacity">
+            Sign Off Now
+          </button>
+        </div>
 
       </div>
     </div>

@@ -106,6 +106,16 @@ export default function CashierPortal() {
     }
   }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff])
 
+  // Listen for manual sign-off trigger from ShiftEndingModal
+  useEffect(() => {
+    const handler = () => {
+      setShowShiftEnding(false)
+      setShowSignOff(true)
+    }
+    window.addEventListener('cashier:start-signoff', handler)
+    return () => window.removeEventListener('cashier:start-signoff', handler)
+  }, [])
+
   // Fetch pending job count for sign-off step 1
   useEffect(() => {
     if (showSignOff && shiftData?.sheet_id) {

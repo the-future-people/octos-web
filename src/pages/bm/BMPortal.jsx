@@ -12,6 +12,9 @@ import Reports    from '../../components/bm/Reports'
 import Inventory  from '../../components/bm/Inventory'
 import Catalogue    from '../../components/bm/Catalogue'
 import Performance  from '../../components/bm/Performance'
+import Staff        from '../../components/bm/Staff'
+import Inbox        from '../../components/bm/Inbox'
+import DailyGreeting from '../../components/layout/DailyGreeting'
 
 const SECTIONS = [
   {
@@ -56,6 +59,8 @@ export default function BMPortal() {
       case 'inventory':  return <Inventory />
       case 'catalogue':   return <Catalogue />
       case 'performance': return <Performance />
+      case 'staff':       return <Staff />
+      case 'inbox':       return <Inbox />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
@@ -64,6 +69,7 @@ export default function BMPortal() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[var(--bg)]">
+      <DailyGreeting />
 
       {/* Topbar */}
       <BMTopbar

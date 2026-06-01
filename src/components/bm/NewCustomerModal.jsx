@@ -91,8 +91,11 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
 
   const handleSubmit = () => {
     setError('')
+    console.log('Submitting form:', form)
     if (!form.first_name.trim())                { setError('First name is required.'); return }
     if (!form.phone.trim())                     { setError('Phone number is required.'); return }
+    if ((isBusiness || isInstitution) && !form.company_name.trim()) { setError('Organisation name is required.'); return }
+    if ((isBusiness || isInstitution) && !form.address.trim())      { setError('Address is required.'); return }
     if (phoneStatus?.found === true)            { setError('This phone number is already registered.'); return }
     if (phoneStatus === 'checking')             { setError('Please wait — checking phone number...'); return }
     mutate(form)
@@ -157,18 +160,32 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
             ))}
           </div>
 
-          {/* Business Name */}
+          {/* Business Name + Address */}
           {isBusiness && (
-            <div>
-              <label className={LABEL_CLS}>
-                Business Name<span className="text-[var(--red-text)] ml-0.5">*</span>
-              </label>
-              <input
-                value={form.company_name}
-                onChange={e => set('company_name', e.target.value)}
-                placeholder="e.g. Suma Court Hotel, J.K. Tradings"
-                className={INPUT_CLS}
-              />
+            <div className="space-y-3">
+              <div>
+                <label className={LABEL_CLS}>
+                  Business Name<span className="text-[var(--red-text)] ml-0.5">*</span>
+                </label>
+                <input
+                  value={form.company_name}
+                  onChange={e => set('company_name', e.target.value)}
+                  placeholder="e.g. Suma Court Hotel, J.K. Tradings"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>
+                  Business Address<span className="text-[var(--red-text)] ml-0.5">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.address}
+                  onChange={e => set('address', e.target.value)}
+                  placeholder="e.g. 12 Osu Badu Street, Accra"
+                  className={`${INPUT_CLS} resize-none`}
+                />
+              </div>
             </div>
           )}
 
@@ -184,6 +201,18 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
                   onChange={e => set('company_name', e.target.value)}
                   placeholder="e.g. University of Ghana"
                   className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>
+                  Institution Address<span className="text-[var(--red-text)] ml-0.5">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.address}
+                  onChange={e => set('address', e.target.value)}
+                  placeholder="e.g. Legon Campus, Accra"
+                  className={`${INPUT_CLS} resize-none`}
                 />
               </div>
               <div>

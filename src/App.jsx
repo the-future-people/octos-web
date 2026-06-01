@@ -7,7 +7,8 @@ import ProtectedRoute from './components/layout/ProtectedRoute'
 import DailyGreeting from './components/layout/DailyGreeting'
 import LoginPage from './pages/auth/LoginPage'
 import CashierPortal from './pages/cashier/CashierPortal'
-import BMPortal from './pages/bm/BMPortal'
+import BMPortal        from './pages/bm/BMPortal'
+import AttendantPortal from './pages/attendant/AttendantPortal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +25,6 @@ export default function App() {
       <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
-          <DailyGreeting />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
@@ -46,6 +46,14 @@ export default function App() {
               }
             />
 
+            <Route
+              path="/attendant/*"
+              element={
+                <ProtectedRoute allowedRoles={['ATTENDANT']}>
+                  <AttendantPortal />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
         </BrowserRouter>

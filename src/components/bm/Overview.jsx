@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getJobStats, getJobs, getTodaySummary } from '../../api/bm'
 import NewJobModal from './NewJobModal'
+import LateJobModal from './LateJobModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -34,6 +35,7 @@ const STATUS_COLORS = {
 
 export default function Overview({ onNavigate }) {
   const [showNewJob, setShowNewJob] = useState(false)
+  const [showLateJob, setShowLateJob] = useState(false)
 
   const { data: summaryData } = useQuery({
     queryKey: ['todaySummary'],
@@ -56,6 +58,16 @@ export default function Overview({ onNavigate }) {
     enabled:  !!sheetId,
     refetchInterval: 30_000,
   })
+
+  const { data: lockData } = useQuery({
+    queryKey: ['lockStatus'],
+    queryFn:  () => getLockStatus().then(r => r.data),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
+  const canCreateJobs = lockData?.can_create_jobs ?? true
+  const sheetOpen     = summaryData?.meta?.status === 'OPEN'
 
   const stats   = statsData || {}
   const jobs    = Array.isArray(jobsData) ? jobsData : (jobsData?.results || [])
@@ -96,6 +108,22 @@ export default function Overview({ onNavigate }) {
             Route a job to another branch
           </span>
         </button>
+        
+        {/* Late Job button - appears when can_create_jobs is false but sheet is still OPEN */}
+        {!canCreateJobs && sheetOpen && (
+          <button 
+            onClick={() => setShowLateJob(true)}
+            className="col-span-2 flex items-center gap-3 px-5 py-4 bg-amber-50
+              border-2 border-amber-300 text-amber-800 rounded-xl font-bold text-sm
+              hover:bg-amber-100 transition-colors"
+          >
+            <span className="text-xl">⏰</span>
+            Record Late Job
+            <span className="text-amber-600 text-xs font-normal ml-auto hidden sm:block">
+              Post-closing · cashier signed off · held until morning
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Stats — single row of 6 */}
@@ -231,10 +259,18 @@ export default function Overview({ onNavigate }) {
         </div>
       </div>
 
-    {showNewJob && (
+      {/* Modals */}
+      {showNewJob && (
         <NewJobModal
           onClose={() => setShowNewJob(false)}
           onSuccess={() => setShowNewJob(false)}
+        />
+      )}
+
+      {showLateJob && (
+        <LateJobModal
+          onClose={() => setShowLateJob(false)}
+          onSuccess={() => setShowLateJob(false)}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     const role = user.role_name
     if (role === 'CASHIER')         return <Navigate to="/cashier" replace />
     if (role === 'BRANCH_MANAGER')  return <Navigate to="/bm" replace />
+    if (role === 'ATTENDANT')       return <Navigate to="/attendant" replace />
     return <Navigate to="/login" replace />
   }
 
