@@ -1,6 +1,7 @@
 // src/pages/attendant/AttendantPortal.jsx
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import useBranchSocket from '../../hooks/useBranchSocket'
 import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
 import AttendantOverview   from '../../components/attendant/AttendantOverview'
@@ -154,6 +155,7 @@ function DailyTargetWidget({ sheetId }) {
 
 export default function AttendantPortal() {
   const { user, logout } = useAuth()
+  useBranchSocket()
   const [page, setPage] = useState('overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 

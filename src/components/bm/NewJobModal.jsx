@@ -2,20 +2,13 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServices, calculatePrice, createJob, getCustomers } from '../../api/bm'
+import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toFixed(2)}`
 }
-
-function normalisePhone(val) {
-  if (!val) return val
-  val = val.trim().replace(/[\s\-().]/g, '')
-  if (val.startsWith('+233')) return '0' + val.slice(4)
-  if (val.startsWith('233') && val.length >= 12) return '0' + val.slice(3)
-  return val
-}
-
 const JOB_TYPE_THEME = {
   INSTANT:    { accent: 'bg-zinc-900',   tab: 'bg-zinc-900',   tint: 'bg-zinc-50'   },
   PRODUCTION: { accent: 'bg-blue-600',   tab: 'bg-blue-600',   tint: 'bg-blue-50'   },
@@ -32,6 +25,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [customer,      setCustomer]      = useState(null)
   const [custSearch,    setCustSearch]    = useState('')
   const [error,         setError]         = useState('')
+  const [successJob,    setSuccessJob]    = useState(null)
   const [selected,      setSelected]      = useState(null)
   const [selQty,        setSelQty]        = useState(1)
   const [selPages,      setSelPages]      = useState(1)
@@ -62,11 +56,41 @@ export default function NewJobModal({ onClose, onSuccess }) {
     staleTime: 3_000,
   })
 
+  // Alias map — normalises user intent to tokens present in service names.
+  // Keys are what users type, values are what the service name contains.
+  const SERVICE_ALIASES = [
+    { patterns: ['black', 'blk', 'bw', 'b&w', 'mono', 'monochrome', 'grayscale'], resolves: 'b&w' },
+    { patterns: ['colour', 'color', 'col', 'clr'],                                 resolves: 'colour' },
+    { patterns: ['print'],                                                          resolves: 'print' },
+    { patterns: ['copy', 'cop', 'copi'],                                            resolves: 'cop'   },
+    { patterns: ['bind', 'ring'],                                                   resolves: 'bind'  },
+    { patterns: ['passport', 'pass', 'pas'],                                        resolves: 'passport' },
+    { patterns: ['laminate', 'lam'],                                                resolves: 'laminat' },
+  ]
+
+  const resolveToken = (tok) => {
+    for (const { patterns, resolves } of SERVICE_ALIASES) {
+      if (patterns.some(p => p.startsWith(tok) || tok.startsWith(p))) return resolves
+    }
+    return tok
+  }
+
+  const matchesSearch = (name, query) => {
+    if (!query) return true
+    const target = name.toLowerCase()
+    const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    // Every token must match — either directly or via alias — order independent
+    return tokens.every(tok => {
+      const resolved = resolveToken(tok)
+      return target.includes(tok) || target.includes(resolved)
+    })
+  }
+
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
       .filter(s => s.is_active && s.category === jobType)
-      .filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()))
+      .filter(s => matchesSearch(s.name, search))
       .forEach(s => {
         const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
         if (!groups[key]) groups[key] = []
@@ -77,7 +101,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const { data: custResults = [] } = useQuery({
     queryKey: ['custLookup', custSearch],
-    queryFn:  () => getCustomers({ search: normalisePhone(custSearch), page_size: 5 }).then(r => {
+    queryFn:  () => getCustomers({ search: custSearch.trim(), page_size: 5 }).then(r => {
       const d = r.data
       return Array.isArray(d) ? d : (d?.results || [])
     }),
@@ -114,10 +138,8 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const { mutate, isPending } = useMutation({
     mutationFn: (payload) => createJob(payload),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['jobStats'] })
-      queryClient.invalidateQueries({ queryKey: ['recentJobs'] })
-      onSuccess?.(res.data)
-      onClose()
+      invalidateAfterJobCreated(queryClient)
+      setSuccessJob(res.data?.job_number || res.data?.id || '—')
     },
     onError: (err) => {
       const d = err.response?.data
@@ -155,7 +177,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     mutate(payload)
   }
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
       <div className={`rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col
         overflow-hidden animate-slideUp transition-colors duration-300 ${theme.tint}`}>
@@ -463,5 +485,21 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
       </div>
     </div>
+  )
+
+  return (
+    <>
+      {modal}
+      {successJob && (
+        <JobSuccessOverlay
+          jobNumber={successJob}
+          onDone={() => {
+            setSuccessJob(null)
+            onSuccess?.()
+            onClose()
+          }}
+        />
+      )}
+    </>
   )
 }

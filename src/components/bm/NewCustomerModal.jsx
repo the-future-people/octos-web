@@ -2,6 +2,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCustomer, lookupCustomer } from '../../api/bm'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
+import { invalidateAfterCustomerRegistered } from '../../api/invalidations'
 
 // null = idle, 'checking' = in-flight, { found: true, customer } = taken, { found: false } = clear
 const usePhonenLookup = () => {
@@ -15,7 +17,7 @@ const usePhonenLookup = () => {
     abortRef.current?.abort()
 
     const digits = phone.replace(/\D/g, '')
-    if (digits.length < 6) { setStatus(null); return }
+    if (digits.length < 7) { setStatus(null); return }
 
     setStatus('checking')
     timerRef.current = setTimeout(async () => {
@@ -64,8 +66,10 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     customer_type:       'INDIVIDUAL',
     institution_subtype: '',
     notes:               '',
+    address:             '',
   })
   const [error, setError] = useState('')
+  const [successCustomer, setSuccessCustomer] = useState(null)
   const { status: phoneStatus, lookup: lookupPhone, reset: resetLookup } = usePhonenLookup()
 
   const set = (key, val) => {
@@ -76,9 +80,12 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
   const { mutate, isPending } = useMutation({
     mutationFn: (payload) => createCustomer(payload),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] })
-      onSuccess?.(res.data)
-      onClose()
+      invalidateAfterCustomerRegistered(queryClient)
+      const c = res.data
+      const name = c.customer_type === 'INDIVIDUAL'
+        ? [c.first_name, c.last_name].filter(Boolean).join(' ')
+        : c.company_name || c.first_name
+      setSuccessCustomer(name || 'Customer')
     },
     onError: (err) => {
       const data = err.response?.data
@@ -129,7 +136,7 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
   const isBusiness    = form.customer_type === 'BUSINESS'
   const isInstitution = form.customer_type === 'INSTITUTION'
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
       <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden animate-slideUp">
 
@@ -401,5 +408,22 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
 
       </div>
     </div>
+  )
+
+  return (
+    <>
+      {modal}
+      {successCustomer && (
+        <JobSuccessOverlay
+          jobNumber={successCustomer}
+          message="Customer registered"
+          onDone={() => {
+            setSuccessCustomer(null)
+            onSuccess?.()
+            onClose()
+          }}
+        />
+      )}
+    </>
   )
 }

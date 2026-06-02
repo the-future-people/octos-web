@@ -1,6 +1,7 @@
 // src/pages/bm/BMPortal.jsx
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import useBranchSocket from '../../hooks/useBranchSocket'
 import BMTopbar from '../../components/bm/BMTopbar'
 import BMSidebar from '../../components/bm/BMSidebar'
 import BMInfoStrip from '../../components/bm/BMInfoStrip'
@@ -41,6 +42,7 @@ const SECTIONS = [
 
 export default function BMPortal() {
   const { user, logout } = useAuth()
+  useBranchSocket()
   const [activeSection, setActiveSection] = useState('overview')
   const [mobileOpen,    setMobileOpen]    = useState(false)
 

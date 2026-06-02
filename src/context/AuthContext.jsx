@@ -37,8 +37,12 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const getAccessToken = () => {
+    return localStorage.getItem('access_token')
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, getAccessToken }}>
       {children}
     </AuthContext.Provider>
   )

@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { confirmPayment } from '../../api/cashier'
+import { invalidateAfterPaymentConfirmed } from '../../api/invalidations'
 import ReceiptModal from './ReceiptModal'
 import { createPortal } from 'react-dom'
 
@@ -58,8 +59,7 @@ export default function PaymentModal({ job, onClose }) {
   const { mutate, isPending } = useMutation({
     mutationFn: (payload) => confirmPayment(job.id, payload),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
-      queryClient.invalidateQueries({ queryKey: ['cashierSummary'] })
+      invalidateAfterPaymentConfirmed(queryClient)
       setReceipt(res.data)
     },
     onError: (err) => {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
+import useBranchSocket from '../../hooks/useBranchSocket'
 import { getShiftStatus } from '../../api/cashier'
 import CashierTopbar from '../../components/cashier/CashierTopbar'
 import InfoStrip from '../../components/cashier/InfoStrip'
@@ -61,6 +62,7 @@ const TABS = [
 
 export default function CashierPortal() {
   const { user, logout } = useAuth()
+  useBranchSocket()
   const [activeTab,          setActiveTab]          = useState('queue')
   const [mobileOpen,         setMobileOpen]         = useState(false)
   const [shiftPromptShown,   setShiftPromptShown]   = useState(false)

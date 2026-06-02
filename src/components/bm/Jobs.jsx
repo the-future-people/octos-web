@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getJobs, getJobStats, getJobDetail, transitionJob } from '../../api/bm'
+import { invalidateAfterJobTransitioned } from '../../api/invalidations'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -76,9 +77,7 @@ function JobDetailPanel({ jobId, onClose }) {
   const { mutate, isPending } = useMutation({
     mutationFn: ({ to_status, notes }) => transitionJob(jobId, { to_status, notes }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['job-detail', jobId] })
-      queryClient.invalidateQueries({ queryKey: ['jobs'] })
-      queryClient.invalidateQueries({ queryKey: ['jobStats'] })
+      invalidateAfterJobTransitioned(queryClient, jobId)
       setTransitioning(null)
       setError('')
     },
