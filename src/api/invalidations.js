@@ -18,6 +18,8 @@ export const invalidateAfterJobCreated = (queryClient) => {
   // Cashier — most critical: new job must appear in queue immediately
   queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
   queryClient.invalidateQueries({ queryKey: ['cashierSummary'] })
+  queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+  queryClient.invalidateQueries({ queryKey: ['notifications'] })
 }
 
 // ── Payment confirmed (Cashier) ───────────────────────────────────────────────
@@ -34,6 +36,8 @@ export const invalidateAfterPaymentConfirmed = (queryClient) => {
   // Attendant views
   queryClient.invalidateQueries({ queryKey: ['attendant-my-jobs'] })
   queryClient.invalidateQueries({ queryKey: ['attendant-my-jobs-recent'] })
+  queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+  queryClient.invalidateQueries({ queryKey: ['notifications'] })
 }
 
 // ── Job transitioned (BM detail panel) ───────────────────────────────────────
@@ -45,6 +49,8 @@ export const invalidateAfterJobTransitioned = (queryClient, jobId) => {
   queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
   queryClient.invalidateQueries({ queryKey: ['attendant-my-jobs'] })
   queryClient.invalidateQueries({ queryKey: ['attendant-my-jobs-recent'] })
+  queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+  queryClient.invalidateQueries({ queryKey: ['notifications'] })
 }
 
 // ── Sheet closed (BM) ─────────────────────────────────────────────────────────
@@ -59,4 +65,10 @@ export const invalidateAfterSheetClosed = (queryClient) => {
 // ── Customer registered ───────────────────────────────────────────────────────
 export const invalidateAfterCustomerRegistered = (queryClient) => {
   queryClient.invalidateQueries({ queryKey: ['customers'] })
+}
+
+// ── Notifications bell ────────────────────────────────────────────────────────
+export const invalidateNotifications = (queryClient) => {
+  queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+  queryClient.invalidateQueries({ queryKey: ['notifications'] })
 }
