@@ -11,6 +11,7 @@ import AttendantBranchJobs from '../../components/attendant/AttendantBranchJobs'
 import AttendantDrafts     from '../../components/attendant/AttendantDrafts'
 import AttendantServices   from '../../components/attendant/AttendantServices'
 import AttendantInbox      from '../../components/attendant/AttendantInbox'
+import Inbox               from '../../components/bm/Inbox'
 import NewJobModal         from '../../components/bm/NewJobModal'
 import NewCustomerModal    from '../../components/bm/NewCustomerModal'
 import DailyGreeting       from '../../components/layout/DailyGreeting'
@@ -100,7 +101,7 @@ export default function AttendantPortal() {
       case 'my-jobs':     return <AttendantMyJobs sheet={sheet} />
       case 'branch-jobs': return <AttendantBranchJobs sheet={sheet} />
       case 'drafts':      return <AttendantDrafts sheet={sheet} onNavigate={handleNav} />
-      case 'inbox':       return <AttendantInbox />
+      case 'inbox':       return <Inbox />
       case 'services':    return <AttendantServices />
       default:            return (
         <AttendantOverview
