@@ -6,7 +6,9 @@ import {
   getUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
-} from '../../api/cashier'
+} from '../../api/notifications'
+
+// Re-export from bm api if needed — both use same endpoints
 
 export default function NotificationBell() {
   const [open,    setOpen]    = useState(false)
@@ -109,7 +111,7 @@ export default function NotificationBell() {
 
           {/* List */}
           <div className="overflow-y-auto max-h-[360px]">
-            {isLoading ? (
+            {isLoading && !notifsData ? (
               <div className="p-6 text-center text-sm text-[var(--text-3)]">
                 Loading…
               </div>

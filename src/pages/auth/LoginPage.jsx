@@ -31,12 +31,15 @@ export default function LoginPage() {
       const user = await getMe()
 
       // Step 4 — set global auth state
+      console.log('User after login:', user)
+      console.log('Role name:', user.role_name)
       login(tokens, user)
 
       // Step 5 — redirect based on role
       const role = user.role_name
       if (role === 'CASHIER')             navigate('/cashier')
       else if (role === 'BRANCH_MANAGER') navigate('/bm')
+      else if (role === 'ATTENDANT')      navigate('/attendant')
       else navigate('/')
 
     } catch (err) {
