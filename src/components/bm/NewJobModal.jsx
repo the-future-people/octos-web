@@ -390,8 +390,8 @@ export default function NewJobModal({ onClose, onSuccess }) {
             )}
           </div>
 
-          {/* Right — cart */}
-          <div className="w-60 flex flex-col px-4 shrink-0">
+          {/* Right — cart (hidden on mobile, visible on md+) */}
+          <div className="hidden md:flex w-60 flex-col px-4 shrink-0">
             <div className="flex items-center justify-between mb-3 shrink-0">
               <span className="text-xs font-bold text-[var(--text)] uppercase tracking-wider">Cart</span>
               <span className="text-xs text-[var(--text-3)]">
@@ -461,8 +461,54 @@ export default function NewJobModal({ onClose, onSuccess }) {
             rounded-lg text-xs text-red-600 shrink-0">{error}</div>
         )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 flex items-center justify-end gap-3 shrink-0
+        {/* Mobile cart bar */}
+        <div className="md:hidden shrink-0 border-t border-black/10 px-4 py-3">
+          {cart.length > 0 && (
+            <div className="mb-2 space-y-1 max-h-24 overflow-y-auto">
+              {cart.map(item => (
+                <div key={item._id} className="flex items-center justify-between
+                  px-2 py-1 bg-white/60 border border-black/10 rounded-lg">
+                  <span className="text-xs font-medium text-[var(--text)] truncate flex-1 mr-2">
+                    {item.service.name}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-xs font-bold">{fmt(item._price)}</span>
+                    <button onClick={() => removeFromCart(item._id)}
+                      className="text-black/25 hover:text-red-500">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button onClick={onClose}
+              className="px-3 py-2.5 text-sm font-semibold text-[var(--text-2)]
+                hover:text-[var(--text)] transition-colors border border-black/10
+                rounded-xl">
+              Cancel
+            </button>
+            <button onClick={handleSubmit}
+              disabled={isPending || cart.length === 0}
+              className={`flex-1 py-2.5 text-white text-sm font-bold rounded-xl
+                disabled:opacity-40 hover:opacity-90 transition-opacity
+                flex items-center justify-center gap-2 ${theme.accent}`}>
+              {cart.length > 0 && (
+                <span className="bg-white/20 text-white text-xs font-black
+                  px-1.5 py-0.5 rounded-full">{cart.length}</span>
+              )}
+              {isPending ? 'Creating...' : `Create Job · ${fmt(cartTotal)}`}
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop footer */}
+        <div className="hidden md:flex px-6 py-4 items-center justify-end gap-3 shrink-0
           border-t border-black/10">
           <button onClick={onClose}
             className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
