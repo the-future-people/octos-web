@@ -90,7 +90,8 @@ export default function NotificationBell() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-10 w-[360px] bg-[var(--panel)]
+        <div className="fixed left-2 right-2 top-16 sm:absolute sm:left-auto sm:right-0
+          sm:top-10 sm:w-[360px] bg-[var(--panel)]
           border border-[var(--border)] rounded-xl shadow-xl z-50 overflow-hidden">
 
           {/* Header */}
