@@ -73,51 +73,56 @@ export default function PaymentQueue() {
           {jobs.map((job, idx) => (
             <div
               key={job.id}
-              className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-                p-4 flex items-center gap-4"
+              className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4"
             >
-              {/* Position */}
-              <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-[var(--border)]
-                flex items-center justify-center text-xs font-bold text-[var(--text-3)] shrink-0">
-                {String(idx + 1).padStart(2, '0')}
-              </div>
-
-              {/* Job info */}
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-[var(--text)] truncate">
-                  {job.services_summary || job.job_number}
+              {/* Top row — position + job info */}
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-[var(--border)]
+                  flex items-center justify-center text-xs font-bold text-[var(--text-3)] shrink-0 mt-0.5">
+                  {String(idx + 1).padStart(2, '0')}
                 </div>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-xs text-[var(--text-3)] font-mono">{job.job_number}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5
-                    rounded bg-[var(--blue-bg)] text-[var(--blue-text)] border border-[var(--blue-border)]">
-                    {job.job_type}
-                  </span>
-                  <span className="text-xs text-[var(--text-3)]">
-                    by {job.attendant_name || '—'}
-                  </span>
-                  {job.customer_name ? (
-                    <span className="text-xs font-medium text-[var(--text-2)]">{job.customer_name}</span>
-                  ) : (
-                    <span className="text-xs text-[var(--text-3)]">Walk-in</span>
-                  )}
-                  <span className="text-xs text-[var(--text-3)]">{timeAgo(job.created_at)}</span>
-                </div>
-              </div>
-
-              {/* Amount + action */}
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="text-right">
-                  <div className="font-mono font-bold text-base text-[var(--text)]">
-                    {fmt(job.estimated_cost)}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-[var(--text)] break-words leading-snug">
+                    {job.services_summary || job.job_number}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-xs text-[var(--text-3)] font-mono whitespace-nowrap">
+                      {job.job_number}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5
+                      rounded bg-[var(--blue-bg)] text-[var(--blue-text)] border border-[var(--blue-border)]
+                      whitespace-nowrap">
+                      {job.job_type}
+                    </span>
+                    <span className="text-xs text-[var(--text-3)] whitespace-nowrap">
+                      by {job.attendant_name || '—'}
+                    </span>
+                    <span className="text-xs text-[var(--text-3)] whitespace-nowrap">
+                      {timeAgo(job.created_at)}
+                    </span>
                   </div>
                   {job.customer_name && (
-                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">{job.customer_name}</div>
+                    <div className="text-xs font-medium text-[var(--text-2)] mt-1">
+                      {job.customer_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom row — amount + button */}
+              <div className="flex items-center justify-between mt-3 pt-3
+                border-t border-[var(--border)]">
+                <div>
+                  <div className="font-mono font-black text-lg text-[var(--text)]">
+                    {fmt(job.estimated_cost)}
+                  </div>
+                  {!job.customer_name && (
+                    <div className="text-[10px] text-[var(--text-3)]">Walk-in</div>
                   )}
                 </div>
                 <button
-                  className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
-                    rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap"
+                  className="px-5 py-2.5 bg-[var(--text)] text-white text-sm font-bold
+                    rounded-xl hover:opacity-90 transition-opacity whitespace-nowrap"
                   onClick={() => setActiveJob(job)}
                 >
                   Collect Payment
