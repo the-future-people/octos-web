@@ -70,33 +70,37 @@ export default function InfoStrip() {
   // ── Active shift state ────────────────────────────────────────────────────
   return (
     <div className="bg-[var(--panel)] border-b border-[var(--border)]">
-      <div className="flex items-center justify-center gap-6 px-4 sm:px-6 py-2
-        mx-auto max-w-6xl text-[11px] font-bold text-[var(--text-3)] uppercase
-        tracking-wider overflow-x-auto">
+      <div className="flex items-center gap-4 px-4 sm:px-6 py-2 mx-auto max-w-6xl
+        overflow-x-auto whitespace-nowrap">
 
-        <span>Sheet <span className="text-[var(--text)] normal-case font-semibold">
-          {sheetNumber}
-        </span></span>
-
-        <span>Date <span className="text-[var(--text)] normal-case font-semibold">
-          {date}
-        </span></span>
-
-        <span>Shift Ends <span className="text-[var(--text)] normal-case font-semibold">
-          {shiftEnd}
-        </span>
-        {timeLeft && (
-          <span className="ml-1.5 text-[10px] font-bold text-[var(--amber-text)]
-            bg-[var(--amber-bg)] border border-[var(--amber-border)]
-            px-1.5 py-0.5 rounded normal-case">
-            {timeLeft}
-          </span>
-        )}
+        <span className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider shrink-0">
+          Sheet <span className="text-[var(--text)] normal-case font-semibold">{sheetNumber}</span>
         </span>
 
-        <span>Opening Float <span className="text-[var(--text)] normal-case font-semibold">
-          {openingFloat}
-        </span></span>
+        <span className="text-[var(--text-3)]">·</span>
+
+        <span className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider shrink-0">
+          Date <span className="text-[var(--text)] normal-case font-semibold">{date}</span>
+        </span>
+
+        <span className="text-[var(--text-3)]">·</span>
+
+        <span className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider shrink-0">
+          Shift Ends <span className="text-[var(--text)] normal-case font-semibold">{shiftEnd}</span>
+          {timeLeft && (
+            <span className="ml-1.5 text-[10px] font-bold text-[var(--amber-text)]
+              bg-[var(--amber-bg)] border border-[var(--amber-border)]
+              px-1.5 py-0.5 rounded normal-case">
+              {timeLeft}
+            </span>
+          )}
+        </span>
+
+        <span className="text-[var(--text-3)]">·</span>
+
+        <span className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider shrink-0">
+          Opening Float <span className="text-[var(--text)] normal-case font-semibold">{openingFloat}</span>
+        </span>
 
       </div>
     </div>

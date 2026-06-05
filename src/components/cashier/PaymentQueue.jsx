@@ -51,7 +51,7 @@ export default function PaymentQueue() {
           </p>
         </div>
         <div className="px-3 py-1 bg-[var(--panel)] border border-[var(--border)]
-          rounded-full text-sm font-semibold text-[var(--text-2)]">
+          rounded-full text-sm font-semibold text-[var(--text-2)] whitespace-nowrap shrink-0">
           {jobs.length} pending
         </div>
       </div>
