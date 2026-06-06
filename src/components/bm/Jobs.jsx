@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl } from '../../api/bm'
 import { invalidateAfterJobTransitioned } from '../../api/invalidations'
-import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -25,7 +24,6 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-// ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   DRAFT:               { label: 'Draft',             bg: 'bg-zinc-100',    text: 'text-zinc-600'    },
   PENDING_PAYMENT:     { label: 'Pending Payment',   bg: 'bg-amber-100',   text: 'text-amber-700'   },
@@ -63,13 +61,10 @@ function StatusBadge({ status }) {
   )
 }
 
-
-
-// ── Receipt & Invoice Section ─────────────────────────────────────────────────
 function ReceiptInvoiceSection({ job }) {
-  const [tab,             setTab]             = useState('receipt')
+  const [tab, setTab] = useState('receipt')
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
-  const [invoiceForm,     setInvoiceForm]     = useState({
+  const [invoiceForm, setInvoiceForm] = useState({
     invoice_type:     'PROFORMA',
     bill_to_name:     job.customer_name || '',
     bill_to_phone:    job.customer_phone || '',
@@ -78,21 +73,21 @@ function ReceiptInvoiceSection({ job }) {
     delivery_channel: 'DOWNLOAD',
     bm_note:          '',
   })
-  const [invoiceError,   setInvoiceError]   = useState('')
-  const [sendingWa,      setSendingWa]      = useState(false)
-  const [waMsg,          setWaMsg]          = useState('')
+  const [invoiceError, setInvoiceError] = useState('')
+  const [sendingWa, setSendingWa] = useState(false)
+  const [waMsg, setWaMsg] = useState('')
   const queryClient = useQueryClient()
 
   const { data: receiptData } = useQuery({
     queryKey: ['job-receipt', job.id],
     queryFn:  () => getJobReceipt(job.id).then(r => r.data),
-    staleTime: 30_000,
+    staleTime: 30000,
   })
 
   const { data: invoiceData } = useQuery({
     queryKey: ['job-invoices', job.id],
     queryFn:  () => getJobInvoices(job.id).then(r => r.data),
-    staleTime: 30_000,
+    staleTime: 30000,
   })
 
   const receipts = Array.isArray(receiptData) ? receiptData : (receiptData?.results || [])
@@ -151,8 +146,6 @@ function ReceiptInvoiceSection({ job }) {
       <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">
         Receipt & Invoice
       </div>
-
-      {/* Tabs */}
       <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl mb-3">
         {['receipt', 'invoice'].map(t => (
           <button key={t} onClick={() => setTab(t)}
@@ -165,8 +158,6 @@ function ReceiptInvoiceSection({ job }) {
           </button>
         ))}
       </div>
-
-      {/* Receipt tab */}
       {tab === 'receipt' && (
         <div>
           {!receipt ? (
@@ -217,8 +208,6 @@ function ReceiptInvoiceSection({ job }) {
           )}
         </div>
       )}
-
-      {/* Invoice tab */}
       {tab === 'invoice' && (
         <div className="space-y-2">
           {invoice ? (
@@ -255,7 +244,6 @@ function ReceiptInvoiceSection({ job }) {
             </div>
           ) : showInvoiceForm ? (
             <div className="px-3 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl space-y-2">
-              {/* Invoice type */}
               <div className="flex gap-1">
                 {['PROFORMA', 'TAX'].map(t => (
                   <button key={t} onClick={() => setInvoiceForm(f => ({ ...f, invoice_type: t }))}
@@ -268,7 +256,6 @@ function ReceiptInvoiceSection({ job }) {
                   </button>
                 ))}
               </div>
-              {/* Bill to */}
               {[
                 { key: 'bill_to_name',    placeholder: 'Bill to name *'    },
                 { key: 'bill_to_phone',   placeholder: 'Phone'             },
@@ -282,7 +269,6 @@ function ReceiptInvoiceSection({ job }) {
                     rounded-lg outline-none focus:border-[var(--border-dark)]"
                 />
               ))}
-              {/* Delivery */}
               <select value={invoiceForm.delivery_channel}
                 onChange={e => setInvoiceForm(f => ({ ...f, delivery_channel: e.target.value }))}
                 className="w-full px-2.5 py-2 text-xs bg-[var(--panel)] border border-[var(--border)]
@@ -292,7 +278,6 @@ function ReceiptInvoiceSection({ job }) {
                 <option value="EMAIL">Email</option>
                 <option value="BOTH">WhatsApp + Email</option>
               </select>
-              {/* Note */}
               <textarea placeholder="BM note (optional)" rows={2}
                 value={invoiceForm.bm_note}
                 onChange={e => setInvoiceForm(f => ({ ...f, bm_note: e.target.value }))}
@@ -332,23 +317,20 @@ function ReceiptInvoiceSection({ job }) {
   )
 }
 
-// ── Job Detail Panel ──────────────────────────────────────────────────────────
 function JobDetailPanel({ jobId, onClose }) {
   const queryClient = useQueryClient()
-  const [transitioning, setTransitioning] = useState(null)
   const [error, setError] = useState('')
 
   const { data: job, isLoading } = useQuery({
     queryKey: ['job-detail', jobId],
     queryFn:  () => getJobDetail(jobId).then(r => r.data),
-    staleTime: 10_000,
+    staleTime: 10000,
   })
 
   const { mutate, isPending } = useMutation({
     mutationFn: ({ to_status, notes }) => transitionJob(jobId, { to_status, notes }),
     onSuccess: () => {
       invalidateAfterJobTransitioned(queryClient, jobId)
-      setTransitioning(null)
       setError('')
     },
     onError: (err) => {
@@ -363,8 +345,6 @@ function JobDetailPanel({ jobId, onClose }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-[var(--panel)] w-full max-w-lg max-h-[90vh]
         flex flex-col overflow-hidden shadow-2xl rounded-2xl animate-slideUp">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">
@@ -378,16 +358,12 @@ function JobDetailPanel({ jobId, onClose }) {
             className="w-8 h-8 flex items-center justify-center rounded-full
               hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
         </div>
-
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {isLoading && !job ? (
             <div className="space-y-3">
               {[1,2,3].map(i => <div key={i} className="h-20 bg-[var(--bg)] rounded-xl animate-pulse" />)}
             </div>
           ) : job ? (<>
-
-            {/* Status + meta */}
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={job.status} />
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
@@ -400,8 +376,6 @@ function JobDetailPanel({ jobId, onClose }) {
                 </span>
               )}
             </div>
-
-            {/* Key info grid */}
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Customer',    value: toTitleCase(job.customer_name) || 'Walk-in' },
@@ -418,8 +392,6 @@ function JobDetailPanel({ jobId, onClose }) {
                 </div>
               ))}
             </div>
-
-            {/* Line items */}
             {job.line_items?.length > 0 && (
               <div>
                 <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Services</div>
@@ -441,8 +413,6 @@ function JobDetailPanel({ jobId, onClose }) {
                 </div>
               </div>
             )}
-
-            {/* Allowed transitions */}
             {job.allowed_transitions?.length > 0 && (
               <div>
                 <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Actions</div>
@@ -466,8 +436,6 @@ function JobDetailPanel({ jobId, onClose }) {
                 )}
               </div>
             )}
-
-            {/* Status log */}
             {job.status_logs?.length > 0 && (
               <div>
                 <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">History</div>
@@ -493,41 +461,34 @@ function JobDetailPanel({ jobId, onClose }) {
                 </div>
               </div>
             )}
-
-            {/* Notes */}
             {job.notes && (
               <div className="px-3 py-3 bg-amber-50 border border-amber-100 rounded-xl">
                 <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Notes</div>
                 <div className="text-xs text-amber-800">{job.notes}</div>
               </div>
             )}
-
-            {/* Receipt & Invoice */}
             <ReceiptInvoiceSection job={job} />
-
           </>) : (
             <div className="text-sm text-[var(--text-3)] text-center py-8">Job not found</div>
           )}
         </div>
-
       </div>
     </div>,
     document.body
   )
 }
 
-// ── Receipts Tab ──────────────────────────────────────────────────────────────
 function ReceiptsTab() {
-  const [period,          setPeriod]          = useState('day')
-  const [page,            setPage]            = useState(1)
+  const [period, setPeriod] = useState('day')
+  const [page, setPage] = useState(1)
   const [activeReceiptId, setActiveReceiptId] = useState(null)
-  const [sendingWa,       setSendingWa]       = useState(false)
-  const [waMsg,           setWaMsg]           = useState('')
+  const [sendingWa, setSendingWa] = useState(false)
+  const [waMsg, setWaMsg] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['receipts', period, page],
     queryFn:  () => getJobReceipt(null, { period, page, page_size: 10 }).then(r => r.data),
-    staleTime: 15_000,
+    staleTime: 15000,
     placeholderData: prev => prev,
   })
 
@@ -535,7 +496,7 @@ function ReceiptsTab() {
     queryKey: ['receipt-detail', activeReceiptId],
     queryFn:  () => client.get(`/api/v1/finance/receipts/${activeReceiptId}/`).then(r => r.data),
     enabled:  !!activeReceiptId,
-    staleTime: 30_000,
+    staleTime: 30000,
   })
 
   const receipts   = Array.isArray(data) ? data : (data?.results || [])
@@ -581,7 +542,6 @@ function ReceiptsTab() {
 
   return (
     <div className="p-5 sm:p-6 space-y-4">
-      {/* Header + period */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Receipts</h2>
@@ -604,11 +564,7 @@ function ReceiptsTab() {
           ))}
         </div>
       </div>
-
-      {/* Two-panel layout */}
       <div className="flex border border-[var(--border)] rounded-2xl overflow-hidden min-h-[520px]">
-
-        {/* Left — list */}
         <div className="w-72 shrink-0 border-r border-[var(--border)] flex flex-col bg-[var(--panel)]">
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
@@ -647,8 +603,6 @@ function ReceiptsTab() {
               </div>
             ))}
           </div>
-
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="shrink-0 px-3 py-2.5 border-t border-[var(--border)] bg-[var(--bg)]
               flex items-center justify-between">
@@ -668,8 +622,6 @@ function ReceiptsTab() {
             </div>
           )}
         </div>
-
-        {/* Right — detail */}
         <div className="flex-1 flex flex-col bg-[var(--bg)] overflow-hidden">
           {!activeReceiptId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-[var(--text-3)] p-10">
@@ -684,8 +636,6 @@ function ReceiptsTab() {
           ) : r ? (
             <>
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-                {/* Header */}
                 <div className="flex items-start justify-between pb-4 border-b border-[var(--border)]">
                   <div>
                     <div className="font-black text-lg text-[var(--text)]">{r.receipt_number}</div>
@@ -700,15 +650,11 @@ function ReceiptsTab() {
                     PAID
                   </span>
                 </div>
-
-                {/* Job */}
                 <div>
                   <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Job</div>
                   <div className="text-sm font-bold text-[var(--text)]">{r.job_title || '—'}</div>
                   <div className="font-mono text-xs text-[var(--text-3)] mt-0.5">{r.job_number}</div>
                 </div>
-
-                {/* Line items */}
                 {r.line_items?.length > 0 && (
                   <div>
                     <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Services</div>
@@ -734,8 +680,6 @@ function ReceiptsTab() {
                     </div>
                   </div>
                 )}
-
-                {/* Payment settlement */}
                 <div className={`px-4 py-3 rounded-xl border space-y-2
                   ${METHOD_COLOR[r.payment_method] || 'bg-zinc-50 border-zinc-200'}`}>
                   <div className="text-[10px] font-bold uppercase tracking-widest mb-1">Payment Settlement</div>
@@ -752,8 +696,6 @@ function ReceiptsTab() {
                     </div>
                   ))}
                 </div>
-
-                {/* Payment method */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full border
                     ${METHOD_COLOR[r.payment_method] || METHOD_COLOR.CREDIT}`}>
@@ -766,8 +708,6 @@ function ReceiptsTab() {
                     <span className="text-xs text-[var(--text-3)]">Approval: <span className="font-mono font-semibold text-[var(--text)]">{r.pos_approval_code}</span></span>
                   )}
                 </div>
-
-                {/* People */}
                 <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3 space-y-2">
                   <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-1">People</div>
                   {[
@@ -782,10 +722,7 @@ function ReceiptsTab() {
                     </div>
                   ))}
                 </div>
-
               </div>
-
-              {/* Actions */}
               <div className="shrink-0 px-6 py-4 border-t border-[var(--border)] bg-[var(--panel)] flex gap-3">
                 <button onClick={handlePrint}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5
@@ -824,55 +761,276 @@ function ReceiptsTab() {
   )
 }
 
-// ── Invoices Tab ──────────────────────────────────────────────────────────────
-function InvoicesTab() {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  const [period,      setPeriod]      = useState('')
-  const [page,        setPage]        = useState(1)
-  const [showCreate,  setShowCreate]  = useState(false)
-  const [createError, setCreateError] = useState('')
-  const [form, setForm] = useState({
-    invoice_type:     'PROFORMA',
-    bill_to_name:     '',
-    bill_to_phone:    '',
-    bill_to_email:    '',
-    bill_to_company:  '',
-    delivery_channel: 'DOWNLOAD',
-    bm_note:          '',
-    job_id:           '',
+const STATUS_FILTERS = [
+  { value: 'ALL',             label: 'All'             },
+  { value: 'PENDING_PAYMENT', label: 'Pending Payment' },
+  { value: 'IN_PROGRESS',     label: 'In Progress'     },
+  { value: 'READY',           label: 'Ready'           },
+  { value: 'COMPLETE',        label: 'Complete'        },
+  { value: 'CANCELLED',       label: 'Cancelled'       },
+]
+
+const TYPE_FILTERS = [
+  { value: 'ALL',        label: 'All Types'  },
+  { value: 'INSTANT',    label: 'Instant'    },
+  { value: 'PRODUCTION', label: 'Production' },
+  { value: 'DESIGN',     label: 'Design'     },
+]
+
+export default function Jobs() {
+  const [tab, setTab] = useState('jobs')
+  const [status, setStatus] = useState('ALL')
+  const [jobType, setJobType] = useState('ALL')
+  const [period, setPeriod] = useState('day')
+  const [page, setPage] = useState(1)
+  const [selectedId, setSelectedId] = useState(null)
+
+  const { data: statsData } = useQuery({
+    queryKey: ['jobStats', period, jobType],
+    queryFn:  () => getJobStats({
+      period:   period  || undefined,
+      job_type: jobType !== 'ALL' ? jobType : undefined,
+    }).then(r => r.data),
+    refetchInterval: 30000,
+    staleTime: 0,
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['invoices', period, page],
-    queryFn:  () => client.get('/api/v1/finance/invoices/', {
-      params: { period: period || undefined, page, page_size: 10 }
+    queryKey: ['jobs', status, jobType, period, page],
+    queryFn:  () => getJobs({
+      status:   status   !== 'ALL' ? status   : undefined,
+      job_type: jobType  !== 'ALL' ? jobType  : undefined,
+      period:   period   || undefined,
+      page,
+      page_size: 20,
     }).then(r => r.data),
-    staleTime: 15_000,
+    staleTime: 15000,
     placeholderData: prev => prev,
   })
 
-  const invoices   = Array.isArray(data) ? data : (data?.results || [])
+  const jobs       = Array.isArray(data) ? data : (data?.results || [])
   const count      = data?.count || 0
-  const totalPages = Math.ceil(count / 10)
+  const totalPages = Math.ceil(count / 20)
+  const stats = statsData || {}
 
-  const { mutate: createInv, isPending: creating } = useMutation({
-    mutationFn: (payload) => createInvoice(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] })
-      setShowCreate(false)
-      setCreateError('')
-      setForm({
-        invoice_type: 'PROFORMA', bill_to_name: '', bill_to_phone: '',
-        bill_to_email: '', bill_to_company: '', delivery_channel: 'DOWNLOAD',
-        bm_note: '', job_id: '',
-      })
-    },
-    onError: (err) => {
-      const d = err.response?.data
-      setCreateError(d?.detail || 'Failed to create invoice.')
-    },
+  const handleStatus = (v) => { setStatus(v); setPage(1) }
+  const handleType   = (v) => { setJobType(v); setPage(1) }
+  const handlePeriod = (v) => { setPeriod(v); setPage(1) }
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl mx-5 sm:mx-6 mt-5 sm:mt-6">
+        {[
+          { value: 'jobs',     label: 'Jobs'     },
+          { value: 'receipts', label: 'Receipts' },
+          { value: 'invoices', label: 'Invoices' },
+        ].map(t => (
+          <button key={t.value} onClick={() => setTab(t.value)}
+            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors
+              ${tab === t.value
+                ? 'bg-[var(--text)] text-white shadow-sm'
+                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+              }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'receipts' && <ReceiptsTab />}
+      {tab === 'invoices' && <InvoicesTab />}
+      {tab === 'jobs' && (
+        <div className="p-5 sm:p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text)]">Jobs</h2>
+              <p className="text-xs text-[var(--text-3)] mt-0.5">
+                {count > 0 ? `${count.toLocaleString()} jobs` : 'All branch jobs'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {[
+              { label: 'Total',      value: stats.total,      color: 'text-[var(--text)]',    border: 'border-t-zinc-400'    },
+              { label: 'Complete',   value: stats.complete,   color: 'text-emerald-600',       border: 'border-t-emerald-500' },
+              { label: 'In Progress',value: stats.in_progress,color: 'text-violet-600',        border: 'border-t-violet-500'  },
+              { label: 'Pending',    value: stats.pending,    color: 'text-amber-600',         border: 'border-t-amber-400'   },
+              { label: 'Cancelled',  value: stats.cancelled,  color: 'text-red-500',           border: 'border-t-red-400'     },
+              { label: 'Walk-in',    value: stats.walkin,     color: 'text-blue-600',          border: 'border-t-blue-400'    },
+            ].map(c => (
+              <div key={c.label}
+                className={`bg-[var(--panel)] border border-[var(--border)] border-t-2 ${c.border} rounded-xl px-3 py-3 text-center`}>
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
+                <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? '—'}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-3 space-y-3">
+            <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+              {[
+                { value: 'day',   label: 'Today'     },
+                { value: 'week',  label: 'This Week'  },
+                { value: 'month', label: 'This Month' },
+                { value: '',      label: 'All Time'   },
+              ].map(f => (
+                <button key={f.value} onClick={() => handlePeriod(f.value)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors
+                    ${period === f.value
+                      ? 'bg-[var(--text)] text-white shadow-sm'
+                      : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                    }`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex gap-1 flex-wrap">
+                {STATUS_FILTERS.map(f => (
+                  <button key={f.value} onClick={() => handleStatus(f.value)}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-colors whitespace-nowrap
+                      ${status === f.value
+                        ? 'bg-zinc-800 text-white border-transparent'
+                        : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-dark)]'
+                      }`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-4 bg-[var(--border)] shrink-0" />
+              <div className="flex gap-1 justify-center">
+                {TYPE_FILTERS.map(f => (
+                  <button key={f.value} onClick={() => handleType(f.value)}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-colors
+                      ${jobType === f.value
+                        ? 'bg-blue-600 text-white border-transparent'
+                        : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-dark)]'
+                      }`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {isLoading && !data ? (
+            <div className="space-y-2">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
+              flex flex-col items-center justify-center py-16">
+              <p className="text-sm font-semibold text-[var(--text-2)]">No jobs found</p>
+              <p className="text-xs text-[var(--text-3)] mt-1">Try adjusting your filters</p>
+            </div>
+          ) : (
+            <>
+              <div className="hidden sm:grid grid-cols-12 px-4 py-2
+                text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                <span className="col-span-2">Job No.</span>
+                <span className="col-span-3">Title</span>
+                <span className="col-span-2">Customer</span>
+                <span className="col-span-2">Status</span>
+                <span className="col-span-1">Type</span>
+                <span className="col-span-1 text-right">Amount</span>
+                <span className="col-span-1 text-right">When</span>
+              </div>
+              <div className="space-y-1.5">
+                {jobs.map(job => (
+                  <div key={job.id}
+                    onClick={() => setSelectedId(job.id)}
+                    className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
+                      px-4 py-3 cursor-pointer hover:border-[var(--border-dark)] transition-colors">
+                    <div className="flex items-center justify-between sm:hidden">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-[var(--text)]">{job.job_number}</span>
+                          <StatusBadge status={job.status} />
+                        </div>
+                        <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
+                          {job.title} · {toTitleCase(job.customer_name) || 'Walk-in'}
+                        </div>
+                      </div>
+                      <div className="text-right ml-3 shrink-0">
+                        <div className="font-mono text-sm font-bold text-[var(--text)]">{fmt(job.estimated_cost)}</div>
+                        <div className="text-[10px] text-[var(--text-3)]">{timeAgo(job.created_at)}</div>
+                      </div>
+                    </div>
+                    <div className="hidden sm:grid grid-cols-12 items-center gap-1">
+                      <div className="col-span-2">
+                        <span className="font-mono text-xs font-bold text-[var(--text)]">{job.job_number}</span>
+                      </div>
+                      <div className="col-span-3 min-w-0">
+                        <div className="text-xs font-semibold text-[var(--text)] truncate">{job.title}</div>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <div className="text-xs text-[var(--text-2)] truncate">
+                          {toTitleCase(job.customer_name) || 'Walk-in'}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <StatusBadge status={job.status} />
+                      </div>
+                      <div className="col-span-1">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded
+                          ${TYPE_CONFIG[job.job_type]?.bg} ${TYPE_CONFIG[job.job_type]?.color}`}>
+                          {TYPE_CONFIG[job.job_type]?.label || job.job_type}
+                        </span>
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <span className="font-mono text-xs font-bold text-[var(--text)]">{fmt(job.estimated_cost)}</span>
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <span className="text-[10px] text-[var(--text-3)]">{timeAgo(job.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs text-[var(--text-3)]">
+                    Page {page} of {totalPages} · {count.toLocaleString()} jobs
+                  </span>
+                  <div className="flex gap-2">
+                    <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                      className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
+                    <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                      className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {selectedId && (
+            <JobDetailPanel jobId={selectedId} onClose={() => setSelectedId(null)} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Missing component - InvoicesTab
+function InvoicesTab() {
+  const queryClient = useQueryClient()
+  const [period, setPeriod] = useState('')
+  const [page, setPage] = useState(1)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['invoices', period, page],
+    queryFn: () => client.get('/api/v1/finance/invoices/', {
+      params: { period: period || undefined, page, page_size: 10 }
+    }).then(r => r.data),
+    staleTime: 15000,
+    placeholderData: prev => prev,
   })
+
+  const invoices = Array.isArray(data) ? data : (data?.results || [])
+  const count = data?.count || 0
+  const totalPages = Math.ceil(count / 10)
 
   const { mutate: resend, isPending: resending } = useMutation({
     mutationFn: (id) => sendInvoice(id),
@@ -880,18 +1038,18 @@ function InvoicesTab() {
   })
 
   const STATUS_COLOR = {
-    DRAFT:  'bg-zinc-100 text-zinc-600',
-    SENT:   'bg-blue-100 text-blue-700',
+    DRAFT: 'bg-zinc-100 text-zinc-600',
+    SENT: 'bg-blue-100 text-blue-700',
     VIEWED: 'bg-amber-100 text-amber-700',
-    PAID:   'bg-emerald-100 text-emerald-700',
+    PAID: 'bg-emerald-100 text-emerald-700',
   }
 
   const handleDownload = async (id, invoiceNumber) => {
     try {
-      const res  = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
-      const url  = URL.createObjectURL(res.data)
-      const a    = document.createElement('a')
-      a.href     = url
+      const res = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
       a.download = `${invoiceNumber}.pdf`
       a.click()
       URL.revokeObjectURL(url)
@@ -900,43 +1058,32 @@ function InvoicesTab() {
 
   return (
     <div className="p-5 sm:p-6 space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Invoices</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">{count} invoice{count !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Period tabs */}
-          <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
-            {[
-              { value: '',      label: 'All'        },
-              { value: 'day',   label: 'Today'      },
-              { value: 'week',  label: 'This Week'  },
-              { value: 'month', label: 'This Month' },
-            ].map(f => (
-              <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1) }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
-                  ${period === f.value
-                    ? 'bg-[var(--text)] text-white'
-                    : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-                  }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
-              rounded-xl hover:opacity-90 transition-opacity">
-            + New Invoice
-          </button>
+        <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+          {[
+            { value: '', label: 'All' },
+            { value: 'day', label: 'Today' },
+            { value: 'week', label: 'This Week' },
+            { value: 'month', label: 'This Month' },
+          ].map(f => (
+            <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1) }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
+                ${period === f.value
+                  ? 'bg-[var(--text)] text-white'
+                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                }`}>
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
-
-      {/* Invoice list */}
       {isLoading ? (
         <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
         </div>
       ) : invoices.length === 0 ? (
         <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
@@ -990,9 +1137,9 @@ function InvoicesTab() {
                     className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
                       text-[var(--text-2)] transition-colors">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="7 10 12 15 17 10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   </button>
                   <button onClick={() => resend(inv.id)} disabled={resending}
@@ -1000,433 +1147,17 @@ function InvoicesTab() {
                     className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
                       text-[var(--text-2)] disabled:opacity-40 transition-colors">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="22 2 11 13"/>
-                      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                      <polyline points="22 2 11 13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
                     </svg>
                   </button>
                 </div>
               </div>
             ))}
           </div>
-
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-[var(--text-3)]">
-                Page {page} of {totalPages} · {count} invoices
-              </span>
-              <div className="flex gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-                  className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-                  className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Create invoice modal */}
-      {showCreate && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
-          <div className="bg-[var(--panel)] w-full max-w-md rounded-2xl shadow-2xl
-            flex flex-col overflow-hidden animate-slideUp max-h-[90vh]">
-
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
-              <div>
-                <div className="font-bold text-base text-[var(--text)]">New Invoice</div>
-                <div className="text-xs text-[var(--text-3)] mt-0.5">Create a proforma or tax invoice</div>
-              </div>
-              <button onClick={() => setShowCreate(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-full
-                  hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-
-              {/* Invoice type */}
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Invoice Type
-                </label>
-                <div className="flex gap-1.5">
-                  {['PROFORMA', 'TAX'].map(t => (
-                    <button key={t} onClick={() => setForm(f => ({ ...f, invoice_type: t }))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-colors
-                        ${form.invoice_type === t
-                          ? 'bg-[var(--text)] text-white border-transparent'
-                          : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'
-                        }`}>
-                      {t === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Job ID (optional) */}
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Job Reference <span className="normal-case font-normal">(optional)</span>
-                </label>
-                <input type="text" placeholder="e.g. FP-WLB-2026-02247"
-                  value={form.job_id}
-                  onChange={e => setForm(f => ({ ...f, job_id: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                    rounded-xl outline-none focus:border-[var(--border-dark)]"
-                />
-              </div>
-
-              {/* Bill to */}
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Bill To <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  {[
-                    { key: 'bill_to_name',    placeholder: 'Full name *',          type: 'text'  },
-                    { key: 'bill_to_phone',   placeholder: 'Phone number',          type: 'tel'   },
-                    { key: 'bill_to_email',   placeholder: 'Email address',         type: 'email' },
-                    { key: 'bill_to_company', placeholder: 'Company (optional)',    type: 'text'  },
-                  ].map(f => (
-                    <input key={f.key} type={f.type} placeholder={f.placeholder}
-                      value={form[f.key]}
-                      onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                        rounded-xl outline-none focus:border-[var(--border-dark)]"
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Delivery channel */}
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Delivery Channel
-                </label>
-                <select value={form.delivery_channel}
-                  onChange={e => setForm(f => ({ ...f, delivery_channel: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                    rounded-xl outline-none">
-                  <option value="DOWNLOAD">Download only</option>
-                  <option value="WHATSAPP">WhatsApp</option>
-                  <option value="EMAIL">Email</option>
-                  <option value="BOTH">WhatsApp + Email</option>
-                </select>
-              </div>
-
-              {/* BM note */}
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Note <span className="normal-case font-normal">(optional)</span>
-                </label>
-                <textarea placeholder="Add a note to this invoice…" rows={3}
-                  value={form.bm_note}
-                  onChange={e => setForm(f => ({ ...f, bm_note: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                    rounded-xl outline-none resize-none focus:border-[var(--border-dark)]"
-                />
-              </div>
-
-              {createError && (
-                <div className="px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)]
-                  rounded-xl text-xs text-[var(--red-text)]">{createError}</div>
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-[var(--border)] flex gap-3 shrink-0">
-              <button onClick={() => setShowCreate(false)}
-                className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
-                  hover:text-[var(--text)] transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setCreateError('')
-                  createInv({
-                    job_id:           form.job_id ? parseInt(form.job_id) : undefined,
-                    invoice_type:     form.invoice_type,
-                    bill_to_name:     form.bill_to_name,
-                    bill_to_phone:    form.bill_to_phone,
-                    bill_to_email:    form.bill_to_email,
-                    bill_to_company:  form.bill_to_company,
-                    delivery_channel: form.delivery_channel,
-                    bm_note:          form.bm_note,
-                  })
-                }}
-                disabled={creating || !form.bill_to_name.trim()}
-                className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold
-                  rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
-                {creating ? 'Creating…' : 'Create Invoice'}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </div>
-  )
-}
-
-// ── Main Jobs Component ───────────────────────────────────────────────────────
-const STATUS_FILTERS = [
-  { value: 'ALL',             label: 'All'             },
-  { value: 'PENDING_PAYMENT', label: 'Pending Payment' },
-  { value: 'IN_PROGRESS',     label: 'In Progress'     },
-  { value: 'READY',           label: 'Ready'           },
-  { value: 'COMPLETE',        label: 'Complete'        },
-  { value: 'CANCELLED',       label: 'Cancelled'       },
-]
-
-const TYPE_FILTERS = [
-  { value: 'ALL',        label: 'All Types'  },
-  { value: 'INSTANT',    label: 'Instant'    },
-  { value: 'PRODUCTION', label: 'Production' },
-  { value: 'DESIGN',     label: 'Design'     },
-]
-
-export default function Jobs() {
-  const [tab,        setTab]        = useState('jobs')
-  const [status,     setStatus]     = useState('ALL')
-  const [jobType,    setJobType]    = useState('ALL')
-  const [period,     setPeriod]     = useState('day')
-  const [page,       setPage]       = useState(1)
-  const [selectedId, setSelectedId] = useState(null)
-
-  const { data: statsData } = useQuery({
-    queryKey: ['jobStats', period, jobType],
-    queryFn:  () => getJobStats({
-      period:   period  || undefined,
-      job_type: jobType !== 'ALL' ? jobType : undefined,
-    }).then(r => r.data),
-    refetchInterval: 30_000,
-    staleTime: 0,
-  })
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['jobs', status, jobType, period, page],
-    queryFn:  () => getJobs({
-      status:   status   !== 'ALL' ? status   : undefined,
-      job_type: jobType  !== 'ALL' ? jobType  : undefined,
-      period:   period   || undefined,
-      page,
-      page_size: 20,
-    }).then(r => r.data),
-    staleTime: 15_000,
-    placeholderData: prev => prev,
-  })
-
-  const jobs       = Array.isArray(data) ? data : (data?.results || [])
-  const count      = data?.count || 0
-  const totalPages = Math.ceil(count / 20)
-
-  const stats = statsData || {}
-
-  const handleStatus = (v) => { setStatus(v); setPage(1) }
-  const handleType   = (v) => { setJobType(v); setPage(1) }
-  const handlePeriod = (v) => { setPeriod(v); setPage(1) }
-
-  return (
-    <div className="flex flex-col">
-
-      {/* Tab bar — always visible */}
-      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl mx-5 sm:mx-6 mt-5 sm:mt-6">
-        {[
-          { value: 'jobs',     label: 'Jobs'     },
-          { value: 'receipts', label: 'Receipts' },
-          { value: 'invoices', label: 'Invoices' },
-        ].map(t => (
-          <button key={t.value} onClick={() => setTab(t.value)}
-            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors
-              ${tab === t.value
-                ? 'bg-[var(--text)] text-white shadow-sm'
-                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-              }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {tab === 'receipts' && <ReceiptsTab />}
-      {tab === 'invoices' && <InvoicesTab />}
-      {tab === 'jobs' && <div className="p-5 sm:p-6 space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-[var(--text)]">Jobs</h2>
-          <p className="text-xs text-[var(--text-3)] mt-0.5">
-            {count > 0 ? `${count.toLocaleString()} jobs` : 'All branch jobs'}
-          </p>
-        </div>
-      </div>
-
-      {/* Stats strip */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        {[
-          { label: 'Total',      value: stats.total,      color: 'text-[var(--text)]',    border: 'border-t-zinc-400'    },
-          { label: 'Complete',   value: stats.complete,   color: 'text-emerald-600',       border: 'border-t-emerald-500' },
-          { label: 'In Progress',value: stats.in_progress,color: 'text-violet-600',        border: 'border-t-violet-500'  },
-          { label: 'Pending',    value: stats.pending,    color: 'text-amber-600',         border: 'border-t-amber-400'   },
-          { label: 'Cancelled',  value: stats.cancelled,  color: 'text-red-500',           border: 'border-t-red-400'     },
-          { label: 'Walk-in',    value: stats.walkin,     color: 'text-blue-600',          border: 'border-t-blue-400'    },
-        ].map(c => (
-          <div key={c.label}
-            className={`bg-[var(--panel)] border border-[var(--border)] border-t-2 ${c.border} rounded-xl px-3 py-3 text-center`}>
-            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-            <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? '—'}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters — period tabs + status + type in one clean bar */}
-      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-3 space-y-3">
-
-        {/* Period — tab style */}
-        <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
-          {[
-            { value: 'day',   label: 'Today'     },
-            { value: 'week',  label: 'This Week'  },
-            { value: 'month', label: 'This Month' },
-            { value: '',      label: 'All Time'   },
-          ].map(f => (
-            <button key={f.value} onClick={() => handlePeriod(f.value)}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors
-                ${period === f.value
-                  ? 'bg-[var(--text)] text-white shadow-sm'
-                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-                }`}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Status + Type — centered, two distinct groups */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex gap-1 flex-wrap">
-            {STATUS_FILTERS.map(f => (
-              <button key={f.value} onClick={() => handleStatus(f.value)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-colors whitespace-nowrap
-                  ${status === f.value
-                    ? 'bg-zinc-800 text-white border-transparent'
-                    : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-dark)]'
-                  }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-4 bg-[var(--border)] shrink-0" />
-
-          {/* Type — blue accent */}
-          <div className="flex gap-1 justify-center">
-            {TYPE_FILTERS.map(f => (
-              <button key={f.value} onClick={() => handleType(f.value)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-colors
-                  ${jobType === f.value
-                    ? 'bg-blue-600 text-white border-transparent'
-                    : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-dark)]'
-                  }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-      </div>
-
-      {/* Job list */}
-      {isLoading && !data ? (
-        <div className="space-y-2">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          flex flex-col items-center justify-center py-16">
-          <p className="text-sm font-semibold text-[var(--text-2)]">No jobs found</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">Try adjusting your filters</p>
-        </div>
-      ) : (
-        <>
-          {/* Table header — desktop */}
-          <div className="hidden sm:grid grid-cols-12 px-4 py-2
-            text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-            <span className="col-span-2">Job No.</span>
-            <span className="col-span-3">Title</span>
-            <span className="col-span-2">Customer</span>
-            <span className="col-span-2">Status</span>
-            <span className="col-span-1">Type</span>
-            <span className="col-span-1 text-right">Amount</span>
-            <span className="col-span-1 text-right">When</span>
-          </div>
-
-          <div className="space-y-1.5">
-            {jobs.map(job => (
-              <div key={job.id}
-                onClick={() => setSelectedId(job.id)}
-                className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-                  px-4 py-3 cursor-pointer hover:border-[var(--border-dark)] transition-colors">
-
-                {/* Mobile */}
-                <div className="flex items-center justify-between sm:hidden">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[var(--text)]">{job.job_number}</span>
-                      <StatusBadge status={job.status} />
-                    </div>
-                    <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
-                      {job.title} · {toTitleCase(job.customer_name) || 'Walk-in'}
-                    </div>
-                  </div>
-                  <div className="text-right ml-3 shrink-0">
-                    <div className="font-mono text-sm font-bold text-[var(--text)]">{fmt(job.estimated_cost)}</div>
-                    <div className="text-[10px] text-[var(--text-3)]">{timeAgo(job.created_at)}</div>
-                  </div>
-                </div>
-
-                {/* Desktop */}
-                <div className="hidden sm:grid grid-cols-12 items-center gap-1">
-                  <div className="col-span-2">
-                    <span className="font-mono text-xs font-bold text-[var(--text)]">{job.job_number}</span>
-                  </div>
-                  <div className="col-span-3 min-w-0">
-                    <div className="text-xs font-semibold text-[var(--text)] truncate">{job.title}</div>
-                  </div>
-                  <div className="col-span-2 min-w-0">
-                    <div className="text-xs text-[var(--text-2)] truncate">
-                      {toTitleCase(job.customer_name) || 'Walk-in'}
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <StatusBadge status={job.status} />
-                  </div>
-                  <div className="col-span-1">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded
-                      ${TYPE_CONFIG[job.job_type]?.bg} ${TYPE_CONFIG[job.job_type]?.color}`}>
-                      {TYPE_CONFIG[job.job_type]?.label || job.job_type}
-                    </span>
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <span className="font-mono text-xs font-bold text-[var(--text)]">{fmt(job.estimated_cost)}</span>
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <span className="text-[10px] text-[var(--text-3)]">{timeAgo(job.created_at)}</span>
-                  </div>
-                </div>
-
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-[var(--text-3)]">
-                Page {page} of {totalPages} · {count.toLocaleString()} jobs
-              </span>
+              <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} · {count} invoices</span>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
@@ -1439,13 +1170,6 @@ export default function Jobs() {
           )}
         </>
       )}
-
-      {/* Job detail panel */}
-      {selectedId && (
-        <JobDetailPanel jobId={selectedId} onClose={() => setSelectedId(null)} />
-      )}
-
-      </div>}
     </div>
   )
 }
