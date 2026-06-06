@@ -96,8 +96,8 @@ export const markAllNotificationsRead = () =>
   client.post('/api/v1/notifications/read-all/')
 
 // ── Receipts ──────────────────────────────────────────────────────
-export const getJobReceipt        = (jobId) =>
-  client.get('/api/v1/finance/receipts/', { params: { job: jobId } })
+export const getJobReceipt        = (jobId, params = {}) =>
+  client.get('/api/v1/finance/receipts/', { params: jobId ? { job: jobId, ...params } : params })
 
 export const sendReceiptWhatsApp  = (receiptId) =>
   client.post(`/api/v1/finance/receipts/${receiptId}/send-whatsapp/`)

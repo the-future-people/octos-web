@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl } from '../../api/bm'
 import { invalidateAfterJobTransitioned } from '../../api/invalidations'
+import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -515,6 +516,660 @@ function JobDetailPanel({ jobId, onClose }) {
   )
 }
 
+// ── Receipts Tab ──────────────────────────────────────────────────────────────
+function ReceiptsTab() {
+  const [period,          setPeriod]          = useState('day')
+  const [page,            setPage]            = useState(1)
+  const [activeReceiptId, setActiveReceiptId] = useState(null)
+  const [sendingWa,       setSendingWa]       = useState(false)
+  const [waMsg,           setWaMsg]           = useState('')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['receipts', period, page],
+    queryFn:  () => getJobReceipt(null, { period, page, page_size: 10 }).then(r => r.data),
+    staleTime: 15_000,
+    placeholderData: prev => prev,
+  })
+
+  const { data: activeReceipt, isLoading: loadingDetail } = useQuery({
+    queryKey: ['receipt-detail', activeReceiptId],
+    queryFn:  () => client.get(`/api/v1/finance/receipts/${activeReceiptId}/`).then(r => r.data),
+    enabled:  !!activeReceiptId,
+    staleTime: 30_000,
+  })
+
+  const receipts   = Array.isArray(data) ? data : (data?.results || [])
+  const count      = data?.count || 0
+  const totalPages = Math.ceil(count / 10)
+
+  const handlePrint = async () => {
+    if (!activeReceiptId) return
+    try {
+      const res  = await client.get(`/api/v1/finance/receipts/${activeReceiptId}/thermal/`)
+      const text = res.data?.text || ''
+      const win  = window.open('', '_blank', 'width=300,height=600')
+      if (win) {
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
+          <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Courier New',monospace;
+          font-size:12px;display:flex;justify-content:center;padding:16px;}pre{white-space:pre-wrap;
+          word-break:break-word;width:80mm;font-size:11px;}@media print{@page{margin:8mm;}body{padding:0;}}</style>
+          </head><body><pre>${text}</pre></body></html>`)
+        win.document.close()
+        setTimeout(() => { win.print(); win.close() }, 300)
+      }
+    } catch { /* silent */ }
+  }
+
+  const handleSendWa = async () => {
+    if (!activeReceiptId) return
+    setSendingWa(true); setWaMsg('')
+    try {
+      await sendReceiptWhatsApp(activeReceiptId)
+      setWaMsg('Sent!')
+    } catch { setWaMsg('Failed') }
+    finally { setSendingWa(false) }
+  }
+
+  const METHOD_COLOR = {
+    CASH:   'bg-emerald-100 text-emerald-700 border-emerald-200',
+    MOMO:   'bg-amber-100 text-amber-700 border-amber-200',
+    POS:    'bg-blue-100 text-blue-700 border-blue-200',
+    CREDIT: 'bg-zinc-100 text-zinc-600 border-zinc-200',
+  }
+
+  const r = activeReceipt
+
+  return (
+    <div className="p-5 sm:p-6 space-y-4">
+      {/* Header + period */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-[var(--text)]">Receipts</h2>
+          <p className="text-xs text-[var(--text-3)] mt-0.5">Branch payment receipts</p>
+        </div>
+        <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+          {[
+            { value: 'day',   label: 'Today'     },
+            { value: 'week',  label: 'This Week'  },
+            { value: 'month', label: 'This Month' },
+          ].map(f => (
+            <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1); setActiveReceiptId(null) }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
+                ${period === f.value
+                  ? 'bg-[var(--text)] text-white'
+                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                }`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Two-panel layout */}
+      <div className="flex border border-[var(--border)] rounded-2xl overflow-hidden min-h-[520px]">
+
+        {/* Left — list */}
+        <div className="w-72 shrink-0 border-r border-[var(--border)] flex flex-col bg-[var(--panel)]">
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="p-8 text-center text-[var(--text-3)]">Loading…</div>
+            ) : receipts.length === 0 ? (
+              <div className="p-8 text-center text-sm text-[var(--text-3)]">No receipts for this period</div>
+            ) : receipts.map(r => (
+              <div key={r.id} onClick={() => { setActiveReceiptId(r.id); setWaMsg('') }}
+                className={`px-4 py-3 border-b border-[var(--border)] cursor-pointer transition-colors
+                  ${activeReceiptId === r.id
+                    ? 'bg-[var(--bg)] border-l-2 border-l-[var(--text)]'
+                    : 'hover:bg-[var(--bg)]'
+                  }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-xs font-bold text-[var(--text)] truncate">
+                    {r.receipt_number}
+                  </span>
+                  <span className="font-mono text-sm font-bold text-[var(--text)] ml-2 shrink-0">
+                    {fmt(r.amount_paid)}
+                  </span>
+                </div>
+                <div className="text-xs text-[var(--text-2)] font-medium truncate mb-1">
+                  {r.customer_name || 'Walk-in'}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border
+                    ${METHOD_COLOR[r.payment_method] || METHOD_COLOR.CREDIT}`}>
+                    {r.payment_method}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-3)] font-mono">
+                    {r.created_at
+                      ? new Date(r.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="shrink-0 px-3 py-2.5 border-t border-[var(--border)] bg-[var(--bg)]
+              flex items-center justify-between">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
+                  rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
+                ← Prev
+              </button>
+              <span className="text-[10px] font-mono text-[var(--text-3)]">
+                {(page-1)*10+1}–{Math.min(page*10, count)} of {count}
+              </span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
+                  rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right — detail */}
+        <div className="flex-1 flex flex-col bg-[var(--bg)] overflow-hidden">
+          {!activeReceiptId ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-[var(--text-3)] p-10">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span className="text-sm">Select a receipt to view details</span>
+            </div>
+          ) : loadingDetail ? (
+            <div className="flex-1 flex items-center justify-center text-[var(--text-3)]">Loading…</div>
+          ) : r ? (
+            <>
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+                {/* Header */}
+                <div className="flex items-start justify-between pb-4 border-b border-[var(--border)]">
+                  <div>
+                    <div className="font-black text-lg text-[var(--text)]">{r.receipt_number}</div>
+                    <div className="text-xs text-[var(--text-3)] mt-0.5">
+                      {r.created_at ? new Date(r.created_at).toLocaleString('en-GH', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      }) : '—'}
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                    PAID
+                  </span>
+                </div>
+
+                {/* Job */}
+                <div>
+                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Job</div>
+                  <div className="text-sm font-bold text-[var(--text)]">{r.job_title || '—'}</div>
+                  <div className="font-mono text-xs text-[var(--text-3)] mt-0.5">{r.job_number}</div>
+                </div>
+
+                {/* Line items */}
+                {r.line_items?.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Services</div>
+                    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
+                      {r.line_items.map((li, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5
+                          border-b border-[var(--border)] last:border-0">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-[var(--text)]">{li.service_name}</div>
+                            <div className="text-[10px] text-[var(--text-3)]">
+                              {li.pages}pp × {li.sets} sets · {li.is_color ? 'Colour' : 'B&W'}
+                            </div>
+                          </div>
+                          <span className="font-mono text-xs font-bold text-[var(--text)] ml-3">
+                            {fmt(li.line_total)}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--bg)]">
+                        <span className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">Subtotal</span>
+                        <span className="font-mono text-sm font-black text-[var(--text)]">{fmt(r.subtotal || r.amount_paid)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment settlement */}
+                <div className={`px-4 py-3 rounded-xl border space-y-2
+                  ${METHOD_COLOR[r.payment_method] || 'bg-zinc-50 border-zinc-200'}`}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-1">Payment Settlement</div>
+                  {[
+                    ['Amount Paid',   fmt(r.amount_paid),   true ],
+                    r.cash_tendered && parseFloat(r.cash_tendered) > 0 ? ['Cash Tendered', fmt(r.cash_tendered), false] : null,
+                    r.change_given  && parseFloat(r.change_given)  > 0 ? ['Change Given',  fmt(r.change_given),  false] : null,
+                    r.balance_due   && parseFloat(r.balance_due)   > 0 ? ['Balance Due',   fmt(r.balance_due),   false] : null,
+                  ].filter(Boolean).map(([label, val, strong]) => (
+                    <div key={label} className={`flex items-center justify-between
+                      ${strong ? 'pt-2 border-t border-current/20' : ''}`}>
+                      <span className={`text-xs ${strong ? 'font-bold' : 'font-medium'}`}>{label}</span>
+                      <span className={`font-mono ${strong ? 'text-base font-black' : 'text-sm font-semibold'}`}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Payment method */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border
+                    ${METHOD_COLOR[r.payment_method] || METHOD_COLOR.CREDIT}`}>
+                    {r.payment_method}
+                  </span>
+                  {r.momo_reference && (
+                    <span className="text-xs text-[var(--text-3)]">Ref: <span className="font-mono font-semibold text-[var(--text)]">{r.momo_reference}</span></span>
+                  )}
+                  {r.pos_approval_code && (
+                    <span className="text-xs text-[var(--text-3)]">Approval: <span className="font-mono font-semibold text-[var(--text)]">{r.pos_approval_code}</span></span>
+                  )}
+                </div>
+
+                {/* People */}
+                <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3 space-y-2">
+                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-1">People</div>
+                  {[
+                    ['Customer',  r.customer_name || 'Walk-in'],
+                    r.customer_phone ? ['Phone', r.customer_phone] : null,
+                    ['Cashier',   r.cashier_name  || '—'],
+                    ['Attendant', r.intake_by_name || '—'],
+                  ].filter(Boolean).map(([label, val]) => (
+                    <div key={label} className="flex items-center justify-between border-b border-[var(--border)] pb-1.5 last:border-0 last:pb-0">
+                      <span className="text-xs text-[var(--text-3)]">{label}</span>
+                      <span className="text-xs font-semibold text-[var(--text)]">{val}</span>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+
+              {/* Actions */}
+              <div className="shrink-0 px-6 py-4 border-t border-[var(--border)] bg-[var(--panel)] flex gap-3">
+                <button onClick={handlePrint}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5
+                    bg-[var(--text)] text-white text-sm font-bold rounded-xl
+                    hover:opacity-90 transition-opacity">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 6 2 18 2 18 9"/>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                    <rect x="6" y="14" width="12" height="8"/>
+                  </svg>
+                  Print
+                </button>
+                {r.customer_phone && (
+                  <button onClick={handleSendWa} disabled={sendingWa}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5
+                      bg-[#25D366] text-white text-sm font-bold rounded-xl
+                      hover:opacity-90 disabled:opacity-40 transition-opacity">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    {sendingWa ? 'Sending…' : 'WhatsApp'}
+                  </button>
+                )}
+                {waMsg && (
+                  <span className={`text-xs font-bold self-center
+                    ${waMsg === 'Sent!' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {waMsg}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Invoices Tab ──────────────────────────────────────────────────────────────
+function InvoicesTab() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [period,      setPeriod]      = useState('')
+  const [page,        setPage]        = useState(1)
+  const [showCreate,  setShowCreate]  = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [form, setForm] = useState({
+    invoice_type:     'PROFORMA',
+    bill_to_name:     '',
+    bill_to_phone:    '',
+    bill_to_email:    '',
+    bill_to_company:  '',
+    delivery_channel: 'DOWNLOAD',
+    bm_note:          '',
+    job_id:           '',
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['invoices', period, page],
+    queryFn:  () => client.get('/api/v1/finance/invoices/', {
+      params: { period: period || undefined, page, page_size: 10 }
+    }).then(r => r.data),
+    staleTime: 15_000,
+    placeholderData: prev => prev,
+  })
+
+  const invoices   = Array.isArray(data) ? data : (data?.results || [])
+  const count      = data?.count || 0
+  const totalPages = Math.ceil(count / 10)
+
+  const { mutate: createInv, isPending: creating } = useMutation({
+    mutationFn: (payload) => createInvoice(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      setShowCreate(false)
+      setCreateError('')
+      setForm({
+        invoice_type: 'PROFORMA', bill_to_name: '', bill_to_phone: '',
+        bill_to_email: '', bill_to_company: '', delivery_channel: 'DOWNLOAD',
+        bm_note: '', job_id: '',
+      })
+    },
+    onError: (err) => {
+      const d = err.response?.data
+      setCreateError(d?.detail || 'Failed to create invoice.')
+    },
+  })
+
+  const { mutate: resend, isPending: resending } = useMutation({
+    mutationFn: (id) => sendInvoice(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+  })
+
+  const STATUS_COLOR = {
+    DRAFT:  'bg-zinc-100 text-zinc-600',
+    SENT:   'bg-blue-100 text-blue-700',
+    VIEWED: 'bg-amber-100 text-amber-700',
+    PAID:   'bg-emerald-100 text-emerald-700',
+  }
+
+  const handleDownload = async (id, invoiceNumber) => {
+    try {
+      const res  = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
+      const url  = URL.createObjectURL(res.data)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `${invoiceNumber}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+  }
+
+  return (
+    <div className="p-5 sm:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-[var(--text)]">Invoices</h2>
+          <p className="text-xs text-[var(--text-3)] mt-0.5">{count} invoice{count !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Period tabs */}
+          <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+            {[
+              { value: '',      label: 'All'        },
+              { value: 'day',   label: 'Today'      },
+              { value: 'week',  label: 'This Week'  },
+              { value: 'month', label: 'This Month' },
+            ].map(f => (
+              <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1) }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
+                  ${period === f.value
+                    ? 'bg-[var(--text)] text-white'
+                    : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                  }`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
+              rounded-xl hover:opacity-90 transition-opacity">
+            + New Invoice
+          </button>
+        </div>
+      </div>
+
+      {/* Invoice list */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1,2,3].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
+        </div>
+      ) : invoices.length === 0 ? (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
+          flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-sm font-semibold text-[var(--text-2)]">No invoices yet</p>
+          <p className="text-xs text-[var(--text-3)] mt-1">Create your first invoice</p>
+        </div>
+      ) : (
+        <>
+          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            <div className="hidden sm:grid grid-cols-12 px-5 py-2.5 border-b border-[var(--border)]
+              text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+              <span className="col-span-3">Invoice No</span>
+              <span className="col-span-2">Type</span>
+              <span className="col-span-3">Bill To</span>
+              <span className="col-span-2 text-right">Amount</span>
+              <span className="col-span-1">Status</span>
+              <span className="col-span-1 text-right">Actions</span>
+            </div>
+            {invoices.map(inv => (
+              <div key={inv.id} className="grid grid-cols-12 px-5 py-3 border-b border-[var(--border)]
+                last:border-0 items-center hover:bg-[var(--bg)] transition-colors">
+                <div className="col-span-6 sm:col-span-3">
+                  <span className="font-mono text-xs font-bold text-[var(--text)]">{inv.invoice_number}</span>
+                  <div className="text-[10px] text-[var(--text-3)] mt-0.5">{inv.issue_date}</div>
+                </div>
+                <div className="hidden sm:block col-span-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                    ${inv.invoice_type === 'PROFORMA' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {inv.invoice_type}
+                  </span>
+                </div>
+                <div className="hidden sm:block col-span-3 min-w-0">
+                  <div className="text-xs font-semibold text-[var(--text)] truncate">{inv.bill_to_name || '—'}</div>
+                  {inv.bill_to_company && (
+                    <div className="text-[10px] text-[var(--text-3)] truncate">{inv.bill_to_company}</div>
+                  )}
+                </div>
+                <div className="col-span-3 sm:col-span-2 text-right">
+                  <span className="font-mono text-xs font-bold text-[var(--text)]">{fmt(inv.total)}</span>
+                </div>
+                <div className="hidden sm:block col-span-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                    ${STATUS_COLOR[inv.status] || 'bg-zinc-100 text-zinc-600'}`}>
+                    {inv.status}
+                  </span>
+                </div>
+                <div className="col-span-3 sm:col-span-1 flex items-center justify-end gap-1.5">
+                  <button onClick={() => handleDownload(inv.id, inv.invoice_number)}
+                    title="Download PDF"
+                    className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
+                      text-[var(--text-2)] transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => resend(inv.id)} disabled={resending}
+                    title="Resend"
+                    className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
+                      text-[var(--text-2)] disabled:opacity-40 transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="22 2 11 13"/>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-[var(--text-3)]">
+                Page {page} of {totalPages} · {count} invoices
+              </span>
+              <div className="flex gap-2">
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                  className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                  className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Create invoice modal */}
+      {showCreate && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
+          <div className="bg-[var(--panel)] w-full max-w-md rounded-2xl shadow-2xl
+            flex flex-col overflow-hidden animate-slideUp max-h-[90vh]">
+
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
+              <div>
+                <div className="font-bold text-base text-[var(--text)]">New Invoice</div>
+                <div className="text-xs text-[var(--text-3)] mt-0.5">Create a proforma or tax invoice</div>
+              </div>
+              <button onClick={() => setShowCreate(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-full
+                  hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+              {/* Invoice type */}
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Invoice Type
+                </label>
+                <div className="flex gap-1.5">
+                  {['PROFORMA', 'TAX'].map(t => (
+                    <button key={t} onClick={() => setForm(f => ({ ...f, invoice_type: t }))}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-colors
+                        ${form.invoice_type === t
+                          ? 'bg-[var(--text)] text-white border-transparent'
+                          : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'
+                        }`}>
+                      {t === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Job ID (optional) */}
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Job Reference <span className="normal-case font-normal">(optional)</span>
+                </label>
+                <input type="text" placeholder="e.g. FP-WLB-2026-02247"
+                  value={form.job_id}
+                  onChange={e => setForm(f => ({ ...f, job_id: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                    rounded-xl outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+
+              {/* Bill to */}
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Bill To <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { key: 'bill_to_name',    placeholder: 'Full name *',          type: 'text'  },
+                    { key: 'bill_to_phone',   placeholder: 'Phone number',          type: 'tel'   },
+                    { key: 'bill_to_email',   placeholder: 'Email address',         type: 'email' },
+                    { key: 'bill_to_company', placeholder: 'Company (optional)',    type: 'text'  },
+                  ].map(f => (
+                    <input key={f.key} type={f.type} placeholder={f.placeholder}
+                      value={form[f.key]}
+                      onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                        rounded-xl outline-none focus:border-[var(--border-dark)]"
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Delivery channel */}
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Delivery Channel
+                </label>
+                <select value={form.delivery_channel}
+                  onChange={e => setForm(f => ({ ...f, delivery_channel: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                    rounded-xl outline-none">
+                  <option value="DOWNLOAD">Download only</option>
+                  <option value="WHATSAPP">WhatsApp</option>
+                  <option value="EMAIL">Email</option>
+                  <option value="BOTH">WhatsApp + Email</option>
+                </select>
+              </div>
+
+              {/* BM note */}
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Note <span className="normal-case font-normal">(optional)</span>
+                </label>
+                <textarea placeholder="Add a note to this invoice…" rows={3}
+                  value={form.bm_note}
+                  onChange={e => setForm(f => ({ ...f, bm_note: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                    rounded-xl outline-none resize-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+
+              {createError && (
+                <div className="px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)]
+                  rounded-xl text-xs text-[var(--red-text)]">{createError}</div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[var(--border)] flex gap-3 shrink-0">
+              <button onClick={() => setShowCreate(false)}
+                className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
+                  hover:text-[var(--text)] transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setCreateError('')
+                  createInv({
+                    job_id:           form.job_id ? parseInt(form.job_id) : undefined,
+                    invoice_type:     form.invoice_type,
+                    bill_to_name:     form.bill_to_name,
+                    bill_to_phone:    form.bill_to_phone,
+                    bill_to_email:    form.bill_to_email,
+                    bill_to_company:  form.bill_to_company,
+                    delivery_channel: form.delivery_channel,
+                    bm_note:          form.bm_note,
+                  })
+                }}
+                disabled={creating || !form.bill_to_name.trim()}
+                className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold
+                  rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+                {creating ? 'Creating…' : 'Create Invoice'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 // ── Main Jobs Component ───────────────────────────────────────────────────────
 const STATUS_FILTERS = [
   { value: 'ALL',             label: 'All'             },
@@ -533,6 +1188,7 @@ const TYPE_FILTERS = [
 ]
 
 export default function Jobs() {
+  const [tab,        setTab]        = useState('jobs')
   const [status,     setStatus]     = useState('ALL')
   const [jobType,    setJobType]    = useState('ALL')
   const [period,     setPeriod]     = useState('day')
@@ -572,8 +1228,29 @@ export default function Jobs() {
   const handleType   = (v) => { setJobType(v); setPage(1) }
   const handlePeriod = (v) => { setPeriod(v); setPage(1) }
 
+  if (tab === 'receipts') return <ReceiptsTab />
+  if (tab === 'invoices') return <InvoicesTab />
+
   return (
     <div className="p-5 sm:p-6 space-y-5">
+
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl">
+        {[
+          { value: 'jobs',     label: 'Jobs'     },
+          { value: 'receipts', label: 'Receipts' },
+          { value: 'invoices', label: 'Invoices' },
+        ].map(t => (
+          <button key={t.value} onClick={() => setTab(t.value)}
+            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors
+              ${tab === t.value
+                ? 'bg-[var(--text)] text-white shadow-sm'
+                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+              }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {/* Header */}
       <div className="flex items-center justify-between">
