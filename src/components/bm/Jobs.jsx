@@ -1015,8 +1015,6 @@ export default function Jobs() {
 }
 
 // â”€â”€ Invoices Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const PAPER_SIZES = ['A4', 'A3', 'A5', 'A6', 'SRA3', 'LEGAL', 'LETTER', 'CUSTOM']
-const SIDES       = [{ value: 'SINGLE', label: 'Single-sided' }, { value: 'DOUBLE', label: 'Double-sided' }]
 
 function InvoicesTab() {
   const queryClient = useQueryClient()
