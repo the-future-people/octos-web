@@ -1,9 +1,10 @@
-// src/components/bm/Jobs.jsx
-import { useState, useEffect } from 'react'
+﻿// src/components/bm/Jobs.jsx
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
-import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl } from '../../api/bm'
+import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl, getServices, calculatePrice, getCustomers } from '../../api/bm'
 import { invalidateAfterJobTransitioned } from '../../api/invalidations'
+import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -11,7 +12,7 @@ function fmt(n) {
 }
 
 function timeAgo(iso) {
-  if (!iso) return '—'
+  if (!iso) return 'â€”'
   const diff = Math.floor((Date.now() - new Date(iso)) / 60000)
   if (diff < 1)  return 'Just now'
   if (diff < 60) return `${diff}m ago`
@@ -163,7 +164,7 @@ function ReceiptInvoiceSection({ job }) {
           {!receipt ? (
             <div className="px-3 py-4 bg-[var(--bg)] border border-[var(--border)]
               rounded-xl text-xs text-[var(--text-3)] text-center">
-              No receipt yet — payment not confirmed
+              No receipt yet â€” payment not confirmed
             </div>
           ) : (
             <div className="px-3 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl space-y-2">
@@ -195,7 +196,7 @@ function ReceiptInvoiceSection({ job }) {
                 <button onClick={handleSendWa} disabled={sendingWa}
                   className="flex-1 py-2 text-xs font-bold bg-emerald-600 text-white
                     rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {sendingWa ? 'Sending…' : '📲 Send WhatsApp'}
+                  {sendingWa ? 'Sendingâ€¦' : 'ðŸ“² Send WhatsApp'}
                 </button>
               </div>
               {waMsg && (
@@ -232,13 +233,13 @@ function ReceiptInvoiceSection({ job }) {
                 <a href={getInvoicePdfUrl(invoice.id)} target="_blank" rel="noreferrer"
                   className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
                     rounded-lg hover:opacity-90 transition-opacity text-center">
-                  ⬇ Download PDF
+                  â¬‡ Download PDF
                 </a>
                 <button onClick={() => resendInv(invoice.id)} disabled={resendingInv}
                   className="flex-1 py-2 text-xs font-bold border border-[var(--border)]
                     text-[var(--text)] rounded-lg hover:bg-[var(--bg)] disabled:opacity-40
                     transition-colors">
-                  {resendingInv ? 'Sending…' : 'Resend'}
+                  {resendingInv ? 'Sendingâ€¦' : 'Resend'}
                 </button>
               </div>
             </div>
@@ -296,7 +297,7 @@ function ReceiptInvoiceSection({ job }) {
                 <button onClick={handleCreateInvoice} disabled={creatingInv || !invoiceForm.bill_to_name}
                   className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
                     rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {creatingInv ? 'Creating…' : 'Create Invoice'}
+                  {creatingInv ? 'Creatingâ€¦' : 'Create Invoice'}
                 </button>
               </div>
             </div>
@@ -348,7 +349,7 @@ function JobDetailPanel({ jobId, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">
-              {isLoading ? 'Loading…' : job?.job_number}
+              {isLoading ? 'Loadingâ€¦' : job?.job_number}
             </div>
             <div className="text-xs text-[var(--text-3)] mt-0.5">
               {isLoading ? '' : job?.title}
@@ -356,7 +357,7 @@ function JobDetailPanel({ jobId, onClose }) {
           </div>
           <button onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full
-              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
+              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">âœ•</button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {isLoading && !job ? (
@@ -379,8 +380,8 @@ function JobDetailPanel({ jobId, onClose }) {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Customer',    value: toTitleCase(job.customer_name) || 'Walk-in' },
-                { label: 'Intake By',   value: toTitleCase(job.intake_by_name) || '—'      },
-                { label: 'Channel',     value: job.intake_channel || '—'                   },
+                { label: 'Intake By',   value: toTitleCase(job.intake_by_name) || 'â€”'      },
+                { label: 'Channel',     value: job.intake_channel || 'â€”'                   },
                 { label: 'Created',     value: timeAgo(job.created_at)                     },
                 { label: 'Est. Cost',   value: fmt(job.estimated_cost),  highlight: true   },
                 { label: 'Amount Paid', value: fmt(job.amount_paid),     highlight: true   },
@@ -402,7 +403,7 @@ function JobDetailPanel({ jobId, onClose }) {
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold text-[var(--text)]">{li.label || li.service_name}</div>
                         <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                          {li.quantity} × {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'}
+                          {li.quantity} Ã— {li.pages}pp Â· {li.is_color ? 'Colour' : 'B&W'}
                         </div>
                       </div>
                       <span className="font-mono text-xs font-bold text-[var(--text)] ml-3">
@@ -446,7 +447,7 @@ function JobDetailPanel({ jobId, onClose }) {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-[var(--text-2)]">
                           <span className="text-[var(--text-3)]">{log.from_status?.replace(/_/g,' ')}</span>
-                          {' → '}
+                          {' â†’ '}
                           <span className="font-semibold text-[var(--text)]">{log.to_status?.replace(/_/g,' ')}</span>
                         </div>
                         {log.actor_name && (
@@ -568,7 +569,7 @@ function ReceiptsTab() {
         <div className="w-72 shrink-0 border-r border-[var(--border)] flex flex-col bg-[var(--panel)]">
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="p-8 text-center text-[var(--text-3)]">Loading…</div>
+              <div className="p-8 text-center text-[var(--text-3)]">Loadingâ€¦</div>
             ) : receipts.length === 0 ? (
               <div className="p-8 text-center text-sm text-[var(--text-3)]">No receipts for this period</div>
             ) : receipts.map(r => (
@@ -597,7 +598,7 @@ function ReceiptsTab() {
                   <span className="text-[10px] text-[var(--text-3)] font-mono">
                     {r.created_at
                       ? new Date(r.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })
-                      : '—'}
+                      : 'â€”'}
                   </span>
                 </div>
               </div>
@@ -609,15 +610,15 @@ function ReceiptsTab() {
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                 className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
                   rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
-                ← Prev
+                â† Prev
               </button>
               <span className="text-[10px] font-mono text-[var(--text-3)]">
-                {(page-1)*10+1}–{Math.min(page*10, count)} of {count}
+                {(page-1)*10+1}â€“{Math.min(page*10, count)} of {count}
               </span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                 className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
                   rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
-                Next →
+                Next â†’
               </button>
             </div>
           )}
@@ -632,7 +633,7 @@ function ReceiptsTab() {
               <span className="text-sm">Select a receipt to view details</span>
             </div>
           ) : loadingDetail ? (
-            <div className="flex-1 flex items-center justify-center text-[var(--text-3)]">Loading…</div>
+            <div className="flex-1 flex items-center justify-center text-[var(--text-3)]">Loadingâ€¦</div>
           ) : r ? (
             <>
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -643,7 +644,7 @@ function ReceiptsTab() {
                       {r.created_at ? new Date(r.created_at).toLocaleString('en-GH', {
                         day: 'numeric', month: 'short', year: 'numeric',
                         hour: '2-digit', minute: '2-digit'
-                      }) : '—'}
+                      }) : 'â€”'}
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
@@ -652,7 +653,7 @@ function ReceiptsTab() {
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Job</div>
-                  <div className="text-sm font-bold text-[var(--text)]">{r.job_title || '—'}</div>
+                  <div className="text-sm font-bold text-[var(--text)]">{r.job_title || 'â€”'}</div>
                   <div className="font-mono text-xs text-[var(--text-3)] mt-0.5">{r.job_number}</div>
                 </div>
                 {r.line_items?.length > 0 && (
@@ -665,7 +666,7 @@ function ReceiptsTab() {
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-semibold text-[var(--text)]">{li.service_name}</div>
                             <div className="text-[10px] text-[var(--text-3)]">
-                              {li.pages}pp × {li.sets} sets · {li.is_color ? 'Colour' : 'B&W'}
+                              {li.pages}pp Ã— {li.sets} sets Â· {li.is_color ? 'Colour' : 'B&W'}
                             </div>
                           </div>
                           <span className="font-mono text-xs font-bold text-[var(--text)] ml-3">
@@ -713,8 +714,8 @@ function ReceiptsTab() {
                   {[
                     ['Customer',  r.customer_name || 'Walk-in'],
                     r.customer_phone ? ['Phone', r.customer_phone] : null,
-                    ['Cashier',   r.cashier_name  || '—'],
-                    ['Attendant', r.intake_by_name || '—'],
+                    ['Cashier',   r.cashier_name  || 'â€”'],
+                    ['Attendant', r.intake_by_name || 'â€”'],
                   ].filter(Boolean).map(([label, val]) => (
                     <div key={label} className="flex items-center justify-between border-b border-[var(--border)] pb-1.5 last:border-0 last:pb-0">
                       <span className="text-xs text-[var(--text-3)]">{label}</span>
@@ -743,7 +744,7 @@ function ReceiptsTab() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                     </svg>
-                    {sendingWa ? 'Sending…' : 'WhatsApp'}
+                    {sendingWa ? 'Sendingâ€¦' : 'WhatsApp'}
                   </button>
                 )}
                 {waMsg && (
@@ -861,7 +862,7 @@ export default function Jobs() {
               <div key={c.label}
                 className={`bg-[var(--panel)] border border-[var(--border)] border-t-2 ${c.border} rounded-xl px-3 py-3 text-center`}>
                 <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? '—'}</div>
+                <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? 'â€”'}</div>
               </div>
             ))}
           </div>
@@ -948,7 +949,7 @@ export default function Jobs() {
                           <StatusBadge status={job.status} />
                         </div>
                         <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
-                          {job.title} · {toTitleCase(job.customer_name) || 'Walk-in'}
+                          {job.title} Â· {toTitleCase(job.customer_name) || 'Walk-in'}
                         </div>
                       </div>
                       <div className="text-right ml-3 shrink-0">
@@ -990,15 +991,15 @@ export default function Jobs() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-[var(--text-3)]">
-                    Page {page} of {totalPages} · {count.toLocaleString()} jobs
+                    Page {page} of {totalPages} Â· {count.toLocaleString()} jobs
                   </span>
                   <div className="flex gap-2">
                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                       className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">â† Prev</button>
                     <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                       className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next â†’</button>
                   </div>
                 </div>
               )}
@@ -1013,7 +1014,7 @@ export default function Jobs() {
   )
 }
 
-// ── Invoices Tab ──────────────────────────────────────────────────────────────
+// â”€â”€ Invoices Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PAPER_SIZES = ['A4', 'A3', 'A5', 'A6', 'SRA3', 'LEGAL', 'LETTER', 'CUSTOM']
 const SIDES       = [{ value: 'SINGLE', label: 'Single-sided' }, { value: 'DOUBLE', label: 'Double-sided' }]
 
@@ -1131,7 +1132,7 @@ function InvoicesTab() {
                   </span>
                 </div>
                 <div className="hidden sm:block col-span-3 min-w-0">
-                  <div className="text-xs font-semibold text-[var(--text)] truncate">{inv.bill_to_name || '—'}</div>
+                  <div className="text-xs font-semibold text-[var(--text)] truncate">{inv.bill_to_name || 'â€”'}</div>
                   {inv.bill_to_company && (
                     <div className="text-[10px] text-[var(--text-3)] truncate">{inv.bill_to_company}</div>
                   )}
@@ -1172,14 +1173,14 @@ function InvoicesTab() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} · {count} invoices</span>
+              <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} Â· {count} invoices</span>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">â† Prev</button>
                 <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next â†’</button>
               </div>
             </div>
           )}
@@ -1199,145 +1200,171 @@ function InvoicesTab() {
   )
 }
 
-// ── Invoice Create Modal ──────────────────────────────────────────────────────
+// â”€â”€ Invoice Create Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+// ── Invoice Create Modal — 3-step wizard ─────────────────────────────────────
+const PAPER_SIZES = ['A4', 'A3', 'A5', 'A6', 'SRA3', 'LEGAL', 'LETTER', 'CUSTOM']
+const SIDES_OPTS  = [{ value: 'SINGLE', label: 'Single-sided' }, { value: 'DOUBLE', label: 'Double-sided' }]
+
 function InvoiceCreateModal({ onClose, onSuccess }) {
-  const [mode, setMode] = useState('job') // 'job' | 'standalone'
+  const { user } = useAuth()
+  const [step, setStep] = useState(1)
 
-  // Job-linked state
-  const [jobRef,      setJobRef]      = useState('')
-  const [jobData,     setJobData]     = useState(null)
-  const [jobLoading,  setJobLoading]  = useState(false)
-  const [jobError,    setJobError]    = useState('')
+  // ── Step 1: Source & Type ───────────────────────────────────────────────
+  const [invoiceType, setInvoiceType] = useState('PROFORMA')
+  const [mode,        setMode]        = useState('job')
 
-  // Standalone line items
-  const [lineItems, setLineItems] = useState([])
+  // Job-linked
+  const [jobRef,     setJobRef]     = useState('')
+  const [jobData,    setJobData]    = useState(null)
+  const [jobLoading, setJobLoading] = useState(false)
+  const [jobError,   setJobError]   = useState('')
 
-  // Shared form
-  const [form, setForm] = useState({
-    invoice_type:     'PROFORMA',
-    bill_to_name:     '',
-    bill_to_phone:    '',
-    bill_to_email:    '',
-    bill_to_company:  '',
-    delivery_channel: 'DOWNLOAD',
-    due_date:         '',
-    vat_rate:         '0',
-    bm_note:          '',
-  })
+  // Standalone cart (mirrors NewJobModal)
+  const [search,    setSearch]    = useState('')
+  const [selected,  setSelected]  = useState(null)
+  const [selPages,  setSelPages]  = useState(1)
+  const [selSets,   setSelSets]   = useState(1)
+  const [selColor,  setSelColor]  = useState(false)
+  const [selPaper,  setSelPaper]  = useState('A4')
+  const [selSides,  setSelSides]  = useState('SINGLE')
+  const [cart,      setCart]      = useState([])
+
+  // ── Step 2: Bill To ─────────────────────────────────────────────────────
+  const [custSearch,   setCustSearch]   = useState('')
+  const [custSelected, setCustSelected] = useState(null)
+  const [billName,     setBillName]     = useState('')
+  const [billCompany,  setBillCompany]  = useState('')
+  const [billPhone,    setBillPhone]    = useState('')
+  const [billEmail,    setBillEmail]    = useState('')
+
+  // ── Step 3: Delivery ────────────────────────────────────────────────────
+  const [dueDate,  setDueDate]  = useState('')
+  const [vatRate,  setVatRate]  = useState('0')
+  const [channel,  setChannel]  = useState('DOWNLOAD')
+  const [bmNote,   setBmNote]   = useState('')
+  const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
-  const [creating,    setCreating]    = useState(false)
 
-  // Services for standalone picker
-  const { data: servicesData } = useQuery({
+  // ── Queries ─────────────────────────────────────────────────────────────
+  const { data: servicesRaw = [] } = useQuery({
     queryKey: ['services'],
     queryFn:  () => getServices().then(r => r.data),
     staleTime: 300_000,
   })
-  const services = Array.isArray(servicesData) ? servicesData : (servicesData?.results || [])
+  const services = Array.isArray(servicesRaw) ? servicesRaw : (servicesRaw?.results || [])
 
-  const fld = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const { data: custResults = [] } = useQuery({
+    queryKey: ['custSearch', custSearch],
+    queryFn:  () => getCustomers({ search: custSearch.trim(), page_size: 6 }).then(r => {
+      const d = r.data; return Array.isArray(d) ? d : (d?.results || [])
+    }),
+    enabled:  custSearch.length >= 2 && !custSelected,
+    staleTime: 10_000,
+  })
 
-  // Fetch job by job_number
+  const { data: selPrice } = useQuery({
+    queryKey: ['invSelPrice', selected?.id, selPages, selSets, selColor],
+    queryFn:  () => calculatePrice({
+      service:  selected.id,
+      branch:   user?.branch || 2,
+      quantity: selSets,
+      pages:    selPages,
+      is_color: selColor,
+    }).then(r => r.data),
+    enabled: !!selected,
+    staleTime: 3_000,
+  })
+
+  // ── Service grouping (same alias logic as NewJobModal) ──────────────────
+  const SERVICE_ALIASES = [
+    { patterns: ['black','blk','bw','b&w','mono','monochrome'], resolves: 'b&w'      },
+    { patterns: ['colour','color','col','clr'],                  resolves: 'colour'   },
+    { patterns: ['print'],                                        resolves: 'print'    },
+    { patterns: ['copy','cop','copi'],                           resolves: 'cop'      },
+    { patterns: ['bind','ring'],                                  resolves: 'bind'     },
+    { patterns: ['passport','pass','pas'],                        resolves: 'passport' },
+    { patterns: ['laminate','lam'],                               resolves: 'laminat'  },
+  ]
+  const resolveToken = (tok) => {
+    for (const { patterns, resolves } of SERVICE_ALIASES)
+      if (patterns.some(p => p.startsWith(tok) || tok.startsWith(p))) return resolves
+    return tok
+  }
+  const matchesSearch = (name, query) => {
+    if (!query) return true
+    const target = name.toLowerCase()
+    return query.toLowerCase().trim().split(/\s+/).filter(Boolean).every(tok => {
+      const r = resolveToken(tok); return target.includes(tok) || target.includes(r)
+    })
+  }
+  const grouped = useMemo(() => {
+    const groups = {}
+    services
+      .filter(s => s.is_active && matchesSearch(s.name, search))
+      .forEach(s => {
+        const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
+        if (!groups[key]) groups[key] = []
+        groups[key].push(s)
+      })
+    return groups
+  }, [services, search])
+
+  // ── Cart helpers ────────────────────────────────────────────────────────
+  const cartTotal = cart.reduce((s, i) => s + parseFloat(i._price || 0), 0)
+  const vatAmount = cartTotal * (parseFloat(vatRate || 0) / 100)
+
+  const addToCart = () => {
+    if (!selected || !selPrice) return
+    setCart(c => [...c, {
+      _id: Date.now(), service: selected,
+      pages: selPages, sets: selSets, is_color: selColor,
+      paper_size: selPaper, sides: selSides,
+      _price: selPrice.total || 0,
+    }])
+    setSelected(null); setSelPages(1); setSelSets(1); setSelColor(false)
+  }
+  const removeFromCart = (id) => setCart(c => c.filter(i => i._id !== id))
+
+  // ── Job lookup ──────────────────────────────────────────────────────────
   const lookupJob = async () => {
-    const q = jobRef.trim()
-    if (!q) return
+    const q = jobRef.trim(); if (!q) return
     setJobLoading(true); setJobError(''); setJobData(null)
     try {
-      const res = await client.get('/api/v1/jobs/', { params: { search: q, page_size: 5 } })
-      const jobs = Array.isArray(res.data) ? res.data : (res.data?.results || [])
-      const match = jobs.find(j =>
-        j.job_number?.toLowerCase() === q.toLowerCase() || String(j.id) === q
-      )
-      if (!match) { setJobError('Job not found. Check the job number.'); return }
-      // Fetch full detail
+      const res   = await client.get('/api/v1/jobs/', { params: { search: q, page_size: 5 } })
+      const jobs  = Array.isArray(res.data) ? res.data : (res.data?.results || [])
+      const match = jobs.find(j => j.job_number?.toLowerCase() === q.toLowerCase() || String(j.id) === q)
+      if (!match) { setJobError('Job not found.'); return }
       const detail = await client.get(`/api/v1/jobs/${match.id}/`)
-      const job = detail.data
-      setJobData(job)
-      // Auto-populate bill-to from customer
-      if (job.customer_name && !form.bill_to_name) {
-        fld('bill_to_name', job.customer_name)
-      }
-      if (job.customer_phone && !form.bill_to_phone) {
-        fld('bill_to_phone', job.customer_phone)
-      }
+      setJobData(detail.data)
+      // Auto-fill bill-to from job customer
+      if (detail.data.customer_name  && !billName)  setBillName(detail.data.customer_name)
+      if (detail.data.customer_phone && !billPhone) setBillPhone(detail.data.customer_phone)
     } catch { setJobError('Could not fetch job. Try again.') }
     finally   { setJobLoading(false) }
   }
 
-  // Standalone: add empty line item
-  const addLineItem = () => setLineItems(prev => [
-    ...prev,
-    { _key: Date.now(), service: '', label: '', pages: 1, sets: 1,
-      is_color: false, paper_size: 'A4', sides: 'SINGLE',
-      unit_price: null, line_total: null, loading: false }
-  ])
+  // ── Step validation ─────────────────────────────────────────────────────
+  const step1Valid = mode === 'job' ? !!jobData : cart.length > 0
+  const step2Valid = billName.trim().length > 0
+  const step3Valid = step2Valid
 
-  const updateLineItem = (key, patch) =>
-    setLineItems(prev => prev.map(li => li._key === key ? { ...li, ...patch } : li))
-
-  const removeLineItem = (key) =>
-    setLineItems(prev => prev.filter(li => li._key !== key))
-
-  // Price calculation for a standalone line item
-  const calcPrice = async (li) => {
-    if (!li.service || !li.pages || !li.sets) return
-    updateLineItem(li._key, { loading: true })
-    try {
-      const res = await calculatePrice({
-        service:  li.service,
-        quantity: li.sets,
-        pages:    li.pages,
-        is_color: li.is_color,
-      })
-      const d = res.data
-      updateLineItem(li._key, {
-        unit_price: d.unit_price ?? d.price_per_unit ?? null,
-        line_total: d.total ?? null,
-        loading:    false,
-      })
-    } catch {
-      updateLineItem(li._key, { loading: false })
-    }
-  }
-
-  // Running total
-  const standaloneTotals = (() => {
-    const subtotal = lineItems.reduce((s, li) => s + parseFloat(li.line_total || 0), 0)
-    const vat      = subtotal * (parseFloat(form.vat_rate || 0) / 100)
-    return { subtotal, vat, total: subtotal + vat }
-  })()
-
-  const jobTotals = (() => {
-    if (!jobData) return null
-    const subtotal = parseFloat(jobData.estimated_cost || 0)
-    const vat      = subtotal * (parseFloat(form.vat_rate || 0) / 100)
-    return { subtotal, vat, total: subtotal + vat }
-  })()
-
+  // ── Submit ──────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setCreateError(''); setCreating(true)
     try {
       const payload = {
-        invoice_type:     form.invoice_type,
-        bill_to_name:     form.bill_to_name,
-        bill_to_phone:    form.bill_to_phone,
-        bill_to_email:    form.bill_to_email,
-        bill_to_company:  form.bill_to_company,
-        delivery_channel: form.delivery_channel,
-        due_date:         form.due_date || null,
-        vat_rate:         parseFloat(form.vat_rate || 0),
-        bm_note:          form.bm_note,
+        invoice_type: invoiceType, bill_to_name: billName,
+        bill_to_phone: billPhone, bill_to_email: billEmail,
+        bill_to_company: billCompany, delivery_channel: channel,
+        due_date: dueDate || null, vat_rate: parseFloat(vatRate || 0), bm_note: bmNote,
       }
       if (mode === 'job' && jobData) {
         payload.job_id = jobData.id
       } else {
-        payload.line_items = lineItems.map(li => ({
-          service:    parseInt(li.service),
-          pages:      parseInt(li.pages),
-          sets:       parseInt(li.sets),
-          is_color:   li.is_color,
-          paper_size: li.paper_size,
-          sides:      li.sides,
+        payload.line_items = cart.map(li => ({
+          service: li.service.id, pages: li.pages, sets: li.sets,
+          is_color: li.is_color, paper_size: li.paper_size, sides: li.sides,
         }))
       }
       await createInvoice(payload)
@@ -1345,353 +1372,430 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
     } catch (err) {
       const d = err.response?.data
       setCreateError(d?.detail || JSON.stringify(d) || 'Failed to create invoice.')
+      setStep(3)
     } finally { setCreating(false) }
   }
 
-  const canSubmit = (() => {
-    if (!form.bill_to_name.trim()) return false
-    if (mode === 'job')        return !!jobData
-    if (mode === 'standalone') return lineItems.length > 0 && lineItems.every(li => li.service && li.line_total)
-    return false
-  })()
+  // ── Progress bar ────────────────────────────────────────────────────────
+  const STEPS = ['Source & Type', 'Bill To', 'Delivery']
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-[var(--panel)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl
-        shadow-2xl flex flex-col overflow-hidden animate-slideUp max-h-[92vh]">
+        shadow-2xl flex flex-col overflow-hidden animate-slideUp"
+        style={{ maxHeight: '92vh' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">New Invoice</div>
-            <div className="text-xs text-[var(--text-3)] mt-0.5">Generate a proforma or tax invoice</div>
+            <div className="text-xs text-[var(--text-3)] mt-0.5">Step {step} of 3 — {STEPS[step-1]}</div>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full
-              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-
-          {/* ── Mode selector ── */}
-          <div className="px-6 pt-5 pb-0">
-            <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
-              {[
-                { value: 'job',        label: '🔗 From a Job'    },
-                { value: 'standalone', label: '📋 Standalone'    },
-              ].map(m => (
-                <button key={m.value} onClick={() => { setMode(m.value); setJobData(null); setJobError(''); setLineItems([]) }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors
-                    ${mode === m.value
-                      ? 'bg-[var(--text)] text-white'
-                      : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-                    }`}>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Invoice type ── */}
-          <div className="px-6 pt-4">
-            <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-              Invoice Type
-            </label>
-            <div className="flex gap-1.5">
-              {[
-                { value: 'PROFORMA', label: 'Proforma',    desc: 'Quote / pre-payment' },
-                { value: 'TAX',      label: 'Tax Invoice', desc: 'Post-payment / official' },
-              ].map(t => (
-                <button key={t.value}
-                  onClick={() => fld('invoice_type', t.value)}
-                  className={`flex-1 py-2.5 px-3 text-left rounded-xl border transition-colors
-                    ${form.invoice_type === t.value
-                      ? 'bg-[var(--text)] text-white border-transparent'
-                      : 'border-[var(--border)] hover:border-[var(--border-dark)]'
-                    }`}>
-                  <div className={`text-xs font-bold ${form.invoice_type === t.value ? 'text-white' : 'text-[var(--text)]'}`}>
-                    {t.label}
-                  </div>
-                  <div className={`text-[10px] mt-0.5 ${form.invoice_type === t.value ? 'text-white/70' : 'text-[var(--text-3)]'}`}>
-                    {t.desc}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Job mode ── */}
-          {mode === 'job' && (
-            <div className="px-6 pt-4 space-y-3">
-              <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Job Number
-                </label>
-                <div className="flex gap-2">
-                  <input type="text" placeholder="e.g. FP-WLB-2026-02247"
-                    value={jobRef}
-                    onChange={e => setJobRef(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && lookupJob()}
-                    className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                      rounded-xl outline-none focus:border-[var(--border-dark)]"
-                  />
-                  <button onClick={lookupJob} disabled={jobLoading || !jobRef.trim()}
-                    className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
-                      rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0">
-                    {jobLoading ? '…' : 'Lookup'}
-                  </button>
-                </div>
-                {jobError && (
-                  <p className="text-xs text-[var(--red-text)] mt-1.5">{jobError}</p>
-                )}
+        {/* Progress */}
+        <div className="flex px-6 pt-4 gap-2 shrink-0">
+          {STEPS.map((label, i) => (
+            <div key={i} className="flex-1">
+              <div className={`h-1 rounded-full transition-colors ${i < step ? 'bg-[var(--text)]' : 'bg-[var(--border)]'}`} />
+              <div className={`text-[9px] font-bold mt-1 uppercase tracking-wider
+                ${i + 1 === step ? 'text-[var(--text)]' : 'text-[var(--text-3)]'}`}>
+                {label}
               </div>
-
-              {/* Job preview */}
-              {jobData && (
-                <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-                    <div>
-                      <div className="text-xs font-black text-[var(--text)]">{jobData.job_number}</div>
-                      <div className="text-[10px] text-[var(--text-3)] mt-0.5">{jobData.title}</div>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                      {jobData.status?.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                  {jobData.line_items?.length > 0 && (
-                    <div className="divide-y divide-[var(--border)]">
-                      {jobData.line_items.map((li, i) => (
-                        <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-semibold text-[var(--text)]">{li.label || li.service_name}</div>
-                            <div className="text-[10px] text-[var(--text-3)]">
-                              {li.quantity} × {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'} · {li.paper_size}
-                            </div>
-                          </div>
-                          <span className="font-mono text-xs font-bold text-[var(--text)] ml-3 shrink-0">
-                            {fmt(li.line_total)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 border-t border-emerald-100">
-                    <span className="text-xs font-bold text-emerald-700">Est. Total</span>
-                    <span className="font-mono text-sm font-black text-emerald-700">{fmt(jobData.estimated_cost)}</span>
-                  </div>
-                </div>
-              )}
             </div>
-          )}
+          ))}
+        </div>
 
-          {/* ── Standalone mode ── */}
-          {mode === 'standalone' && (
-            <div className="px-6 pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-                  Line Items
-                </label>
-                <button onClick={addLineItem}
-                  className="text-xs font-bold text-[var(--text)] hover:opacity-70 transition-opacity">
-                  + Add Item
-                </button>
-              </div>
+        {/* ── STEP 1 ── */}
+        {step === 1 && (
+          <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6 space-y-4 min-h-0">
 
-              {lineItems.length === 0 && (
-                <div className="py-6 text-center border-2 border-dashed border-[var(--border)] rounded-xl">
-                  <p className="text-xs text-[var(--text-3)]">No items yet</p>
-                  <button onClick={addLineItem}
-                    className="mt-2 text-xs font-bold text-[var(--text)] hover:opacity-70">
-                    + Add first item
-                  </button>
-                </div>
-              )}
-
-              {lineItems.map((li, idx) => (
-                <div key={li._key} className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[var(--text-3)]">Item {idx + 1}</span>
-                    <button onClick={() => removeLineItem(li._key)}
-                      className="text-xs text-[var(--red-text)] hover:opacity-70 transition-opacity">
-                      Remove
-                    </button>
-                  </div>
-
-                  {/* Service picker */}
-                  <div>
-                    <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                      Service
-                    </label>
-                    <select
-                      value={li.service}
-                      onChange={e => {
-                        const svc = services.find(s => String(s.id) === e.target.value)
-                        updateLineItem(li._key, {
-                          service: e.target.value,
-                          label:   svc?.name || '',
-                          unit_price: null,
-                          line_total: null,
-                        })
-                      }}
-                      className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
-                        rounded-xl outline-none">
-                      <option value="">Select service…</option>
-                      {services.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Qty / pages / paper / sides / colour */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                        Pages
-                      </label>
-                      <input type="number" min="1" value={li.pages}
-                        onChange={e => updateLineItem(li._key, { pages: parseInt(e.target.value) || 1, unit_price: null, line_total: null })}
-                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
-                          rounded-xl outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                        Sets / Qty
-                      </label>
-                      <input type="number" min="1" value={li.sets}
-                        onChange={e => updateLineItem(li._key, { sets: parseInt(e.target.value) || 1, unit_price: null, line_total: null })}
-                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
-                          rounded-xl outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                        Paper Size
-                      </label>
-                      <select value={li.paper_size}
-                        onChange={e => updateLineItem(li._key, { paper_size: e.target.value })}
-                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
-                          rounded-xl outline-none">
-                        {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                        Sides
-                      </label>
-                      <select value={li.sides}
-                        onChange={e => updateLineItem(li._key, { sides: e.target.value })}
-                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
-                          rounded-xl outline-none">
-                        {SIDES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Colour + calculate */}
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => updateLineItem(li._key, { is_color: !li.is_color, unit_price: null, line_total: null })}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors
-                        ${li.is_color
-                          ? 'bg-violet-100 text-violet-700 border-violet-200'
-                          : 'border-[var(--border)] text-[var(--text-3)]'
-                        }`}>
-                      <span className={`w-3 h-3 rounded-full ${li.is_color ? 'bg-violet-500' : 'bg-zinc-300'}`} />
-                      {li.is_color ? 'Colour' : 'B&W'}
-                    </button>
-
-                    <button
-                      onClick={() => calcPrice(li)}
-                      disabled={!li.service || li.loading}
-                      className="px-3 py-2 text-xs font-bold bg-[var(--text)] text-white
-                        rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
-                      {li.loading ? 'Calculating…' : 'Get Price'}
-                    </button>
-                  </div>
-
-                  {/* Price result */}
-                  {li.line_total !== null && (
-                    <div className="flex items-center justify-between px-3 py-2
-                      bg-emerald-50 border border-emerald-100 rounded-xl">
-                      <span className="text-xs text-emerald-700">
-                        {li.unit_price !== null ? `${fmt(li.unit_price)} × ${li.sets} sets × ${li.pages}pp` : 'Total'}
-                      </span>
-                      <span className="font-mono text-sm font-black text-emerald-700">
-                        {fmt(li.line_total)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Standalone running total */}
-              {lineItems.some(li => li.line_total !== null) && (
-                <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3 space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[var(--text-3)]">Subtotal</span>
-                    <span className="font-mono font-bold text-[var(--text)]">{fmt(standaloneTotals.subtotal)}</span>
-                  </div>
-                  {standaloneTotals.vat > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[var(--text-3)]">VAT ({form.vat_rate}%)</span>
-                      <span className="font-mono font-bold text-[var(--text)]">{fmt(standaloneTotals.vat)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between pt-1.5 border-t border-[var(--border)]">
-                    <span className="text-sm font-bold text-[var(--text)]">Total</span>
-                    <span className="font-mono text-base font-black text-[var(--text)]">{fmt(standaloneTotals.total)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Shared fields ── */}
-          <div className="px-6 pt-5 pb-6 space-y-4">
-
-            {/* Bill To */}
+            {/* Invoice type */}
             <div>
-              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                Bill To <span className="text-[var(--red-text)]">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Invoice Type</label>
+              <div className="flex gap-1.5">
                 {[
-                  { key: 'bill_to_name',    placeholder: 'Full name *',        colSpan: 'col-span-2' },
-                  { key: 'bill_to_company', placeholder: 'Company (optional)', colSpan: 'col-span-2' },
-                  { key: 'bill_to_phone',   placeholder: 'Phone number',       colSpan: 'col-span-1' },
-                  { key: 'bill_to_email',   placeholder: 'Email address',      colSpan: 'col-span-1' },
-                ].map(f => (
-                  <input key={f.key} type="text" placeholder={f.placeholder}
-                    value={form[f.key]}
-                    onChange={e => fld(f.key, e.target.value)}
-                    className={`${f.colSpan} px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                      rounded-xl outline-none focus:border-[var(--border-dark)]`}
-                  />
+                  { value: 'PROFORMA', label: 'Proforma',    desc: 'Quote / pre-payment'       },
+                  { value: 'TAX',      label: 'Tax Invoice', desc: 'Post-payment / official'   },
+                ].map(t => (
+                  <button key={t.value} onClick={() => setInvoiceType(t.value)}
+                    className={`flex-1 py-2.5 px-3 text-left rounded-xl border transition-colors
+                      ${invoiceType === t.value ? 'bg-[var(--text)] text-white border-transparent' : 'border-[var(--border)] hover:border-[var(--border-dark)]'}`}>
+                    <div className={`text-xs font-bold ${invoiceType === t.value ? 'text-white' : 'text-[var(--text)]'}`}>{t.label}</div>
+                    <div className={`text-[10px] mt-0.5 ${invoiceType === t.value ? 'text-white/70' : 'text-[var(--text-3)]'}`}>{t.desc}</div>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Due date + VAT */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Mode */}
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Source</label>
+              <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+                {[{ value: 'job', label: '🔗 From a Job' }, { value: 'standalone', label: '📋 Standalone' }].map(m => (
+                  <button key={m.value}
+                    onClick={() => { setMode(m.value); setJobData(null); setJobError(''); setCart([]) }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors
+                      ${mode === m.value ? 'bg-[var(--text)] text-white' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Job mode */}
+            {mode === 'job' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Job Number</label>
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="e.g. FP-WLB-2026-02247" value={jobRef}
+                      onChange={e => setJobRef(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && lookupJob()}
+                      className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                    />
+                    <button onClick={lookupJob} disabled={jobLoading || !jobRef.trim()}
+                      className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0">
+                      {jobLoading ? '…' : 'Lookup'}
+                    </button>
+                  </div>
+                  {jobError && <p className="text-xs text-[var(--red-text)] mt-1.5">{jobError}</p>}
+                </div>
+
+                {jobData && (
+                  <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden">
+                    {/* Paid warning */}
+                    {['COMPLETE', 'PAID'].includes(jobData.status) && (
+                      <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600 shrink-0">
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span className="text-xs text-amber-700 font-medium">This job is already paid — you're creating a formal record invoice only.</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+                      <div>
+                        <div className="text-xs font-black text-[var(--text)]">{jobData.job_number}</div>
+                        <div className="text-[10px] text-[var(--text-3)] mt-0.5">{jobData.title}</div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
+                        {jobData.status?.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    {jobData.line_items?.length > 0 && (
+                      <div className="divide-y divide-[var(--border)]">
+                        {jobData.line_items.map((li, i) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-semibold text-[var(--text)]">{li.label || li.service_name}</div>
+                              <div className="text-[10px] text-[var(--text-3)]">{li.quantity} × {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'}</div>
+                            </div>
+                            <span className="font-mono text-xs font-bold text-[var(--text)] ml-3 shrink-0">{fmt(li.line_total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 border-t border-emerald-100">
+                      <span className="text-xs font-bold text-emerald-700">Est. Total</span>
+                      <span className="font-mono text-sm font-black text-emerald-700">{fmt(jobData.estimated_cost)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Standalone mode — mirrors NewJobModal */}
+            {mode === 'standalone' && (
+              <div className="space-y-3">
+                {/* Service search */}
+                <input type="text" value={search} onChange={e => { setSearch(e.target.value); setSelected(null) }}
+                  placeholder="Search services…"
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                />
+
+                {/* Grouped chips */}
+                <div className="max-h-48 overflow-y-auto space-y-2.5 pr-1">
+                  {Object.keys(grouped).length === 0 ? (
+                    <div className="text-sm text-[var(--text-3)] text-center py-4">No services found</div>
+                  ) : Object.entries(grouped).map(([grp, items]) => (
+                    <div key={grp}>
+                      <div className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-1.5">{grp}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {items.map(s => (
+                          <button key={s.id} onClick={() => {
+                            setSelected(s); setSelPages(s.smart_defaults?.pages || 1)
+                            setSelSets(s.smart_defaults?.quantity || 1)
+                            setSelColor(s.smart_defaults?.is_color ?? false)
+                          }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
+                              ${selected?.id === s.id
+                                ? 'bg-[var(--text)] text-white border-transparent'
+                                : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-2)] hover:border-[var(--border-dark)]'
+                              }`}>
+                            {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Inline editor */}
+                {selected && (
+                  <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+                    <div className="text-xs font-bold text-[var(--text)]">{selected.name}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Pages / Sheets</label>
+                        <input type="number" min="1" value={selPages}
+                          onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Copies / Sets</label>
+                        <input type="number" min="1" value={selSets}
+                          onChange={e => setSelSets(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Paper Size</label>
+                        <select value={selPaper} onChange={e => setSelPaper(e.target.value)}
+                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none">
+                          {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Sides</label>
+                        <select value={selSides} onChange={e => setSelSides(e.target.value)}
+                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none">
+                          {SIDES_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setSelColor(c => !c)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors
+                          ${selColor ? 'bg-violet-100 text-violet-700 border-violet-200' : 'border-[var(--border)] text-[var(--text-3)]'}`}>
+                        <span className={`w-3 h-3 rounded-full ${selColor ? 'bg-violet-500' : 'bg-zinc-300'}`} />
+                        {selColor ? 'Colour' : 'B&W'}
+                      </button>
+                      <div className="flex-1 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-700">Total</span>
+                        <span className="font-mono font-black text-sm text-emerald-700">
+                          {selPrice ? fmt(selPrice.total) : '…'}
+                        </span>
+                      </div>
+                      <button onClick={addToCart} disabled={!selPrice}
+                        className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity whitespace-nowrap">
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cart */}
+                {cart.length > 0 && (
+                  <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Items</span>
+                      <span className="text-[10px] text-[var(--text-3)]">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {cart.map(item => (
+                      <div key={item._id} className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-0">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold text-[var(--text)]">{item.service.name}</div>
+                          <div className="text-[10px] text-[var(--text-3)]">{item.sets} × {item.pages}pp · {item.is_color ? 'Colour' : 'B&W'} · {item.paper_size}</div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-3 shrink-0">
+                          <span className="font-mono text-xs font-bold text-[var(--text)]">{fmt(item._price)}</span>
+                          <button onClick={() => removeFromCart(item._id)} className="text-[var(--text-3)] hover:text-[var(--red-text)] transition-colors">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="px-4 py-2.5 bg-[var(--bg)] flex items-center justify-between">
+                      <span className="text-xs font-bold text-[var(--text-3)]">Subtotal</span>
+                      <span className="font-mono text-sm font-black text-[var(--text)]">{fmt(cartTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STEP 2 ── */}
+        {step === 2 && (
+          <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6 space-y-4 min-h-0">
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Search Customer <span className="normal-case font-normal">(or enter manually below)</span>
+              </label>
+              <div className="relative">
+                <input type="text" value={custSearch}
+                  onChange={e => { setCustSearch(e.target.value); setCustSelected(null) }}
+                  placeholder="Search by name or phone…"
+                  className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
+                    ${custSelected
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold'
+                      : 'bg-[var(--bg)] border-[var(--border)] focus:border-[var(--border-dark)]'
+                    }`}
+                />
+                {custSearch && (
+                  <button onClick={() => { setCustSearch(''); setCustSelected(null) }}
+                    className="absolute right-3 top-2.5 text-[var(--text-3)] hover:text-[var(--text)] text-sm">✕</button>
+                )}
+                {custResults.length > 0 && !custSelected && (
+                  <div className="absolute top-12 left-0 right-0 bg-[var(--panel)] border border-[var(--border)] rounded-xl shadow-lg z-20 overflow-hidden">
+                    {custResults.map(c => (
+                      <button key={c.id}
+                        onClick={() => {
+                          setCustSelected(c)
+                          const name = c.customer_type !== 'INDIVIDUAL' ? (c.company_name || c.full_name) : c.full_name
+                          setCustSearch(name)
+                          setBillName(c.full_name || '')
+                          setBillCompany(c.company_name || '')
+                          setBillPhone(c.phone || '')
+                          setBillEmail(c.email || '')
+                        }}
+                        className="w-full px-4 py-2.5 text-left hover:bg-[var(--bg)] border-b border-[var(--border)] last:border-0 transition-colors">
+                        <div className="text-sm font-semibold text-[var(--text)]">
+                          {c.customer_type !== 'INDIVIDUAL' ? (c.company_name || c.full_name) : c.full_name}
+                        </div>
+                        <div className="text-xs text-[var(--text-3)] mt-0.5">
+                          {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Rep: ${c.full_name} · ` : ''}{c.phone}
+                          {c.customer_type && ` · ${c.customer_type}`}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {custSelected && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-emerald-700 font-semibold">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Customer auto-populated — edit fields below if needed
+                </div>
+              )}
+            </div>
+
+            <div className="h-px bg-[var(--border)]" />
+
+            {/* Manual / editable fields */}
+            <div className="space-y-2">
               <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  Due Date
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                  Full Name <span className="text-[var(--red-text)]">*</span>
                 </label>
-                <input type="date" value={form.due_date}
-                  onChange={e => fld('due_date', e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                    rounded-xl outline-none focus:border-[var(--border-dark)]"
+                <input type="text" placeholder="Full name" value={billName} onChange={e => setBillName(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                  VAT Rate (%)
-                </label>
-                <select value={form.vat_rate} onChange={e => fld('vat_rate', e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                    rounded-xl outline-none">
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Company / Organisation</label>
+                <input type="text" placeholder="Company name (optional)" value={billCompany} onChange={e => setBillCompany(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Phone</label>
+                  <input type="tel" placeholder="Phone number" value={billPhone} onChange={e => setBillPhone(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Email</label>
+                  <input type="email" placeholder="Email address" value={billEmail} onChange={e => setBillEmail(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3 ── */}
+        {step === 3 && (
+          <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6 space-y-4 min-h-0">
+
+            {/* Summary card */}
+            <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)]">
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">Summary</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[var(--text-3)]">Type</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                    ${invoiceType === 'PROFORMA' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {invoiceType}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-xs text-[var(--text-3)]">Bill To</span>
+                  <span className="text-xs font-semibold text-[var(--text)]">{billName}{billCompany ? ` · ${billCompany}` : ''}</span>
+                </div>
+                {mode === 'job' && jobData && (
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-xs text-[var(--text-3)]">Job</span>
+                    <span className="font-mono text-xs font-bold text-[var(--text)]">{jobData.job_number}</span>
+                  </div>
+                )}
+              </div>
+              {/* Line items */}
+              {(mode === 'standalone' ? cart : jobData?.line_items || []).map((li, i) => (
+                <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] last:border-0">
+                  <div className="text-xs text-[var(--text-2)]">
+                    {mode === 'standalone' ? li.service.name : (li.label || li.service_name)}
+                  </div>
+                  <span className="font-mono text-xs font-bold text-[var(--text)]">
+                    {fmt(mode === 'standalone' ? li._price : li.line_total)}
+                  </span>
+                </div>
+              ))}
+              <div className="px-4 py-2.5 bg-[var(--panel)] space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--text-3)]">Subtotal</span>
+                  <span className="font-mono font-bold text-[var(--text)]">
+                    {fmt(mode === 'job' && jobData ? jobData.estimated_cost : cartTotal)}
+                  </span>
+                </div>
+                {parseFloat(vatRate) > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-3)]">VAT ({vatRate}%)</span>
+                    <span className="font-mono font-bold text-[var(--text)]">{fmt(vatAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1.5 border-t border-[var(--border)]">
+                  <span className="text-sm font-bold text-[var(--text)]">Total</span>
+                  <span className="font-mono text-base font-black text-[var(--text)]">
+                    {fmt((mode === 'job' && jobData ? parseFloat(jobData.estimated_cost) : cartTotal) + vatAmount)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Settings */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Due Date</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">VAT Rate</label>
+                <select value={vatRate} onChange={e => setVatRate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none">
                   <option value="0">No VAT (0%)</option>
                   <option value="15">15%</option>
                   <option value="21">21%</option>
@@ -1699,62 +1803,65 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
               </div>
             </div>
 
-            {/* Delivery channel */}
             <div>
-              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-                Delivery Channel
-              </label>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Delivery Channel</label>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { value: 'DOWNLOAD',  label: '⬇ Download only'      },
-                  { value: 'WHATSAPP',  label: '📲 WhatsApp'            },
-                  { value: 'EMAIL',     label: '✉ Email'                },
-                  { value: 'BOTH',      label: '📲 + ✉ WhatsApp & Email' },
+                  { value: 'DOWNLOAD', label: '⬇ Download only'       },
+                  { value: 'WHATSAPP', label: '📲 WhatsApp'             },
+                  { value: 'EMAIL',    label: '✉ Email'                 },
+                  { value: 'BOTH',     label: '📲 + ✉ WhatsApp & Email' },
                 ].map(c => (
-                  <button key={c.value} onClick={() => fld('delivery_channel', c.value)}
+                  <button key={c.value} onClick={() => setChannel(c.value)}
                     className={`py-2 px-3 text-xs font-bold rounded-xl border transition-colors text-left
-                      ${form.delivery_channel === c.value
-                        ? 'bg-[var(--text)] text-white border-transparent'
-                        : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'
-                      }`}>
+                      ${channel === c.value ? 'bg-[var(--text)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'}`}>
                     {c.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* BM Note */}
             <div>
               <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
                 Note <span className="normal-case font-normal text-[var(--text-3)]">(optional)</span>
               </label>
-              <textarea placeholder="Add a note to this invoice…" rows={2}
-                value={form.bm_note}
-                onChange={e => fld('bm_note', e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                  rounded-xl outline-none resize-none focus:border-[var(--border-dark)]"
+              <textarea placeholder="Add a note to this invoice…" rows={2} value={bmNote} onChange={e => setBmNote(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl outline-none resize-none focus:border-[var(--border-dark)]"
               />
             </div>
 
             {createError && (
-              <div className="px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
-                rounded-xl text-xs text-[var(--red-text)]">{createError}</div>
+              <div className="px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-xl text-xs text-[var(--red-text)]">{createError}</div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-[var(--border)] flex items-center gap-3 shrink-0 bg-[var(--panel)]">
-          <button onClick={onClose}
-            className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
-              hover:text-[var(--text)] transition-colors">
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={creating || !canSubmit}
-            className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold
-              rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
-            {creating ? 'Creating…' : `Create ${form.invoice_type === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}`}
-          </button>
+        {/* Footer navigation */}
+        <div className="px-6 py-4 border-t border-[var(--border)] flex items-center gap-3 shrink-0">
+          {step > 1 ? (
+            <button onClick={() => setStep(s => s - 1)}
+              className="px-4 py-2.5 text-sm font-semibold border border-[var(--border)] rounded-xl hover:border-[var(--border-dark)] transition-colors">
+              ← Back
+            </button>
+          ) : (
+            <button onClick={onClose}
+              className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)] transition-colors">
+              Cancel
+            </button>
+          )}
+          {step < 3 ? (
+            <button
+              onClick={() => setStep(s => s + 1)}
+              disabled={step === 1 ? !step1Valid : !step2Valid}
+              className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+              Next →
+            </button>
+          ) : (
+            <button onClick={handleSubmit} disabled={creating || !step3Valid}
+              className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+              {creating ? 'Creating…' : `Create ${invoiceType === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}`}
+            </button>
+          )}
         </div>
       </div>
     </div>,
