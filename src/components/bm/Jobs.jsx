@@ -196,7 +196,7 @@ function ReceiptInvoiceSection({ job }) {
                 <button onClick={handleSendWa} disabled={sendingWa}
                   className="flex-1 py-2 text-xs font-bold bg-emerald-600 text-white
                     rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {sendingWa ? 'Sendingâ€¦' : 'ðŸ“² Send WhatsApp'}
+                  {sendingWa ? 'Sending…' : 'ðŸ“² Send WhatsApp'}
                 </button>
               </div>
               {waMsg && (
@@ -239,7 +239,7 @@ function ReceiptInvoiceSection({ job }) {
                   className="flex-1 py-2 text-xs font-bold border border-[var(--border)]
                     text-[var(--text)] rounded-lg hover:bg-[var(--bg)] disabled:opacity-40
                     transition-colors">
-                  {resendingInv ? 'Sendingâ€¦' : 'Resend'}
+                  {resendingInv ? 'Sending…' : 'Resend'}
                 </button>
               </div>
             </div>
@@ -297,7 +297,7 @@ function ReceiptInvoiceSection({ job }) {
                 <button onClick={handleCreateInvoice} disabled={creatingInv || !invoiceForm.bill_to_name}
                   className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
                     rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {creatingInv ? 'Creatingâ€¦' : 'Create Invoice'}
+                  {creatingInv ? 'Creating…' : 'Create Invoice'}
                 </button>
               </div>
             </div>
@@ -349,7 +349,7 @@ function JobDetailPanel({ jobId, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">
-              {isLoading ? 'Loadingâ€¦' : job?.job_number}
+              {isLoading ? 'Loading…' : job?.job_number}
             </div>
             <div className="text-xs text-[var(--text-3)] mt-0.5">
               {isLoading ? '' : job?.title}
@@ -357,7 +357,7 @@ function JobDetailPanel({ jobId, onClose }) {
           </div>
           <button onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full
-              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">âœ•</button>
+              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {isLoading && !job ? (
@@ -403,7 +403,7 @@ function JobDetailPanel({ jobId, onClose }) {
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold text-[var(--text)]">{li.label || li.service_name}</div>
                         <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                          {li.quantity} Ã— {li.pages}pp Â· {li.is_color ? 'Colour' : 'B&W'}
+                          {li.quantity} × {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'}
                         </div>
                       </div>
                       <span className="font-mono text-xs font-bold text-[var(--text)] ml-3">
@@ -569,7 +569,7 @@ function ReceiptsTab() {
         <div className="w-72 shrink-0 border-r border-[var(--border)] flex flex-col bg-[var(--panel)]">
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="p-8 text-center text-[var(--text-3)]">Loadingâ€¦</div>
+              <div className="p-8 text-center text-[var(--text-3)]">Loading…</div>
             ) : receipts.length === 0 ? (
               <div className="p-8 text-center text-sm text-[var(--text-3)]">No receipts for this period</div>
             ) : receipts.map(r => (
@@ -633,7 +633,7 @@ function ReceiptsTab() {
               <span className="text-sm">Select a receipt to view details</span>
             </div>
           ) : loadingDetail ? (
-            <div className="flex-1 flex items-center justify-center text-[var(--text-3)]">Loadingâ€¦</div>
+            <div className="flex-1 flex items-center justify-center text-[var(--text-3)]">Loading…</div>
           ) : r ? (
             <>
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -666,7 +666,7 @@ function ReceiptsTab() {
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-semibold text-[var(--text)]">{li.service_name}</div>
                             <div className="text-[10px] text-[var(--text-3)]">
-                              {li.pages}pp Ã— {li.sets} sets Â· {li.is_color ? 'Colour' : 'B&W'}
+                              {li.pages}pp × {li.sets} sets · {li.is_color ? 'Colour' : 'B&W'}
                             </div>
                           </div>
                           <span className="font-mono text-xs font-bold text-[var(--text)] ml-3">
@@ -744,7 +744,7 @@ function ReceiptsTab() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                     </svg>
-                    {sendingWa ? 'Sendingâ€¦' : 'WhatsApp'}
+                    {sendingWa ? 'Sending…' : 'WhatsApp'}
                   </button>
                 )}
                 {waMsg && (
@@ -949,7 +949,7 @@ export default function Jobs() {
                           <StatusBadge status={job.status} />
                         </div>
                         <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
-                          {job.title} Â· {toTitleCase(job.customer_name) || 'Walk-in'}
+                          {job.title} · {toTitleCase(job.customer_name) || 'Walk-in'}
                         </div>
                       </div>
                       <div className="text-right ml-3 shrink-0">
@@ -991,7 +991,7 @@ export default function Jobs() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-[var(--text-3)]">
-                    Page {page} of {totalPages} Â· {count.toLocaleString()} jobs
+                    Page {page} of {totalPages} · {count.toLocaleString()} jobs
                   </span>
                   <div className="flex gap-2">
                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
@@ -1173,7 +1173,7 @@ function InvoicesTab() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} Â· {count} invoices</span>
+              <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} · {count} invoices</span>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
