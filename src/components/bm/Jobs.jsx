@@ -1013,43 +1013,47 @@ export default function Jobs() {
   )
 }
 
-// Missing component - InvoicesTab
+// ── Invoices Tab ──────────────────────────────────────────────────────────────
+const PAPER_SIZES = ['A4', 'A3', 'A5', 'A6', 'SRA3', 'LEGAL', 'LETTER', 'CUSTOM']
+const SIDES       = [{ value: 'SINGLE', label: 'Single-sided' }, { value: 'DOUBLE', label: 'Double-sided' }]
+
 function InvoicesTab() {
   const queryClient = useQueryClient()
-  const [period, setPeriod] = useState('')
-  const [page, setPage] = useState(1)
+  const [period,      setPeriod]      = useState('')
+  const [page,        setPage]        = useState(1)
+  const [showCreate,  setShowCreate]  = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['invoices', period, page],
-    queryFn: () => client.get('/api/v1/finance/invoices/', {
+    queryFn:  () => client.get('/api/v1/finance/invoices/', {
       params: { period: period || undefined, page, page_size: 10 }
     }).then(r => r.data),
-    staleTime: 15000,
+    staleTime: 15_000,
     placeholderData: prev => prev,
   })
 
-  const invoices = Array.isArray(data) ? data : (data?.results || [])
-  const count = data?.count || 0
+  const invoices   = Array.isArray(data) ? data : (data?.results || [])
+  const count      = data?.count || 0
   const totalPages = Math.ceil(count / 10)
 
   const { mutate: resend, isPending: resending } = useMutation({
     mutationFn: (id) => sendInvoice(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
   })
 
   const STATUS_COLOR = {
-    DRAFT: 'bg-zinc-100 text-zinc-600',
-    SENT: 'bg-blue-100 text-blue-700',
+    DRAFT:  'bg-zinc-100 text-zinc-600',
+    SENT:   'bg-blue-100 text-blue-700',
     VIEWED: 'bg-amber-100 text-amber-700',
-    PAID: 'bg-emerald-100 text-emerald-700',
+    PAID:   'bg-emerald-100 text-emerald-700',
   }
 
   const handleDownload = async (id, invoiceNumber) => {
     try {
-      const res = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
+      const res  = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
+      const url  = URL.createObjectURL(res.data)
+      const a    = document.createElement('a')
+      a.href     = url
       a.download = `${invoiceNumber}.pdf`
       a.click()
       URL.revokeObjectURL(url)
@@ -1058,38 +1062,48 @@ function InvoicesTab() {
 
   return (
     <div className="p-5 sm:p-6 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Invoices</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">{count} invoice{count !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
-          {[
-            { value: '', label: 'All' },
-            { value: 'day', label: 'Today' },
-            { value: 'week', label: 'This Week' },
-            { value: 'month', label: 'This Month' },
-          ].map(f => (
-            <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1) }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
-                ${period === f.value
-                  ? 'bg-[var(--text)] text-white'
-                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-                }`}>
-              {f.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+            {[
+              { value: '',      label: 'All'        },
+              { value: 'day',   label: 'Today'      },
+              { value: 'week',  label: 'This Week'  },
+              { value: 'month', label: 'This Month' },
+            ].map(f => (
+              <button key={f.value} onClick={() => { setPeriod(f.value); setPage(1) }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors
+                  ${period === f.value
+                    ? 'bg-[var(--text)] text-white'
+                    : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                  }`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
+              rounded-xl hover:opacity-90 transition-opacity">
+            + New Invoice
+          </button>
         </div>
       </div>
+
+      {/* List */}
       {isLoading ? (
         <div className="space-y-2">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
+          {[1,2,3].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
         </div>
       ) : invoices.length === 0 ? (
         <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
           flex flex-col items-center justify-center py-16 text-center">
           <p className="text-sm font-semibold text-[var(--text-2)]">No invoices yet</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">Create your first invoice</p>
+          <p className="text-xs text-[var(--text-3)] mt-1">Create your first invoice above</p>
         </div>
       ) : (
         <>
@@ -1137,9 +1151,9 @@ function InvoicesTab() {
                     className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
                       text-[var(--text-2)] transition-colors">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                   </button>
                   <button onClick={() => resend(inv.id)} disabled={resending}
@@ -1147,22 +1161,23 @@ function InvoicesTab() {
                     className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]
                       text-[var(--text-2)] disabled:opacity-40 transition-colors">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="22 2 11 13" />
-                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      <polyline points="22 2 11 13"/>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
                     </svg>
                   </button>
                 </div>
               </div>
             ))}
           </div>
+
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-[var(--text-3)]">Page {page} of {totalPages} · {count} invoices</span>
               <div className="flex gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
                     rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
                     rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
               </div>
@@ -1170,6 +1185,579 @@ function InvoicesTab() {
           )}
         </>
       )}
+
+      {showCreate && (
+        <InvoiceCreateModal
+          onClose={() => setShowCreate(false)}
+          onSuccess={() => {
+            setShowCreate(false)
+            queryClient.invalidateQueries({ queryKey: ['invoices'] })
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Invoice Create Modal ──────────────────────────────────────────────────────
+function InvoiceCreateModal({ onClose, onSuccess }) {
+  const [mode, setMode] = useState('job') // 'job' | 'standalone'
+
+  // Job-linked state
+  const [jobRef,      setJobRef]      = useState('')
+  const [jobData,     setJobData]     = useState(null)
+  const [jobLoading,  setJobLoading]  = useState(false)
+  const [jobError,    setJobError]    = useState('')
+
+  // Standalone line items
+  const [lineItems, setLineItems] = useState([])
+
+  // Shared form
+  const [form, setForm] = useState({
+    invoice_type:     'PROFORMA',
+    bill_to_name:     '',
+    bill_to_phone:    '',
+    bill_to_email:    '',
+    bill_to_company:  '',
+    delivery_channel: 'DOWNLOAD',
+    due_date:         '',
+    vat_rate:         '0',
+    bm_note:          '',
+  })
+  const [createError, setCreateError] = useState('')
+  const [creating,    setCreating]    = useState(false)
+
+  // Services for standalone picker
+  const { data: servicesData } = useQuery({
+    queryKey: ['services'],
+    queryFn:  () => getServices().then(r => r.data),
+    staleTime: 300_000,
+  })
+  const services = Array.isArray(servicesData) ? servicesData : (servicesData?.results || [])
+
+  const fld = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  // Fetch job by job_number
+  const lookupJob = async () => {
+    const q = jobRef.trim()
+    if (!q) return
+    setJobLoading(true); setJobError(''); setJobData(null)
+    try {
+      const res = await client.get('/api/v1/jobs/', { params: { search: q, page_size: 5 } })
+      const jobs = Array.isArray(res.data) ? res.data : (res.data?.results || [])
+      const match = jobs.find(j =>
+        j.job_number?.toLowerCase() === q.toLowerCase() || String(j.id) === q
+      )
+      if (!match) { setJobError('Job not found. Check the job number.'); return }
+      // Fetch full detail
+      const detail = await client.get(`/api/v1/jobs/${match.id}/`)
+      const job = detail.data
+      setJobData(job)
+      // Auto-populate bill-to from customer
+      if (job.customer_name && !form.bill_to_name) {
+        fld('bill_to_name', job.customer_name)
+      }
+      if (job.customer_phone && !form.bill_to_phone) {
+        fld('bill_to_phone', job.customer_phone)
+      }
+    } catch { setJobError('Could not fetch job. Try again.') }
+    finally   { setJobLoading(false) }
+  }
+
+  // Standalone: add empty line item
+  const addLineItem = () => setLineItems(prev => [
+    ...prev,
+    { _key: Date.now(), service: '', label: '', pages: 1, sets: 1,
+      is_color: false, paper_size: 'A4', sides: 'SINGLE',
+      unit_price: null, line_total: null, loading: false }
+  ])
+
+  const updateLineItem = (key, patch) =>
+    setLineItems(prev => prev.map(li => li._key === key ? { ...li, ...patch } : li))
+
+  const removeLineItem = (key) =>
+    setLineItems(prev => prev.filter(li => li._key !== key))
+
+  // Price calculation for a standalone line item
+  const calcPrice = async (li) => {
+    if (!li.service || !li.pages || !li.sets) return
+    updateLineItem(li._key, { loading: true })
+    try {
+      const res = await calculatePrice({
+        service:  li.service,
+        quantity: li.sets,
+        pages:    li.pages,
+        is_color: li.is_color,
+      })
+      const d = res.data
+      updateLineItem(li._key, {
+        unit_price: d.unit_price ?? d.price_per_unit ?? null,
+        line_total: d.total ?? null,
+        loading:    false,
+      })
+    } catch {
+      updateLineItem(li._key, { loading: false })
+    }
+  }
+
+  // Running total
+  const standaloneTotals = (() => {
+    const subtotal = lineItems.reduce((s, li) => s + parseFloat(li.line_total || 0), 0)
+    const vat      = subtotal * (parseFloat(form.vat_rate || 0) / 100)
+    return { subtotal, vat, total: subtotal + vat }
+  })()
+
+  const jobTotals = (() => {
+    if (!jobData) return null
+    const subtotal = parseFloat(jobData.estimated_cost || 0)
+    const vat      = subtotal * (parseFloat(form.vat_rate || 0) / 100)
+    return { subtotal, vat, total: subtotal + vat }
+  })()
+
+  const handleSubmit = async () => {
+    setCreateError(''); setCreating(true)
+    try {
+      const payload = {
+        invoice_type:     form.invoice_type,
+        bill_to_name:     form.bill_to_name,
+        bill_to_phone:    form.bill_to_phone,
+        bill_to_email:    form.bill_to_email,
+        bill_to_company:  form.bill_to_company,
+        delivery_channel: form.delivery_channel,
+        due_date:         form.due_date || null,
+        vat_rate:         parseFloat(form.vat_rate || 0),
+        bm_note:          form.bm_note,
+      }
+      if (mode === 'job' && jobData) {
+        payload.job_id = jobData.id
+      } else {
+        payload.line_items = lineItems.map(li => ({
+          service:    parseInt(li.service),
+          pages:      parseInt(li.pages),
+          sets:       parseInt(li.sets),
+          is_color:   li.is_color,
+          paper_size: li.paper_size,
+          sides:      li.sides,
+        }))
+      }
+      await createInvoice(payload)
+      onSuccess()
+    } catch (err) {
+      const d = err.response?.data
+      setCreateError(d?.detail || JSON.stringify(d) || 'Failed to create invoice.')
+    } finally { setCreating(false) }
+  }
+
+  const canSubmit = (() => {
+    if (!form.bill_to_name.trim()) return false
+    if (mode === 'job')        return !!jobData
+    if (mode === 'standalone') return lineItems.length > 0 && lineItems.every(li => li.service && li.line_total)
+    return false
+  })()
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-[var(--panel)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl
+        shadow-2xl flex flex-col overflow-hidden animate-slideUp max-h-[92vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
+          <div>
+            <div className="font-black text-base text-[var(--text)]">New Invoice</div>
+            <div className="text-xs text-[var(--text-3)] mt-0.5">Generate a proforma or tax invoice</div>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full
+              hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── Mode selector ── */}
+          <div className="px-6 pt-5 pb-0">
+            <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl">
+              {[
+                { value: 'job',        label: '🔗 From a Job'    },
+                { value: 'standalone', label: '📋 Standalone'    },
+              ].map(m => (
+                <button key={m.value} onClick={() => { setMode(m.value); setJobData(null); setJobError(''); setLineItems([]) }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors
+                    ${mode === m.value
+                      ? 'bg-[var(--text)] text-white'
+                      : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                    }`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Invoice type ── */}
+          <div className="px-6 pt-4">
+            <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+              Invoice Type
+            </label>
+            <div className="flex gap-1.5">
+              {[
+                { value: 'PROFORMA', label: 'Proforma',    desc: 'Quote / pre-payment' },
+                { value: 'TAX',      label: 'Tax Invoice', desc: 'Post-payment / official' },
+              ].map(t => (
+                <button key={t.value}
+                  onClick={() => fld('invoice_type', t.value)}
+                  className={`flex-1 py-2.5 px-3 text-left rounded-xl border transition-colors
+                    ${form.invoice_type === t.value
+                      ? 'bg-[var(--text)] text-white border-transparent'
+                      : 'border-[var(--border)] hover:border-[var(--border-dark)]'
+                    }`}>
+                  <div className={`text-xs font-bold ${form.invoice_type === t.value ? 'text-white' : 'text-[var(--text)]'}`}>
+                    {t.label}
+                  </div>
+                  <div className={`text-[10px] mt-0.5 ${form.invoice_type === t.value ? 'text-white/70' : 'text-[var(--text-3)]'}`}>
+                    {t.desc}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Job mode ── */}
+          {mode === 'job' && (
+            <div className="px-6 pt-4 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Job Number
+                </label>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="e.g. FP-WLB-2026-02247"
+                    value={jobRef}
+                    onChange={e => setJobRef(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && lookupJob()}
+                    className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                      rounded-xl outline-none focus:border-[var(--border-dark)]"
+                  />
+                  <button onClick={lookupJob} disabled={jobLoading || !jobRef.trim()}
+                    className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
+                      rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0">
+                    {jobLoading ? '…' : 'Lookup'}
+                  </button>
+                </div>
+                {jobError && (
+                  <p className="text-xs text-[var(--red-text)] mt-1.5">{jobError}</p>
+                )}
+              </div>
+
+              {/* Job preview */}
+              {jobData && (
+                <div className="bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+                    <div>
+                      <div className="text-xs font-black text-[var(--text)]">{jobData.job_number}</div>
+                      <div className="text-[10px] text-[var(--text-3)] mt-0.5">{jobData.title}</div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                      {jobData.status?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  {jobData.line_items?.length > 0 && (
+                    <div className="divide-y divide-[var(--border)]">
+                      {jobData.line_items.map((li, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-[var(--text)]">{li.label || li.service_name}</div>
+                            <div className="text-[10px] text-[var(--text-3)]">
+                              {li.quantity} × {li.pages}pp · {li.is_color ? 'Colour' : 'B&W'} · {li.paper_size}
+                            </div>
+                          </div>
+                          <span className="font-mono text-xs font-bold text-[var(--text)] ml-3 shrink-0">
+                            {fmt(li.line_total)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 border-t border-emerald-100">
+                    <span className="text-xs font-bold text-emerald-700">Est. Total</span>
+                    <span className="font-mono text-sm font-black text-emerald-700">{fmt(jobData.estimated_cost)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Standalone mode ── */}
+          {mode === 'standalone' && (
+            <div className="px-6 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                  Line Items
+                </label>
+                <button onClick={addLineItem}
+                  className="text-xs font-bold text-[var(--text)] hover:opacity-70 transition-opacity">
+                  + Add Item
+                </button>
+              </div>
+
+              {lineItems.length === 0 && (
+                <div className="py-6 text-center border-2 border-dashed border-[var(--border)] rounded-xl">
+                  <p className="text-xs text-[var(--text-3)]">No items yet</p>
+                  <button onClick={addLineItem}
+                    className="mt-2 text-xs font-bold text-[var(--text)] hover:opacity-70">
+                    + Add first item
+                  </button>
+                </div>
+              )}
+
+              {lineItems.map((li, idx) => (
+                <div key={li._key} className="bg-[var(--bg)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[var(--text-3)]">Item {idx + 1}</span>
+                    <button onClick={() => removeLineItem(li._key)}
+                      className="text-xs text-[var(--red-text)] hover:opacity-70 transition-opacity">
+                      Remove
+                    </button>
+                  </div>
+
+                  {/* Service picker */}
+                  <div>
+                    <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                      Service
+                    </label>
+                    <select
+                      value={li.service}
+                      onChange={e => {
+                        const svc = services.find(s => String(s.id) === e.target.value)
+                        updateLineItem(li._key, {
+                          service: e.target.value,
+                          label:   svc?.name || '',
+                          unit_price: null,
+                          line_total: null,
+                        })
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
+                        rounded-xl outline-none">
+                      <option value="">Select service…</option>
+                      {services.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Qty / pages / paper / sides / colour */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                        Pages
+                      </label>
+                      <input type="number" min="1" value={li.pages}
+                        onChange={e => updateLineItem(li._key, { pages: parseInt(e.target.value) || 1, unit_price: null, line_total: null })}
+                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
+                          rounded-xl outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                        Sets / Qty
+                      </label>
+                      <input type="number" min="1" value={li.sets}
+                        onChange={e => updateLineItem(li._key, { sets: parseInt(e.target.value) || 1, unit_price: null, line_total: null })}
+                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
+                          rounded-xl outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                        Paper Size
+                      </label>
+                      <select value={li.paper_size}
+                        onChange={e => updateLineItem(li._key, { paper_size: e.target.value })}
+                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
+                          rounded-xl outline-none">
+                        {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
+                        Sides
+                      </label>
+                      <select value={li.sides}
+                        onChange={e => updateLineItem(li._key, { sides: e.target.value })}
+                        className="w-full px-3 py-2 text-sm bg-[var(--panel)] border border-[var(--border)]
+                          rounded-xl outline-none">
+                        {SIDES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Colour + calculate */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => updateLineItem(li._key, { is_color: !li.is_color, unit_price: null, line_total: null })}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors
+                        ${li.is_color
+                          ? 'bg-violet-100 text-violet-700 border-violet-200'
+                          : 'border-[var(--border)] text-[var(--text-3)]'
+                        }`}>
+                      <span className={`w-3 h-3 rounded-full ${li.is_color ? 'bg-violet-500' : 'bg-zinc-300'}`} />
+                      {li.is_color ? 'Colour' : 'B&W'}
+                    </button>
+
+                    <button
+                      onClick={() => calcPrice(li)}
+                      disabled={!li.service || li.loading}
+                      className="px-3 py-2 text-xs font-bold bg-[var(--text)] text-white
+                        rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+                      {li.loading ? 'Calculating…' : 'Get Price'}
+                    </button>
+                  </div>
+
+                  {/* Price result */}
+                  {li.line_total !== null && (
+                    <div className="flex items-center justify-between px-3 py-2
+                      bg-emerald-50 border border-emerald-100 rounded-xl">
+                      <span className="text-xs text-emerald-700">
+                        {li.unit_price !== null ? `${fmt(li.unit_price)} × ${li.sets} sets × ${li.pages}pp` : 'Total'}
+                      </span>
+                      <span className="font-mono text-sm font-black text-emerald-700">
+                        {fmt(li.line_total)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Standalone running total */}
+              {lineItems.some(li => li.line_total !== null) && (
+                <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-3)]">Subtotal</span>
+                    <span className="font-mono font-bold text-[var(--text)]">{fmt(standaloneTotals.subtotal)}</span>
+                  </div>
+                  {standaloneTotals.vat > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[var(--text-3)]">VAT ({form.vat_rate}%)</span>
+                      <span className="font-mono font-bold text-[var(--text)]">{fmt(standaloneTotals.vat)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-1.5 border-t border-[var(--border)]">
+                    <span className="text-sm font-bold text-[var(--text)]">Total</span>
+                    <span className="font-mono text-base font-black text-[var(--text)]">{fmt(standaloneTotals.total)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Shared fields ── */}
+          <div className="px-6 pt-5 pb-6 space-y-4">
+
+            {/* Bill To */}
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Bill To <span className="text-[var(--red-text)]">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'bill_to_name',    placeholder: 'Full name *',        colSpan: 'col-span-2' },
+                  { key: 'bill_to_company', placeholder: 'Company (optional)', colSpan: 'col-span-2' },
+                  { key: 'bill_to_phone',   placeholder: 'Phone number',       colSpan: 'col-span-1' },
+                  { key: 'bill_to_email',   placeholder: 'Email address',      colSpan: 'col-span-1' },
+                ].map(f => (
+                  <input key={f.key} type="text" placeholder={f.placeholder}
+                    value={form[f.key]}
+                    onChange={e => fld(f.key, e.target.value)}
+                    className={`${f.colSpan} px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                      rounded-xl outline-none focus:border-[var(--border-dark)]`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Due date + VAT */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  Due Date
+                </label>
+                <input type="date" value={form.due_date}
+                  onChange={e => fld('due_date', e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                    rounded-xl outline-none focus:border-[var(--border-dark)]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                  VAT Rate (%)
+                </label>
+                <select value={form.vat_rate} onChange={e => fld('vat_rate', e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                    rounded-xl outline-none">
+                  <option value="0">No VAT (0%)</option>
+                  <option value="15">15%</option>
+                  <option value="21">21%</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Delivery channel */}
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Delivery Channel
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { value: 'DOWNLOAD',  label: '⬇ Download only'      },
+                  { value: 'WHATSAPP',  label: '📲 WhatsApp'            },
+                  { value: 'EMAIL',     label: '✉ Email'                },
+                  { value: 'BOTH',      label: '📲 + ✉ WhatsApp & Email' },
+                ].map(c => (
+                  <button key={c.value} onClick={() => fld('delivery_channel', c.value)}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-colors text-left
+                      ${form.delivery_channel === c.value
+                        ? 'bg-[var(--text)] text-white border-transparent'
+                        : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'
+                      }`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* BM Note */}
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Note <span className="normal-case font-normal text-[var(--text-3)]">(optional)</span>
+              </label>
+              <textarea placeholder="Add a note to this invoice…" rows={2}
+                value={form.bm_note}
+                onChange={e => fld('bm_note', e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+                  rounded-xl outline-none resize-none focus:border-[var(--border-dark)]"
+              />
+            </div>
+
+            {createError && (
+              <div className="px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
+                rounded-xl text-xs text-[var(--red-text)]">{createError}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[var(--border)] flex items-center gap-3 shrink-0 bg-[var(--panel)]">
+          <button onClick={onClose}
+            className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
+              hover:text-[var(--text)] transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={creating || !canSubmit}
+            className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold
+              rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+            {creating ? 'Creating…' : `Create ${form.invoice_type === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}`}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
