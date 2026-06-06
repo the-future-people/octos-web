@@ -130,69 +130,107 @@ export default function AttendantPortal() {
       <div className="flex flex-1 overflow-hidden justify-center">
         <div className="flex w-full max-w-6xl">
 
-          {/* Mobile overlay */}
+          {/* Mobile slide-in sidebar */}
           {mobileOpen && (
-            <div
-              className="fixed inset-0 z-30 bg-black/40 md:hidden"
-              onClick={() => setMobileOpen(false)}
-            />
+            <>
+              <div className="fixed inset-0 bg-black/30 z-20 sm:hidden"
+                onClick={() => setMobileOpen(false)} />
+              <div className="fixed top-0 left-0 bottom-0 w-56 bg-[var(--panel)]
+                border-r border-[var(--border)] z-30 sm:hidden flex flex-col">
+                {/* Mobile header */}
+                <div className="flex items-center justify-between px-5 py-4
+                  border-b border-[var(--border)] shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 bg-[var(--text)] rounded-lg flex items-center justify-center">
+                      <span className="text-white font-black text-xs">O</span>
+                    </div>
+                    <div>
+                      <div className="font-black text-sm text-[var(--text)]">Octos</div>
+                      <div className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                        Attendant
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => setMobileOpen(false)}
+                    className="text-[var(--text-3)] hover:text-[var(--text)] transition-colors">✕</button>
+                </div>
+                {/* Mobile nav */}
+                <nav className="flex-1 overflow-y-auto px-3 py-4">
+                  {sections.map(section => (
+                    <div key={section} className="mb-4">
+                      <div className="text-[9px] font-black text-[var(--text-3)] uppercase
+                        tracking-widest px-2 mb-1">{section}</div>
+                      {NAV.filter(n => n.section === section).map(item => (
+                        <button key={item.key} onClick={() => handleNav(item.key)}
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl
+                            text-sm font-semibold transition-colors mb-0.5 text-left
+                            ${page === item.key
+                              ? 'bg-[var(--text)] text-white'
+                              : 'text-[var(--text-2)] hover:bg-[var(--bg)] hover:text-[var(--text)]'
+                            }`}>
+                          <span className="shrink-0">{item.icon}</span>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </nav>
+              </div>
+            </>
           )}
 
-          {/* Sidebar */}
-          <aside className={`
-            fixed inset-y-0 left-0 z-40 w-56 bg-[var(--panel)] border-r border-[var(--border)]
-            flex flex-col transition-transform duration-200
-            ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-            md:relative md:translate-x-0 md:flex
-          `}>
+          {/* Desktop sidebar — icon only on sm, full on md+ */}
+          <aside className="hidden sm:flex md:w-56 sm:w-12 shrink-0 bg-[var(--panel)]
+            border-r border-[var(--border)] flex-col overflow-y-auto">
 
-            {/* Mobile-only sidebar header */}
-            <div className="md:hidden flex items-center justify-between px-5 py-4
-              border-b border-[var(--border)] shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 bg-[var(--text)] rounded-lg flex items-center justify-center">
-                  <span className="text-white font-black text-xs">O</span>
-                </div>
-                <div>
-                  <div className="font-black text-sm text-[var(--text)]">Octos</div>
-                  <div className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-                    Attendant
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setMobileOpen(false)}
-                className="text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
-                ✕
-              </button>
-            </div>
-
-            {/* Nav */}
-            <nav className="flex-1 overflow-y-auto px-3 py-4">
+            {/* Full labels — md+ */}
+            <div className="hidden md:block pt-3">
               {sections.map(section => (
                 <div key={section} className="mb-4">
                   <div className="text-[9px] font-black text-[var(--text-3)] uppercase
-                    tracking-widest px-2 mb-1">
-                    {section}
-                  </div>
+                    tracking-widest px-5 pt-3 pb-1">{section}</div>
                   {NAV.filter(n => n.section === section).map(item => (
-                    <button
-                      key={item.key}
-                      onClick={() => handleNav(item.key)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl
-                        text-sm font-semibold transition-colors mb-0.5 text-left
+                    <div key={item.key} className="px-3 py-0.5">
+                      <button onClick={() => handleNav(item.key)}
+                        className={`w-full flex items-center gap-3 px-4 py-2 text-sm
+                          transition-colors text-left rounded-lg
+                          ${page === item.key
+                            ? 'bg-[var(--bg)] text-[var(--text)] font-semibold'
+                            : 'text-[var(--text-2)] hover:bg-[var(--bg)] font-medium'
+                          }`}>
+                        <span className="shrink-0">{item.icon}</span>
+                        {item.label}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Icons only — sm */}
+            <div className="md:hidden pt-3">
+              {sections.map((section, sIdx) => (
+                <div key={section}>
+                  {sIdx > 0 && (
+                    <div className="px-3 pt-2 pb-1">
+                      <div className="h-px bg-[var(--border)]" />
+                    </div>
+                  )}
+                  {NAV.filter(n => n.section === section).map(item => (
+                    <button key={item.key} onClick={() => handleNav(item.key)}
+                      title={item.label}
+                      className={`w-full flex items-center justify-center py-3
+                        transition-colors
                         ${page === item.key
-                          ? 'bg-[var(--text)] text-white'
-                          : 'text-[var(--text-2)] hover:bg-[var(--bg)] hover:text-[var(--text)]'
-                        }`}
-                    >
-                      <span className="shrink-0">{item.icon}</span>
-                      {item.label}
+                          ? 'bg-[var(--bg)] text-[var(--text)]'
+                          : 'text-[var(--text-2)] hover:bg-[var(--bg)]'
+                        }`}>
+                      {item.icon}
                     </button>
                   ))}
                 </div>
               ))}
-            </nav>
+            </div>
           </aside>
 
           {/* Main */}
