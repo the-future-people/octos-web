@@ -94,3 +94,23 @@ export const markNotificationRead = (id) =>
 
 export const markAllNotificationsRead = () =>
   client.post('/api/v1/notifications/read-all/')
+
+// ── Receipts ──────────────────────────────────────────────────────
+export const getJobReceipt        = (jobId) =>
+  client.get('/api/v1/finance/receipts/', { params: { job: jobId } })
+
+export const sendReceiptWhatsApp  = (receiptId) =>
+  client.post(`/api/v1/finance/receipts/${receiptId}/send-whatsapp/`)
+
+// ── Invoices ──────────────────────────────────────────────────────
+export const getJobInvoices       = (jobId) =>
+  client.get('/api/v1/finance/invoices/', { params: { job: jobId } })
+
+export const createInvoice        = (payload) =>
+  client.post('/api/v1/finance/invoices/create/', payload)
+
+export const sendInvoice          = (invoiceId) =>
+  client.post(`/api/v1/finance/invoices/${invoiceId}/send/`)
+
+export const getInvoicePdfUrl     = (invoiceId) =>
+  `/api/v1/finance/invoices/${invoiceId}/pdf/`

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
-import { getJobs, getJobStats, getJobDetail, transitionJob } from '../../api/bm'
+import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl } from '../../api/bm'
 import { invalidateAfterJobTransitioned } from '../../api/invalidations'
 import client from '../../api/client'
 
@@ -59,6 +59,275 @@ function StatusBadge({ status }) {
     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
       {c.label}
     </span>
+  )
+}
+
+
+
+// ── Receipt & Invoice Section ─────────────────────────────────────────────────
+function ReceiptInvoiceSection({ job }) {
+  const [tab,             setTab]             = useState('receipt')
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [invoiceForm,     setInvoiceForm]     = useState({
+    invoice_type:     'PROFORMA',
+    bill_to_name:     job.customer_name || '',
+    bill_to_phone:    job.customer_phone || '',
+    bill_to_email:    '',
+    bill_to_company:  '',
+    delivery_channel: 'DOWNLOAD',
+    bm_note:          '',
+  })
+  const [invoiceError,   setInvoiceError]   = useState('')
+  const [sendingWa,      setSendingWa]      = useState(false)
+  const [waMsg,          setWaMsg]          = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: receiptData } = useQuery({
+    queryKey: ['job-receipt', job.id],
+    queryFn:  () => getJobReceipt(job.id).then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const { data: invoiceData } = useQuery({
+    queryKey: ['job-invoices', job.id],
+    queryFn:  () => getJobInvoices(job.id).then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const receipts = Array.isArray(receiptData) ? receiptData : (receiptData?.results || [])
+  const invoices = Array.isArray(invoiceData) ? invoiceData : (invoiceData?.results || [])
+  const receipt  = receipts[0] || null
+  const invoice  = invoices[0] || null
+
+  const { mutate: createInv, isPending: creatingInv } = useMutation({
+    mutationFn: (payload) => createInvoice(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['job-invoices', job.id] })
+      setShowInvoiceForm(false)
+      setInvoiceError('')
+    },
+    onError: (err) => {
+      const d = err.response?.data
+      setInvoiceError(d?.detail || 'Failed to create invoice.')
+    },
+  })
+
+  const { mutate: resendInv, isPending: resendingInv } = useMutation({
+    mutationFn: (id) => sendInvoice(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['job-invoices', job.id] }),
+  })
+
+  const handleSendWa = async () => {
+    if (!receipt) return
+    setSendingWa(true)
+    setWaMsg('')
+    try {
+      await sendReceiptWhatsApp(receipt.id)
+      setWaMsg('Sent!')
+    } catch {
+      setWaMsg('Failed')
+    } finally {
+      setSendingWa(false)
+    }
+  }
+
+  const handleCreateInvoice = () => {
+    setInvoiceError('')
+    createInv({
+      job_id:           job.id,
+      invoice_type:     invoiceForm.invoice_type,
+      bill_to_name:     invoiceForm.bill_to_name,
+      bill_to_phone:    invoiceForm.bill_to_phone,
+      bill_to_email:    invoiceForm.bill_to_email,
+      bill_to_company:  invoiceForm.bill_to_company,
+      delivery_channel: invoiceForm.delivery_channel,
+      bm_note:          invoiceForm.bm_note,
+    })
+  }
+
+  return (
+    <div>
+      <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">
+        Receipt & Invoice
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-[var(--bg)] p-1 rounded-xl mb-3">
+        {['receipt', 'invoice'].map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors capitalize
+              ${tab === t
+                ? 'bg-[var(--text)] text-white'
+                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+              }`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Receipt tab */}
+      {tab === 'receipt' && (
+        <div>
+          {!receipt ? (
+            <div className="px-3 py-4 bg-[var(--bg)] border border-[var(--border)]
+              rounded-xl text-xs text-[var(--text-3)] text-center">
+              No receipt yet — payment not confirmed
+            </div>
+          ) : (
+            <div className="px-3 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[var(--text)]">{receipt.receipt_number}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  {receipt.payment_method}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-3)]">Amount paid</span>
+                <span className="font-mono text-xs font-bold text-[var(--text)]">
+                  {fmt(receipt.amount_paid)}
+                </span>
+              </div>
+              {receipt.customer_name && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[var(--text-3)]">Customer</span>
+                  <span className="text-xs text-[var(--text)]">{receipt.customer_name}</span>
+                </div>
+              )}
+              {receipt.customer_phone && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[var(--text-3)]">Phone</span>
+                  <span className="text-xs text-[var(--text)]">{receipt.customer_phone}</span>
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleSendWa} disabled={sendingWa}
+                  className="flex-1 py-2 text-xs font-bold bg-emerald-600 text-white
+                    rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
+                  {sendingWa ? 'Sending…' : '📲 Send WhatsApp'}
+                </button>
+              </div>
+              {waMsg && (
+                <div className={`text-xs text-center font-semibold
+                  ${waMsg === 'Sent!' ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {waMsg}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invoice tab */}
+      {tab === 'invoice' && (
+        <div className="space-y-2">
+          {invoice ? (
+            <div className="px-3 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[var(--text)]">{invoice.invoice_number}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                  {invoice.invoice_type}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-3)]">Total</span>
+                <span className="font-mono text-xs font-bold text-[var(--text)]">
+                  {fmt(invoice.total)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-3)]">Status</span>
+                <span className="text-xs font-semibold text-[var(--text)]">{invoice.status}</span>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <a href={getInvoicePdfUrl(invoice.id)} target="_blank" rel="noreferrer"
+                  className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
+                    rounded-lg hover:opacity-90 transition-opacity text-center">
+                  ⬇ Download PDF
+                </a>
+                <button onClick={() => resendInv(invoice.id)} disabled={resendingInv}
+                  className="flex-1 py-2 text-xs font-bold border border-[var(--border)]
+                    text-[var(--text)] rounded-lg hover:bg-[var(--bg)] disabled:opacity-40
+                    transition-colors">
+                  {resendingInv ? 'Sending…' : 'Resend'}
+                </button>
+              </div>
+            </div>
+          ) : showInvoiceForm ? (
+            <div className="px-3 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl space-y-2">
+              {/* Invoice type */}
+              <div className="flex gap-1">
+                {['PROFORMA', 'TAX'].map(t => (
+                  <button key={t} onClick={() => setInvoiceForm(f => ({ ...f, invoice_type: t }))}
+                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg border transition-colors
+                      ${invoiceForm.invoice_type === t
+                        ? 'bg-[var(--text)] text-white border-transparent'
+                        : 'border-[var(--border)] text-[var(--text-3)]'
+                      }`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {/* Bill to */}
+              {[
+                { key: 'bill_to_name',    placeholder: 'Bill to name *'    },
+                { key: 'bill_to_phone',   placeholder: 'Phone'             },
+                { key: 'bill_to_email',   placeholder: 'Email'             },
+                { key: 'bill_to_company', placeholder: 'Company (optional)'},
+              ].map(f => (
+                <input key={f.key} type="text" placeholder={f.placeholder}
+                  value={invoiceForm[f.key]}
+                  onChange={e => setInvoiceForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  className="w-full px-2.5 py-2 text-xs bg-[var(--panel)] border border-[var(--border)]
+                    rounded-lg outline-none focus:border-[var(--border-dark)]"
+                />
+              ))}
+              {/* Delivery */}
+              <select value={invoiceForm.delivery_channel}
+                onChange={e => setInvoiceForm(f => ({ ...f, delivery_channel: e.target.value }))}
+                className="w-full px-2.5 py-2 text-xs bg-[var(--panel)] border border-[var(--border)]
+                  rounded-lg outline-none">
+                <option value="DOWNLOAD">Download only</option>
+                <option value="WHATSAPP">WhatsApp</option>
+                <option value="EMAIL">Email</option>
+                <option value="BOTH">WhatsApp + Email</option>
+              </select>
+              {/* Note */}
+              <textarea placeholder="BM note (optional)" rows={2}
+                value={invoiceForm.bm_note}
+                onChange={e => setInvoiceForm(f => ({ ...f, bm_note: e.target.value }))}
+                className="w-full px-2.5 py-2 text-xs bg-[var(--panel)] border border-[var(--border)]
+                  rounded-lg outline-none resize-none"
+              />
+              {invoiceError && (
+                <div className="text-xs text-red-500 font-semibold">{invoiceError}</div>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => setShowInvoiceForm(false)}
+                  className="flex-1 py-2 text-xs font-bold border border-[var(--border)]
+                    text-[var(--text-2)] rounded-lg hover:bg-[var(--bg)] transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleCreateInvoice} disabled={creatingInv || !invoiceForm.bill_to_name}
+                  className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
+                    rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
+                  {creatingInv ? 'Creating…' : 'Create Invoice'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="px-3 py-4 bg-[var(--bg)] border border-[var(--border)]
+              rounded-xl text-center space-y-2">
+              <p className="text-xs text-[var(--text-3)]">No invoice for this job</p>
+              <button onClick={() => setShowInvoiceForm(true)}
+                className="px-4 py-2 text-xs font-bold bg-[var(--text)] text-white
+                  rounded-lg hover:opacity-90 transition-opacity">
+                + Create Invoice
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -231,6 +500,9 @@ function JobDetailPanel({ jobId, onClose }) {
                 <div className="text-xs text-amber-800">{job.notes}</div>
               </div>
             )}
+
+            {/* Receipt & Invoice */}
+            <ReceiptInvoiceSection job={job} />
 
           </>) : (
             <div className="text-sm text-[var(--text-3)] text-center py-8">Job not found</div>
