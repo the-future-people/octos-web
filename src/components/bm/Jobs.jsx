@@ -1228,14 +1228,11 @@ export default function Jobs() {
   const handleType   = (v) => { setJobType(v); setPage(1) }
   const handlePeriod = (v) => { setPeriod(v); setPage(1) }
 
-  if (tab === 'receipts') return <ReceiptsTab />
-  if (tab === 'invoices') return <InvoicesTab />
-
   return (
-    <div className="p-5 sm:p-6 space-y-5">
+    <div className="flex flex-col">
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl">
+      {/* Tab bar — always visible */}
+      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl mx-5 sm:mx-6 mt-5 sm:mt-6">
         {[
           { value: 'jobs',     label: 'Jobs'     },
           { value: 'receipts', label: 'Receipts' },
@@ -1251,6 +1248,11 @@ export default function Jobs() {
           </button>
         ))}
       </div>
+
+      {/* Tab content */}
+      {tab === 'receipts' && <ReceiptsTab />}
+      {tab === 'invoices' && <InvoicesTab />}
+      {tab === 'jobs' && <div className="p-5 sm:p-6 space-y-5">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -1443,6 +1445,7 @@ export default function Jobs() {
         <JobDetailPanel jobId={selectedId} onClose={() => setSelectedId(null)} />
       )}
 
+      </div>}
     </div>
   )
 }
