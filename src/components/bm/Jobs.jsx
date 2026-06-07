@@ -1239,7 +1239,7 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
   // ── Step 3: Delivery ────────────────────────────────────────────────────
   const [dueDate,  setDueDate]  = useState('')
   const [vatRate,  setVatRate]  = useState('0')
-  const [channel,  setChannel]  = useState('DOWNLOAD')
+  const [channel,  setChannel]  = useState('WHATSAPP')
   const [bmNote,   setBmNote]   = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -1793,7 +1793,6 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
               <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Delivery Channel</label>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { value: 'DOWNLOAD', label: '⬇ Download only'       },
                   { value: 'WHATSAPP', label: '📲 WhatsApp'             },
                   { value: 'EMAIL',    label: '✉ Email'                 },
                   { value: 'BOTH',     label: '📲 + ✉ WhatsApp & Email' },
@@ -1844,12 +1843,13 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                       <div className="text-xs text-zinc-500 mt-0.5">
                         {user?.branch_detail?.name || user?.branch_name || 'Branch'}
                       </div>
-                      {user?.branch_detail?.phone && (
-                        <div className="text-xs text-zinc-400 mt-0.5">{user.branch_detail.phone}</div>
-                      )}
-                      {user?.branch_detail?.address && (
-                        <div className="text-xs text-zinc-400 mt-0.5">{user.branch_detail.address}</div>
-                      )}
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        {[
+                          user?.branch_detail?.phone || user?.branch_detail?.whatsapp_number,
+                          user?.branch_detail?.email,
+                          user?.branch_detail?.address || user?.branch_detail?.location,
+                        ].filter(Boolean).join(' · ')}
+                      </div>
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-black px-2.5 py-1 rounded-full inline-block
@@ -1937,7 +1937,9 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                 <div className="px-6 py-4 border-t border-zinc-100 space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-zinc-400">Delivery</span>
-                    <span className="font-semibold text-zinc-700">{channel}</span>
+                    <span className="font-semibold text-zinc-700">
+                      {channel === 'WHATSAPP' ? '📲 WhatsApp' : channel === 'EMAIL' ? '✉ Email' : '📲 + ✉ WhatsApp & Email'}
+                    </span>
                   </div>
                   {bmNote && (
                     <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg">
