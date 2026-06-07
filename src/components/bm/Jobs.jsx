@@ -1387,7 +1387,7 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">New Invoice</div>
-            <div className="text-xs text-[var(--text-3)] mt-0.5">Step {step} of 3 — {STEPS[step-1]}</div>
+            <div className="text-xs text-[var(--text-3)] mt-0.5">Step {step} of 4 — {STEPS[step-1]}</div>
           </div>
           <button onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
@@ -1841,14 +1841,21 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="font-black text-xl text-zinc-900 tracking-tight">Farhat Printing Press</div>
-                      <div className="text-xs text-zinc-400 mt-0.5">Westland Branch</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">
+                        {user?.branch_detail?.name || user?.branch_name || 'Branch'}
+                      </div>
+                      {user?.branch_detail?.phone && (
+                        <div className="text-xs text-zinc-400 mt-0.5">{user.branch_detail.phone}</div>
+                      )}
+                      {user?.branch_detail?.address && (
+                        <div className="text-xs text-zinc-400 mt-0.5">{user.branch_detail.address}</div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-black px-2.5 py-1 rounded-full inline-block
                         ${invoiceType === 'PROFORMA' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
                         {invoiceType} INVOICE
                       </div>
-                      <div className="text-[10px] text-zinc-400 mt-1">Draft Preview</div>
                     </div>
                   </div>
                 </div>
@@ -1878,27 +1885,34 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
 
                 {/* Line items */}
                 <div className="px-6 py-3">
-                  <div className="grid grid-cols-12 text-[9px] font-bold text-zinc-400 uppercase tracking-widest pb-2 border-b border-zinc-100">
-                    <span className="col-span-6">Service</span>
-                    <span className="col-span-3 text-center">Details</span>
-                    <span className="col-span-3 text-right">Amount</span>
+                  <div className="grid grid-cols-12 text-[9px] font-bold text-zinc-400 uppercase tracking-widest pb-2 border-b border-zinc-200">
+                    <span className="col-span-1">#</span>
+                    <span className="col-span-5">Description</span>
+                    <span className="col-span-2 text-center">Qty</span>
+                    <span className="col-span-2 text-right">Unit Price</span>
+                    <span className="col-span-2 text-right">Amount</span>
                   </div>
-                  {lineItems.map((li, i) => (
-                    <div key={i} className="grid grid-cols-12 items-center py-2.5 border-b border-zinc-50 last:border-0">
-                      <div className="col-span-6 text-xs font-semibold text-zinc-800">
-                        {mode === 'standalone' ? li.service.name : (li.label || li.service_name)}
+                  {lineItems.map((li, i) => {
+                    const qty       = mode === 'standalone' ? (li.sets * li.pages) : (li.quantity * li.pages)
+                    const lineTotal = parseFloat(mode === 'standalone' ? li._price : li.line_total) || 0
+                    const unitPrice = qty > 0 ? lineTotal / qty : 0
+                    const desc      = mode === 'standalone' ? li.service.name : (li.label || li.service_name)
+                    const detail    = mode === 'standalone'
+                      ? `${li.sets} set${li.sets !== 1 ? 's' : ''} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
+                      : `${li.quantity} set${li.quantity !== 1 ? 's' : ''} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
+                    return (
+                      <div key={i} className="grid grid-cols-12 items-start py-3 border-b border-zinc-50 last:border-0">
+                        <div className="col-span-1 text-xs text-zinc-400">{i + 1}</div>
+                        <div className="col-span-5">
+                          <div className="text-xs font-semibold text-zinc-800">{desc}</div>
+                          <div className="text-[10px] text-zinc-400 mt-0.5">{detail}</div>
+                        </div>
+                        <div className="col-span-2 text-center text-xs text-zinc-600">{qty}</div>
+                        <div className="col-span-2 text-right font-mono text-xs text-zinc-600">{fmt(unitPrice)}</div>
+                        <div className="col-span-2 text-right font-mono text-xs font-bold text-zinc-800">{fmt(lineTotal)}</div>
                       </div>
-                      <div className="col-span-3 text-center text-[10px] text-zinc-500">
-                        {mode === 'standalone'
-                          ? `${li.sets} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
-                          : `${li.quantity} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
-                        }
-                      </div>
-                      <div className="col-span-3 text-right font-mono text-xs font-bold text-zinc-800">
-                        {fmt(mode === 'standalone' ? li._price : li.line_total)}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Totals */}
