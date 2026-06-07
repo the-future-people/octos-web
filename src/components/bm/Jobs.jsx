@@ -1843,13 +1843,15 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                       <div className="text-xs text-zinc-500 mt-0.5">
                         {user?.branch_detail?.name || user?.branch_name || 'Branch'}
                       </div>
-                      <div className="text-xs text-zinc-400 mt-0.5">
-                        {[
-                          user?.branch_detail?.phone || user?.branch_detail?.whatsapp_number,
-                          user?.branch_detail?.email,
-                          user?.branch_detail?.address || user?.branch_detail?.location,
-                        ].filter(Boolean).join(' · ')}
-                      </div>
+                      {(user?.branch_detail?.phone || user?.branch_detail?.address || user?.branch_detail?.email) && (
+                        <div className="text-xs text-zinc-400 mt-1 space-y-0.5">
+                          {(user?.branch_detail?.phone || user?.branch_detail?.whatsapp_number) && (
+                            <div>{user.branch_detail.phone || user.branch_detail.whatsapp_number}</div>
+                          )}
+                          {user?.branch_detail?.email && <div>{user.branch_detail.email}</div>}
+                          {user?.branch_detail?.address && <div>{user.branch_detail.address}</div>}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-black px-2.5 py-1 rounded-full inline-block
