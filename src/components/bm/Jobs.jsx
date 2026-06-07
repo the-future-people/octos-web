@@ -1381,8 +1381,7 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-[var(--panel)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl
-        shadow-2xl flex flex-col overflow-hidden animate-slideUp"
-        style={{ maxHeight: '92vh' }}>
+        shadow-2xl flex flex-col overflow-hidden animate-slideUp h-[92vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
@@ -1547,32 +1546,18 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                     <div className="text-xs font-bold text-[var(--text)]">{selected.name}</div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Pages / Sheets</label>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Sheets</label>
                         <input type="number" min="1" value={selPages}
                           onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
                           className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Copies / Sets</label>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Copies</label>
                         <input type="number" min="1" value={selSets}
                           onChange={e => setSelSets(Math.max(1, parseInt(e.target.value) || 1))}
                           className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none"
                         />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Paper Size</label>
-                        <select value={selPaper} onChange={e => setSelPaper(e.target.value)}
-                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none">
-                          {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">Sides</label>
-                        <select value={selSides} onChange={e => setSelSides(e.target.value)}
-                          className="w-full px-2.5 py-2 text-sm bg-[var(--panel)] border border-[var(--border)] rounded-lg outline-none">
-                          {SIDES_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
