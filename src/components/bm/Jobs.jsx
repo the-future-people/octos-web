@@ -1346,6 +1346,7 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
   const step1Valid = mode === 'job' ? !!jobData : cart.length > 0
   const step2Valid = billName.trim().length > 0
   const step3Valid = step2Valid
+  const step4Valid = step3Valid
 
   // ── Submit ──────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -1375,11 +1376,10 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
   }
 
   // ── Progress bar ────────────────────────────────────────────────────────
-  const STEPS = ['Source & Type', 'Bill To', 'Delivery']
+ const STEPS = ['Source & Type', 'Bill To', 'Delivery', 'Preview']
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
-      onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
       <div className="bg-[var(--panel)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl
         shadow-2xl flex flex-col overflow-hidden animate-slideUp h-[92vh]">
 
@@ -1725,7 +1725,10 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
                   <span className="text-xs text-[var(--text-3)]">Bill To</span>
-                  <span className="text-xs font-semibold text-[var(--text)]">{billName}{billCompany ? ` · ${billCompany}` : ''}</span>
+                  <div className="text-right">
+                    <div className="text-xs font-bold text-[var(--text)]">{billCompany || billName}</div>
+                    {billCompany && <div className="text-[10px] text-[var(--text-3)]">{billName}</div>}
+                  </div>
                 </div>
                 {mode === 'job' && jobData && (
                   <div className="flex items-center justify-between mt-1.5">
@@ -1819,6 +1822,127 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
           </div>
         )}
 
+        {/* ── STEP 4 — Preview ── */}
+        {step === 4 && (() => {
+          const lineItems = mode === 'standalone' ? cart : (jobData?.line_items || [])
+          const subtotal  = mode === 'job' && jobData
+            ? parseFloat(jobData.estimated_cost || 0)
+            : cartTotal
+          const vat   = subtotal * (parseFloat(vatRate || 0) / 100)
+          const total = subtotal + vat
+          const today = new Date().toLocaleDateString('en-GH', { day: 'numeric', month: 'long', year: 'numeric' })
+
+          return (
+            <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6 min-h-0">
+              <div className="bg-white border border-[var(--border)] rounded-2xl overflow-hidden text-zinc-800 shadow-sm">
+
+                {/* Invoice header */}
+                <div className="px-6 pt-6 pb-4 border-b border-zinc-100">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-black text-xl text-zinc-900 tracking-tight">Farhat Printing Press</div>
+                      <div className="text-xs text-zinc-400 mt-0.5">Westland Branch</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-xs font-black px-2.5 py-1 rounded-full inline-block
+                        ${invoiceType === 'PROFORMA' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {invoiceType} INVOICE
+                      </div>
+                      <div className="text-[10px] text-zinc-400 mt-1">Draft Preview</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bill to + meta */}
+                <div className="px-6 py-4 grid grid-cols-2 gap-4 border-b border-zinc-100">
+                  <div>
+                    <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Bill To</div>
+                    <div className="text-sm font-bold text-zinc-900">{billCompany || billName}</div>
+                    {billCompany && <div className="text-xs text-zinc-500 mt-0.5">{billName}</div>}
+                    {billPhone && <div className="text-xs text-zinc-500 mt-0.5">{billPhone}</div>}
+                    {billEmail && <div className="text-xs text-zinc-500 mt-0.5">{billEmail}</div>}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Invoice Details</div>
+                    <div className="text-xs text-zinc-500">Issued: <span className="font-semibold text-zinc-800">{today}</span></div>
+                    {dueDate && (
+                      <div className="text-xs text-zinc-500 mt-0.5">Due: <span className="font-semibold text-zinc-800">
+                        {new Date(dueDate).toLocaleDateString('en-GH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span></div>
+                    )}
+                    {mode === 'job' && jobData && (
+                      <div className="text-xs text-zinc-500 mt-0.5">Job: <span className="font-mono font-bold text-zinc-800">{jobData.job_number}</span></div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Line items */}
+                <div className="px-6 py-3">
+                  <div className="grid grid-cols-12 text-[9px] font-bold text-zinc-400 uppercase tracking-widest pb-2 border-b border-zinc-100">
+                    <span className="col-span-6">Service</span>
+                    <span className="col-span-3 text-center">Details</span>
+                    <span className="col-span-3 text-right">Amount</span>
+                  </div>
+                  {lineItems.map((li, i) => (
+                    <div key={i} className="grid grid-cols-12 items-center py-2.5 border-b border-zinc-50 last:border-0">
+                      <div className="col-span-6 text-xs font-semibold text-zinc-800">
+                        {mode === 'standalone' ? li.service.name : (li.label || li.service_name)}
+                      </div>
+                      <div className="col-span-3 text-center text-[10px] text-zinc-500">
+                        {mode === 'standalone'
+                          ? `${li.sets} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
+                          : `${li.quantity} × ${li.pages}pp · ${li.is_color ? 'Colour' : 'B&W'}`
+                        }
+                      </div>
+                      <div className="col-span-3 text-right font-mono text-xs font-bold text-zinc-800">
+                        {fmt(mode === 'standalone' ? li._price : li.line_total)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Totals */}
+                <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 space-y-1.5">
+                  <div className="flex justify-between text-xs text-zinc-500">
+                    <span>Subtotal</span>
+                    <span className="font-mono font-semibold text-zinc-700">{fmt(subtotal)}</span>
+                  </div>
+                  {vat > 0 && (
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>VAT ({vatRate}%)</span>
+                      <span className="font-mono font-semibold text-zinc-700">{fmt(vat)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-2 border-t border-zinc-200">
+                    <span className="text-sm font-bold text-zinc-900">Total</span>
+                    <span className="font-mono text-base font-black text-zinc-900">{fmt(total)}</span>
+                  </div>
+                </div>
+
+                {/* Delivery + Note */}
+                <div className="px-6 py-4 border-t border-zinc-100 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-400">Delivery</span>
+                    <span className="font-semibold text-zinc-700">{channel}</span>
+                  </div>
+                  {bmNote && (
+                    <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg">
+                      <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">Note</div>
+                      <div className="text-xs text-amber-800">{bmNote}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-3 border-t border-zinc-100 text-center">
+                  <div className="text-[10px] text-zinc-400">Thank you for your business — Farhat Printing Press</div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+
         {/* Footer navigation */}
         <div className="px-6 py-4 border-t border-[var(--border)] flex items-center gap-3 shrink-0">
           {step > 1 ? (
@@ -1832,15 +1956,19 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
               Cancel
             </button>
           )}
-          {step < 3 ? (
+          {step < 4 ? (
             <button
               onClick={() => setStep(s => s + 1)}
-              disabled={step === 1 ? !step1Valid : !step2Valid}
+              disabled={
+                step === 1 ? !step1Valid :
+                step === 2 ? !step2Valid :
+                !step3Valid
+              }
               className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
-              Next →
+              {step === 3 ? 'Preview →' : 'Next →'}
             </button>
           ) : (
-            <button onClick={handleSubmit} disabled={creating || !step3Valid}
+            <button onClick={handleSubmit} disabled={creating || !step4Valid}
               className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
               {creating ? 'Creating…' : `Create ${invoiceType === 'PROFORMA' ? 'Proforma' : 'Tax Invoice'}`}
             </button>
