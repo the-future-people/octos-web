@@ -50,7 +50,11 @@ function HourlyChart({ data, height = 140 }) {
       ctx.fillText(d.label, padL + i * gap + gap / 2, H - 8)
     })
   }, [data, height])
-  return <canvas ref={canvasRef} style={{ width: '100%', height: `${height}px`, display: 'block' }} />
+  return (
+    <div style={{ minWidth: '520px' }}>
+      <canvas ref={canvasRef} style={{ width: '100%', height: `${height}px`, display: 'block' }} />
+    </div>
+  )
 }
 
 function fmt(amount) {
@@ -349,7 +353,7 @@ export default function DaySheet() {
                 </div>
               </div>
             </div>
-            <div className="w-full overflow-hidden">
+            <div className="w-full overflow-x-auto">
               {perfPeriod === 'day' ? (
                 (perfData?.hourly?.length > 0 && perfData.hourly.some(h => h.count > 0)) ? (
                   <HourlyChart data={perfData.hourly} height={150} />
