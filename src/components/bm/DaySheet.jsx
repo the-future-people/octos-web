@@ -333,7 +333,7 @@ export default function DaySheet() {
                     <div className="text-[10px] text-[var(--text-3)]">{perfData.peak.count} jobs</div>
                   </div>
                 )}
-                <div className="flex gap-0.5 bg-[var(--bg)] p-0.5 rounded-lg">
+                <div className="flex gap-0.5 bg-[var(--border)] p-0.5 rounded-lg">
                   {[
                     { value: 'day',   label: 'Today' },
                     { value: 'week',  label: 'Week'  },
@@ -342,7 +342,7 @@ export default function DaySheet() {
                     <button key={p.value} onClick={() => setPerfPeriod(p.value)}
                       className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-colors
                         ${perfPeriod === p.value
-                          ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
+                          ? 'bg-[var(--text)] text-white'
                           : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
                         }`}>
                       {p.label}
@@ -351,21 +351,31 @@ export default function DaySheet() {
                 </div>
               </div>
             </div>
-            {perfPeriod === 'day' ? (
-              (perfData?.hourly?.length > 0 && perfData.hourly.some(h => h.count > 0)) ? (
-                <HourlyChart data={perfData.hourly} height={150} />
+            <div className="w-full overflow-hidden">
+              {perfPeriod === 'day' ? (
+                (perfData?.hourly?.length > 0 && perfData.hourly.some(h => h.count > 0)) ? (
+                  <HourlyChart data={perfData.hourly} height={150} />
+                ) : (
+                  <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
+                    No activity yet today
+                  </div>
+                )
               ) : (
-                <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
-                  No activity yet today
+                <div className="space-y-2 py-2">
+                  {[
+                    { label: 'Total Jobs',  value: perfData?.summary?.total     ?? 0, color: 'text-[var(--text)]'  },
+                    { label: 'Completed',   value: perfData?.summary?.complete   ?? 0, color: 'text-emerald-600'    },
+                    { label: 'Pending',     value: perfData?.summary?.pending    ?? 0, color: 'text-amber-600'      },
+                    { label: 'Revenue',     value: `GHS ${parseFloat(perfData?.summary?.revenue || 0).toLocaleString('en-GH', {minimumFractionDigits: 2})}`, color: 'text-blue-600' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center justify-between px-1">
+                      <span className="text-xs text-[var(--text-3)]">{s.label}</span>
+                      <span className={`text-xs font-bold font-mono ${s.color}`}>{s.value}</span>
+                    </div>
+                  ))}
                 </div>
-              )
-            ) : (
-              <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
-                {perfData?.summary?.total
-                  ? `${perfData.summary.total} jobs · ${perfData.summary.complete} completed`
-                  : 'No data for this period'}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
