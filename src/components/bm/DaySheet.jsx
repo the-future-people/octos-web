@@ -70,11 +70,14 @@ export default function DaySheet() {
     refetchInterval: 30_000,
   })
 
+  const [perfPeriod, setPerfPeriod] = useState('day')
+
   const { data: perfData } = useQuery({
-    queryKey: ['performance-today'],
-    queryFn:  () => client.get('/api/v1/jobs/performance/?period=day').then(r => r.data),
+    queryKey: ['performance-today', perfPeriod],
+    queryFn:  () => client.get(`/api/v1/jobs/performance/?period=${perfPeriod}`).then(r => r.data),
     refetchInterval: 60_000,
     staleTime: 30_000,
+    placeholderData: prev => prev,
   })
 
   const { data: lockData } = useQuery({
@@ -310,28 +313,60 @@ export default function DaySheet() {
           )}
 
           {/* Hourly activity chart */}
-          {perfData?.hourly?.length > 0 && (
-            <div className="mt-5 pt-4 border-t border-[var(--border)]">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-                    Hourly Activity
-                  </div>
-                  <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                    {perfData.hourly.reduce((s, h) => s + h.count, 0)} jobs recorded today
-                  </div>
+          <div className="mt-5 pt-4 border-t border-[var(--border)]">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                  Activity
                 </div>
-                {perfData.peak?.count > 0 && (
+                <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                  {perfPeriod === 'day'
+                    ? `${(perfData?.hourly || []).reduce((s, h) => s + h.count, 0)} jobs today`
+                    : `${perfData?.summary?.total ?? 0} jobs this ${perfPeriod}`}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {perfPeriod === 'day' && perfData?.peak?.count > 0 && (
                   <div className="text-right">
                     <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Peak</div>
                     <div className="text-sm font-black text-violet-600">{perfData.peak.label}</div>
                     <div className="text-[10px] text-[var(--text-3)]">{perfData.peak.count} jobs</div>
                   </div>
                 )}
+                <div className="flex gap-0.5 bg-[var(--bg)] p-0.5 rounded-lg">
+                  {[
+                    { value: 'day',   label: 'Today' },
+                    { value: 'week',  label: 'Week'  },
+                    { value: 'month', label: 'Month' },
+                  ].map(p => (
+                    <button key={p.value} onClick={() => setPerfPeriod(p.value)}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-colors
+                        ${perfPeriod === p.value
+                          ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
+                          : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                        }`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <HourlyChart data={perfData.hourly} height={140} />
             </div>
-          )}
+            {perfPeriod === 'day' ? (
+              (perfData?.hourly?.length > 0 && perfData.hourly.some(h => h.count > 0)) ? (
+                <HourlyChart data={perfData.hourly} height={150} />
+              ) : (
+                <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
+                  No activity yet today
+                </div>
+              )
+            ) : (
+              <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
+                {perfData?.summary?.total
+                  ? `${perfData.summary.total} jobs · ${perfData.summary.complete} completed`
+                  : 'No data for this period'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
