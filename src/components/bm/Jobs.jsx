@@ -196,7 +196,7 @@ function ReceiptInvoiceSection({ job }) {
                 <button onClick={handleSendWa} disabled={sendingWa}
                   className="flex-1 py-2 text-xs font-bold bg-emerald-600 text-white
                     rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  {sendingWa ? 'Sending…' : 'ðŸ“² Send WhatsApp'}
+                  {sendingWa ? 'Sending…' : ' Send WhatsApp'}
                 </button>
               </div>
               {waMsg && (
@@ -233,7 +233,7 @@ function ReceiptInvoiceSection({ job }) {
                 <a href={getInvoicePdfUrl(invoice.id)} target="_blank" rel="noreferrer"
                   className="flex-1 py-2 text-xs font-bold bg-[var(--text)] text-white
                     rounded-lg hover:opacity-90 transition-opacity text-center">
-                  â¬‡ Download PDF
+                  ↓ Download PDF
                 </a>
                 <button onClick={() => resendInv(invoice.id)} disabled={resendingInv}
                   className="flex-1 py-2 text-xs font-bold border border-[var(--border)]
@@ -349,10 +349,7 @@ function JobDetailPanel({ jobId, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div>
             <div className="font-black text-base text-[var(--text)]">
-              {isLoading ? 'Loading…' : job?.job_number}
-            </div>
-            <div className="text-xs text-[var(--text-3)] mt-0.5">
-              {isLoading ? '' : job?.title}
+              {isLoading ? 'Loading...' : job?.job_number}
             </div>
           </div>
           <button onClick={onClose}
@@ -447,7 +444,7 @@ function JobDetailPanel({ jobId, onClose }) {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-[var(--text-2)]">
                           <span className="text-[var(--text-3)]">{log.from_status?.replace(/_/g,' ')}</span>
-                          {' â†’ '}
+                          {' → '}
                           <span className="font-semibold text-[var(--text)]">{log.to_status?.replace(/_/g,' ')}</span>
                         </div>
                         {log.actor_name && (
@@ -610,15 +607,15 @@ function ReceiptsTab() {
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                 className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
                   rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
-                â† Prev
+                ← Prev
               </button>
               <span className="text-[10px] font-mono text-[var(--text-3)]">
-                {(page-1)*10+1}â€“{Math.min(page*10, count)} of {count}
+                {(page-1)*10+1}—{Math.min(page*10, count)} of {count}
               </span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                 className="px-2.5 py-1 text-xs font-bold border border-[var(--border)]
                   rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">
-                Next â†’
+                Next →
               </button>
             </div>
           )}
@@ -993,10 +990,10 @@ export default function Jobs() {
                   <div className="flex gap-2">
                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                       className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">â† Prev</button>
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
                     <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
                       className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next â†’</button>
+                        rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
                   </div>
                 </div>
               )}
@@ -1172,10 +1169,10 @@ function InvoicesTab() {
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">â† Prev</button>
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">← Prev</button>
                 <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--panel)] border border-[var(--border)]
-                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next â†’</button>
+                    rounded-lg disabled:opacity-40 hover:border-[var(--border-dark)] transition-colors">Next →</button>
               </div>
             </div>
           )}
