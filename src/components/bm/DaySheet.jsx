@@ -321,8 +321,10 @@ export default function DaySheet() {
                 </div>
                 <div className="text-[10px] text-[var(--text-3)] mt-0.5">
                   {perfPeriod === 'day'
-                    ? `${(perfData?.hourly || []).reduce((s, h) => s + h.count, 0)} jobs today`
-                    : `${perfData?.summary?.total ?? 0} jobs this ${perfPeriod}`}
+                    ? `${(perfData?.hourly || []).reduce((s, h) => s + h.count, 0)} jobs today · by hour`
+                    : perfPeriod === 'week'
+                    ? `${perfData?.summary?.total ?? 0} jobs this week · by hour`
+                    : `${perfData?.summary?.total ?? 0} jobs this month · by day`}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -360,12 +362,20 @@ export default function DaySheet() {
                     No activity yet today
                   </div>
                 )
+              ) : perfPeriod === 'week' ? (
+                (perfData?.hourly?.length > 0 && perfData.hourly.some(h => h.count > 0)) ? (
+                  <HourlyChart data={perfData.hourly} height={150} />
+                ) : (
+                  <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
+                    No activity this week
+                  </div>
+                )
               ) : (
                 (perfData?.daily?.length > 0 && perfData.daily.some(d => d.count > 0)) ? (
                   <HourlyChart data={perfData.daily} height={150} />
                 ) : (
                   <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
-                    No data for this period
+                    No data this month
                   </div>
                 )
               )}
