@@ -1107,7 +1107,7 @@ function InvoicesTab() {
               <span className="col-span-2">Type</span>
               <span className="col-span-3">Bill To</span>
               <span className="col-span-2 text-right">Amount</span>
-              <span className="col-span-1">Status</span>
+              <span className="col-span-1 pl-3">Status</span>
               <span className="col-span-1 text-right">Actions</span>
             </div>
             {invoices.map(inv => (
@@ -1132,7 +1132,7 @@ function InvoicesTab() {
                 <div className="col-span-3 sm:col-span-2 text-right">
                   <span className="font-mono text-xs font-bold text-[var(--text)]">{fmt(inv.total)}</span>
                 </div>
-                <div className="hidden sm:block col-span-1">
+                <div className="hidden sm:block col-span-1 pl-3">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
                     ${STATUS_COLOR[inv.status] || 'bg-zinc-100 text-zinc-600'}`}>
                     {inv.status}
