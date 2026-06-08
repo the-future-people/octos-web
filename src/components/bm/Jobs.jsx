@@ -1407,14 +1407,24 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
             {/* Invoice type */}
             <div>
               <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Invoice Type</label>
-              <div className="flex gap-0 bg-[var(--bg)] p-1 rounded-xl">
+              <div className="relative flex bg-[var(--bg)] p-1 rounded-2xl overflow-hidden"
+                style={{backdropFilter: 'blur(12px)'}}>
+                <div className="absolute top-1 bottom-1 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                  style={{
+                    width: 'calc(50% - 2px)',
+                    left: invoiceType === 'PROFORMA' ? '4px' : 'calc(50% - 2px)',
+                    background: invoiceType === 'PROFORMA'
+                      ? 'linear-gradient(135deg,#7c3aed,#6d28d9)'
+                      : 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
+                  }} />
                 {[
-                  { value: 'PROFORMA', label: 'Proforma', activeClass: 'bg-violet-600 text-white' },
-                  { value: 'TAX',      label: 'Tax Invoice', activeClass: 'bg-blue-600 text-white' },
+                  { value: 'PROFORMA', label: 'Proforma'    },
+                  { value: 'TAX',      label: 'Tax Invoice' },
                 ].map(t => (
                   <button key={t.value} onClick={() => setInvoiceType(t.value)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors
-                      ${invoiceType === t.value ? t.activeClass : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+                    className="relative flex-1 py-2 text-xs font-bold rounded-xl transition-colors duration-200 z-10"
+                    style={{color: invoiceType === t.value ? '#fff' : 'var(--color-text-tertiary)'}}>
                     {t.label}
                   </button>
                 ))}
@@ -1424,15 +1434,25 @@ function InvoiceCreateModal({ onClose, onSuccess }) {
             {/* Mode */}
             <div>
               <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">Source</label>
-              <div className="flex gap-0 bg-[var(--bg)] p-1 rounded-xl">
+              <div className="relative flex bg-[var(--bg)] p-1 rounded-2xl overflow-hidden"
+                style={{backdropFilter: 'blur(12px)'}}>
+                <div className="absolute top-1 bottom-1 rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                  style={{
+                    width: 'calc(50% - 2px)',
+                    left: mode === 'job' ? '4px' : 'calc(50% - 2px)',
+                    background: mode === 'job'
+                      ? 'linear-gradient(135deg,#059669,#047857)'
+                      : 'linear-gradient(135deg,#d97706,#b45309)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
+                  }} />
                 {[
-                  { value: 'job',        label: 'From a Job',  activeClass: 'bg-emerald-600 text-white' },
-                  { value: 'standalone', label: 'Standalone',  activeClass: 'bg-amber-500 text-white'   },
+                  { value: 'job',        label: 'From a Job' },
+                  { value: 'standalone', label: 'Standalone' },
                 ].map(m => (
                   <button key={m.value}
                     onClick={() => { setMode(m.value); setJobData(null); setJobError(''); setCart([]) }}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors
-                      ${mode === m.value ? m.activeClass : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+                    className="relative flex-1 py-2 text-xs font-bold rounded-xl transition-colors duration-200 z-10"
+                    style={{color: mode === m.value ? '#fff' : 'var(--color-text-tertiary)'}}>
                     {m.label}
                   </button>
                 ))}
