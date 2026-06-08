@@ -1,5 +1,5 @@
 // src/components/bm/Performance.jsx
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
 
@@ -171,12 +171,8 @@ export default function Performance() {
   })
 
   const summary  = data?.summary  || {}
-  const hourly   = data?.hourly   || []
-  const peak     = data?.peak
   const services = data?.services || []
   const staff    = data?.staff    || []
-
-  const totalHourlyJobs = hourly.reduce((s, h) => s + h.count, 0)
 
   return (
     <div className="p-5 sm:p-6 space-y-5">
@@ -247,32 +243,6 @@ export default function Performance() {
             </div>
           )
         })()}
-
-        {/* Hourly distribution */}
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="text-sm font-bold text-[var(--text)]">Hourly Activity</div>
-              <div className="text-xs text-[var(--text-3)] mt-0.5">
-                Jobs per hour · {totalHourlyJobs} total
-              </div>
-            </div>
-            {peak && peak.count > 0 && (
-              <div className="text-right">
-                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Peak Hour</div>
-                <div className="text-sm font-black text-violet-600">{peak.label}</div>
-                <div className="text-[10px] text-[var(--text-3)]">{peak.count} jobs</div>
-              </div>
-            )}
-          </div>
-          {totalHourlyJobs === 0 ? (
-            <div className="flex items-center justify-center h-24 text-sm text-[var(--text-3)]">
-              No activity recorded yet
-            </div>
-          ) : (
-            <HourlyChart data={hourly} height={160} />
-          )}
-        </div>
 
         {/* Services + Staff — side by side on large screens */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
