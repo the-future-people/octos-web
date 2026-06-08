@@ -361,19 +361,13 @@ export default function DaySheet() {
                   </div>
                 )
               ) : (
-                <div className="space-y-2 py-2">
-                  {[
-                    { label: 'Total Jobs',  value: perfData?.summary?.total     ?? 0, color: 'text-[var(--text)]'  },
-                    { label: 'Completed',   value: perfData?.summary?.complete   ?? 0, color: 'text-emerald-600'    },
-                    { label: 'Pending',     value: perfData?.summary?.pending    ?? 0, color: 'text-amber-600'      },
-                    { label: 'Revenue',     value: `GHS ${parseFloat(perfData?.summary?.revenue || 0).toLocaleString('en-GH', {minimumFractionDigits: 2})}`, color: 'text-blue-600' },
-                  ].map(s => (
-                    <div key={s.label} className="flex items-center justify-between px-1">
-                      <span className="text-xs text-[var(--text-3)]">{s.label}</span>
-                      <span className={`text-xs font-bold font-mono ${s.color}`}>{s.value}</span>
-                    </div>
-                  ))}
-                </div>
+                (perfData?.daily?.length > 0 && perfData.daily.some(d => d.count > 0)) ? (
+                  <HourlyChart data={perfData.daily} height={150} />
+                ) : (
+                  <div className="flex items-center justify-center h-20 text-xs text-[var(--text-3)]">
+                    No data for this period
+                  </div>
+                )
               )}
             </div>
           </div>
