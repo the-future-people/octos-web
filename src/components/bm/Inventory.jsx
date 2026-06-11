@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getStock, getStockMovements, receiveStock } from '../../api/bm'
 import client from '../../api/client'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(n) {
   return parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -37,9 +38,10 @@ const WASTE_REASONS = [
 // ── Receive Stock Modal ───────────────────────────────────────────────────────
 function ReceiveStockModal({ item, onClose }) {
   const queryClient = useQueryClient()
-  const [qty,   setQty]   = useState('')
-  const [notes, setNotes] = useState('')
-  const [error, setError] = useState('')
+  const [qty,     setQty]     = useState('')
+  const [notes,   setNotes]   = useState('')
+  const [error,   setError]   = useState('')
+  const [success, setSuccess] = useState(false)
 
   const { mutate, isPending } = useMutation({
     mutationFn: () => receiveStock({
@@ -50,7 +52,7 @@ function ReceiveStockModal({ item, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] })
       queryClient.invalidateQueries({ queryKey: ['movements'] })
-      onClose()
+      setSuccess(true)
     },
     onError: (err) => {
       const d = err.response?.data
@@ -64,6 +66,12 @@ function ReceiveStockModal({ item, onClose }) {
     setError('')
     mutate()
   }
+
+  if (success) return <JobSuccessOverlay
+    message="Stock received"
+    jobNumber={`+${qty} ${item.unit_label} · ${item.name}`}
+    onDone={onClose}
+  />
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
@@ -137,9 +145,10 @@ function ReportWasteModal({ items, onClose }) {
   const [reason,       setReason]       = useState('JAM')
   const [notes,        setNotes]        = useState('')
   const [error,        setError]        = useState('')
+  const [success,      setSuccess]      = useState(false)
 
   const { mutate, isPending } = useMutation({
-    mutationFn: () => client.post('/api/v1/inventory/waste/', {
+    mutationFn: () => client.post('/api/v1/inventory/waste/report/', {
       consumable_id: parseInt(consumableId),
       quantity:      parseFloat(qty),
       reason,
@@ -149,7 +158,7 @@ function ReportWasteModal({ items, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['stock'] })
       queryClient.invalidateQueries({ queryKey: ['movements'] })
       queryClient.invalidateQueries({ queryKey: ['waste'] })
-      onClose()
+      setSuccess(true)
     },
     onError: (err) => {
       const d = err.response?.data
@@ -164,6 +173,20 @@ function ReportWasteModal({ items, onClose }) {
     setError('')
     mutate()
   }
+
+  const wasteItem = items.find(i => String(i.consumable) === String(consumableId))
+
+  if (success) return <JobSuccessOverlay
+    message="Waste recorded"
+    jobNumber={`−${qty} ${wasteItem?.unit_label || ''} · ${wasteItem?.name || ''}`}
+    onDone={onClose}
+  />
+
+  if (success) return <JobSuccessOverlay
+    message="Stock received"
+    jobNumber={`+${qty} ${item.unit_label} · ${item.name}`}
+    onDone={onClose}
+  />
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
