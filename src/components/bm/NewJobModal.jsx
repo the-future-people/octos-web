@@ -1,5 +1,6 @@
 // src/components/bm/NewJobModal.jsx
 import { useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServices, calculatePrice, createJob, getCustomers } from '../../api/bm'
 import { invalidateAfterJobCreated } from '../../api/invalidations'
@@ -177,8 +178,8 @@ export default function NewJobModal({ onClose, onSuccess }) {
     mutate(payload)
   }
 
-  const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
+  const modal = createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
       <div className={`rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col
         overflow-hidden animate-slideUp transition-colors duration-300 ${theme.tint}`}>
 
@@ -530,9 +531,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   )
-
   return (
     <>
       {modal}
