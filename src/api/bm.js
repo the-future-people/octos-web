@@ -41,6 +41,9 @@ export const getServices      = () =>
 export const calculatePrice   = (params) =>
   client.get('/api/v1/jobs/price/calculate/', { params })
 
+export const getBulkPricing   = (branchId) =>
+  client.get('/api/v1/jobs/price/bulk/', { params: { branch: branchId } })
+
 export const createLateJob    = (payload) =>
   client.post('/api/v1/jobs/late/', payload)
 
