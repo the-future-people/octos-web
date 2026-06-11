@@ -790,7 +790,7 @@ export default function Jobs() {
       job_type: jobType !== 'ALL' ? jobType : undefined,
     }).then(r => r.data),
     refetchInterval: 30000,
-    staleTime: 0,
+    staleTime: 30000,
   })
 
   const { data, isLoading } = useQuery({
