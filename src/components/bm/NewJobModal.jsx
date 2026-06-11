@@ -68,7 +68,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const localPrice = useMemo(() => {
     if (!selected || needsNetworkPrice) return null
-    const rule = bulkPricing[selected.id]
+    const rule = bulkPricing[selected.id] || bulkPricing[String(selected.id)]
     if (!rule) return null
 
     const base       = parseFloat(rule.base_price)
