@@ -1,7 +1,7 @@
 // src/components/bm/Overview.jsx
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getJobStats, getJobs, getTodaySummary } from '../../api/bm'
+import { getJobStats, getTodaySummary, getLockStatus, getWorkload } from '../../api/bm'
 import NewJobModal from './NewJobModal'
 import LateJobModal from './LateJobModal'
 
@@ -9,32 +9,71 @@ function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
 
-function timeAgo(dateStr) {
-  if (!dateStr) return ''
-  const diff = Math.floor((Date.now() - new Date(dateStr)) / 60000)
-  if (diff < 1)  return 'just now'
-  if (diff < 60) return `${diff}m ago`
-  return `${Math.floor(diff / 60)}h ago`
+function fmtMins(mins) {
+  if (mins == null) return null
+  if (mins < 60) return `${mins}m`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
-const STAT_CARDS = [
-  { key: 'total',      label: 'Total Jobs',      color: 'border-t-blue-500',   textColor: 'text-blue-600'   },
-  { key: 'in_progress',label: 'In Progress',     color: 'border-t-amber-400',  textColor: 'text-amber-600'  },
-  { key: 'complete',   label: 'Complete',        color: 'border-t-emerald-500',textColor: 'text-emerald-600'},
-  { key: 'pending',    label: 'Pending Payment', color: 'border-t-red-400',    textColor: 'text-red-500'    },
-]
-
-const STATUS_COLORS = {
-  COMPLETE:        'bg-emerald-50 text-emerald-700 border-emerald-200',
-  IN_PROGRESS:     'bg-amber-50 text-amber-700 border-amber-200',
-  PENDING_PAYMENT: 'bg-red-50 text-red-700 border-red-200',
-  DRAFT:           'bg-zinc-50 text-zinc-600 border-zinc-200',
-  CANCELLED:       'bg-zinc-50 text-zinc-400 border-zinc-200',
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({ label, value, color, textColor, sub }) {
+  return (
+    <div className={`bg-[var(--panel)] border border-[var(--border)] border-t-4
+      ${color} rounded-xl p-4`}>
+      <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+        {label}
+      </div>
+      <div className={`font-mono font-black text-2xl ${textColor}`}>
+        {value ?? '—'}
+      </div>
+      {sub && (
+        <div className="text-[10px] text-[var(--text-3)] mt-1">{sub}</div>
+      )}
+    </div>
+  )
 }
 
+// ── Workload Tile ─────────────────────────────────────────────────────────────
+function WorkloadTile({ icon, label, count, color, urgency, sub, onClick }) {
+  const base = 'bg-[var(--panel)] border rounded-xl p-4 flex items-start gap-3 transition-colors'
+  const borderColor = urgency === 'high'
+    ? 'border-red-200 hover:border-red-300'
+    : urgency === 'medium'
+    ? 'border-amber-200 hover:border-amber-300'
+    : 'border-[var(--border)] hover:border-[var(--border-dark)]'
+
+  return (
+    <button onClick={onClick} className={`${base} ${borderColor} w-full text-left`}>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+          {label}
+        </div>
+        <div className={`font-mono font-black text-xl mt-0.5 ${
+          urgency === 'high' ? 'text-red-600' :
+          urgency === 'medium' ? 'text-amber-600' :
+          'text-[var(--text)]'
+        }`}>
+          {count ?? '—'}
+        </div>
+        {sub && (
+          <div className={`text-[10px] mt-0.5 ${
+            urgency === 'high' ? 'text-red-500' :
+            urgency === 'medium' ? 'text-amber-600' :
+            'text-[var(--text-3)]'
+          }`}>{sub}</div>
+        )}
+      </div>
+    </button>
+  )
+}
 
 export default function Overview({ onNavigate }) {
-  const [showNewJob, setShowNewJob] = useState(false)
+  const [showNewJob,  setShowNewJob]  = useState(false)
   const [showLateJob, setShowLateJob] = useState(false)
 
   const { data: summaryData } = useQuery({
@@ -54,17 +93,16 @@ export default function Overview({ onNavigate }) {
     refetchInterval: 30_000,
   })
 
-  const { data: jobsData } = useQuery({
-    queryKey: ['recentJobs', sheetId],
-    queryFn:  () => getJobs({ page_size: 6, daily_sheet: sheetId }).then(r => r.data),
-    enabled:  !!sheetId,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-
   const { data: lockData } = useQuery({
     queryKey: ['lockStatus'],
     queryFn:  () => getLockStatus().then(r => r.data),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+
+  const { data: workload, isLoading: workloadLoading } = useQuery({
+    queryKey: ['workload'],
+    queryFn:  () => getWorkload().then(r => r.data),
     staleTime: 60_000,
     refetchInterval: 60_000,
   })
@@ -75,13 +113,19 @@ export default function Overview({ onNavigate }) {
   const isPostClose      = !canCreateJobs && sheetOpen
 
   const stats   = statsData || {}
-  const jobs    = Array.isArray(jobsData) ? jobsData : (jobsData?.results || [])
+  const revenue = summaryData?.revenue || {}
+
+  // Workload urgency helpers
+  const pendingUrgency = (workload?.oldest_pending_mins ?? 0) > 30 ? 'high'
+    : (workload?.oldest_pending_mins ?? 0) > 10 ? 'medium' : 'low'
+  const overdueUrgency = (workload?.overdue ?? 0) > 0 ? 'high' : 'low'
+  const pickupUrgency  = (workload?.ready_for_pickup ?? 0) > 0 ? 'medium' : 'low'
 
   return (
-    <div className="p-5 sm:p-6">
+    <div className="p-5 sm:p-6 space-y-6">
 
-      {/* Hero buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      {/* ── Hero Buttons ── */}
+      <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => setShowNewJob(true)}
           className="flex items-center gap-3 px-5 py-4 bg-[var(--text)] text-white
@@ -94,7 +138,7 @@ export default function Overview({ onNavigate }) {
           </svg>
           New Job
           <span className="text-white/60 text-xs font-normal ml-auto hidden sm:block">
-            Create instant, production or design job
+            Instant · Production · Design
           </span>
         </button>
         <button
@@ -110,10 +154,10 @@ export default function Overview({ onNavigate }) {
           </svg>
           Outsource Job
           <span className="text-[var(--text-3)] text-xs font-normal ml-auto hidden sm:block">
-            Route a job to another branch
+            Route to another branch
           </span>
         </button>
-        
+
         {/* Post-closing banners */}
         {isPostClose && !cashierSignedOff && (
           <button
@@ -122,7 +166,8 @@ export default function Overview({ onNavigate }) {
               border-2 border-amber-300 text-amber-800 rounded-xl font-bold text-sm
               hover:bg-amber-100 transition-colors"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" className="shrink-0">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
             Record Late Job
@@ -139,7 +184,8 @@ export default function Overview({ onNavigate }) {
               border-2 border-orange-300 text-orange-800 rounded-xl font-bold text-sm
               hover:bg-orange-100 transition-colors"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" className="shrink-0">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
             Post-closing Hold
@@ -150,147 +196,227 @@ export default function Overview({ onNavigate }) {
         )}
       </div>
 
-      {/* Stats — single row of 6 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {STAT_CARDS.map(card => (
-          <div key={card.key}
-            className={`bg-[var(--panel)] border border-[var(--border)] border-t-4
-              ${card.color} rounded-xl p-4`}>
-            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
-              {card.label}
-            </div>
-            <div className={`font-mono font-black text-2xl ${card.textColor}`}>
-              {stats[card.key] ?? '—'}
-            </div>
-          </div>
-        ))}
-        <div className="bg-[var(--panel)] border border-[var(--border)] border-t-4
-          border-t-red-300 rounded-xl p-4">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
-            Unread Messages
-          </div>
-          <div className="font-mono font-black text-2xl text-[var(--red-text)]">0</div>
+      {/* ── Today's Pulse ── */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-black text-[var(--text-3)] uppercase tracking-widest">
+            Today's Pulse
+          </span>
+          <div className="flex-1 h-px bg-[var(--border)]" />
+          {summaryData?.meta?.sheet_number && (
+            <span className="text-[10px] font-mono text-[var(--text-3)]">
+              {summaryData.meta.sheet_number}
+            </span>
+          )}
         </div>
-        <div className="bg-[var(--panel)] border border-[var(--border)] border-t-4
-          border-t-purple-400 rounded-xl p-4">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
-            Routed Out
-          </div>
-          <div className="font-mono font-black text-2xl text-[var(--text)]">
-            {stats.routed ?? '—'}
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard
+            label="Total Jobs"
+            value={stats.total}
+            color="border-t-blue-500"
+            textColor="text-blue-600"
+          />
+          <StatCard
+            label="Complete"
+            value={stats.complete}
+            color="border-t-emerald-500"
+            textColor="text-emerald-600"
+          />
+          <StatCard
+            label="In Progress"
+            value={stats.in_progress}
+            color="border-t-amber-400"
+            textColor="text-amber-600"
+          />
+          <StatCard
+            label="Revenue"
+            value={revenue.total_collected != null
+              ? `GHS ${parseFloat(revenue.total_collected).toLocaleString('en-GH', { minimumFractionDigits: 0 })}`
+              : '—'}
+            color="border-t-violet-500"
+            textColor="text-violet-600"
+            sub={revenue.total_cash != null ? `Cash ${fmt(revenue.total_cash)}` : null}
+          />
         </div>
       </div>
 
-      {/* Recent jobs */}
+      {/* ── Active Workload ── */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-[var(--text)]">Recent Jobs</h2>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-black text-[var(--text-3)] uppercase tracking-widest">
+            Active Workload
+          </span>
+          <div className="flex-1 h-px bg-[var(--border)]" />
           <button
             onClick={() => onNavigate('jobs')}
-            className="text-xs text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
-            View all →
+            className="text-[10px] text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
+            View all jobs →
           </button>
         </div>
 
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-          {/* Header */}
-          <div className="hidden sm:grid grid-cols-12 px-4 py-2.5 border-b border-[var(--border)]
-            text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-            <span className="col-span-5">Job</span>
-            <span className="col-span-2">Type</span>
-            <span className="col-span-2">Status</span>
-            <span className="col-span-2 text-right">Cost</span>
-            <span className="col-span-1 text-right">When</span>
+        {workloadLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="h-24 bg-[var(--panel)] border border-[var(--border)]
+                rounded-xl animate-pulse" />
+            ))}
           </div>
-
-          {jobs.length === 0 ? (
-            <div className="py-12 text-center text-sm text-[var(--text-3)]">
-              No jobs found
-            </div>
-          ) : (
-            jobs.map(job => (
-              <div key={job.id}
-                className="px-4 py-3 border-b border-[var(--border)]
-                  last:border-0 hover:bg-[var(--bg)] transition-colors">
-                {/* Mobile layout */}
-                <div className="flex items-center justify-between gap-2 sm:hidden">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-semibold text-[var(--text)] truncate">
-                      {job.title || job.job_number}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] text-[var(--text-3)] font-mono">
-                        {job.job_number}
-                      </span>
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5
-                        rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text-3)]">
-                        {job.job_type}
-                      </span>
-                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5
-                        rounded border ${STATUS_COLORS[job.status] || STATUS_COLORS.DRAFT}`}>
-                        {job.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-mono text-xs font-bold text-[var(--text)]">
-                      {fmt(job.estimated_cost)}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                      {timeAgo(job.created_at)}
-                    </div>
-                  </div>
-                </div>
-                {/* Desktop layout */}
-                <div className="hidden sm:grid grid-cols-12">
-                  <div className="col-span-5 min-w-0">
-                    <div className="text-xs font-semibold text-[var(--text)] truncate">
-                      {job.title || job.job_number}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-3)] font-mono mt-0.5">
-                      {job.job_number}
-                    </div>
-                  </div>
-                  <div className="col-span-2 flex items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider
-                      px-1.5 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)]
-                      text-[var(--text-3)]">
-                      {job.job_type}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex items-center">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider
-                      px-1.5 py-0.5 rounded border
-                      ${STATUS_COLORS[job.status] || STATUS_COLORS.DRAFT}`}>
-                      {job.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex items-center justify-end">
-                    <span className="font-mono text-xs text-[var(--text)]">
-                      {fmt(job.estimated_cost)}
-                    </span>
-                  </div>
-                  <div className="col-span-1 flex items-center justify-end">
-                    <span className="text-[10px] text-[var(--text-3)]">
-                      {timeAgo(job.created_at)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <WorkloadTile
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" className={
+                    pendingUrgency === 'high' ? 'text-red-600' :
+                    pendingUrgency === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                  }>
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                  <line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+              }
+              label="Pending Payment"
+              count={workload?.pending_payment ?? '—'}
+              color={
+                pendingUrgency === 'high' ? 'bg-red-50' :
+                pendingUrgency === 'medium' ? 'bg-amber-50' : 'bg-blue-50'
+              }
+              urgency={pendingUrgency}
+              sub={workload?.oldest_pending_mins != null
+                ? `Oldest: ${fmtMins(workload.oldest_pending_mins)}`
+                : null}
+              onClick={() => onNavigate('jobs')}
+            />
+            <WorkloadTile
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" className="text-blue-600">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  <polyline points="17 6 23 6 23 12"/>
+                </svg>
+              }
+              label="In Production"
+              count={workload?.in_production ?? '—'}
+              color="bg-blue-50"
+              urgency="low"
+              sub="Confirmed + In Progress"
+              onClick={() => onNavigate('jobs')}
+            />
+            <WorkloadTile
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" className={
+                    pickupUrgency === 'medium' ? 'text-amber-600' : 'text-emerald-600'
+                  }>
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+              }
+              label="Ready for Pickup"
+              count={workload?.ready_for_pickup ?? '—'}
+              color={pickupUrgency === 'medium' ? 'bg-amber-50' : 'bg-emerald-50'}
+              urgency={pickupUrgency}
+              sub="Awaiting collection"
+              onClick={() => onNavigate('jobs')}
+            />
+            <WorkloadTile
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" className="text-violet-600">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              }
+              label="Awaiting Feedback"
+              count={workload?.awaiting_feedback ?? '—'}
+              color="bg-violet-50"
+              urgency="low"
+              sub="Sample sent · Revision"
+              onClick={() => onNavigate('jobs')}
+            />
+            <WorkloadTile
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" className={
+                    overdueUrgency === 'high' ? 'text-red-600' : 'text-zinc-400'
+                  }>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              }
+              label="Overdue"
+              count={workload?.overdue ?? '—'}
+              color={overdueUrgency === 'high' ? 'bg-red-50' : 'bg-zinc-50'}
+              urgency={overdueUrgency}
+              sub="Past deadline"
+              onClick={() => onNavigate('jobs')}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Modals */}
+      {/* ── Payment Queue Alert ── */}
+      {(workload?.pending_payment ?? 0) > 0 && (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                pendingUrgency === 'high' ? 'bg-red-500' : 'bg-amber-400'
+              }`} />
+              <span className="text-sm font-bold text-[var(--text)]">
+                {workload.pending_payment} job{workload.pending_payment !== 1 ? 's' : ''} waiting for payment
+              </span>
+              {workload.oldest_pending_mins != null && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  pendingUrgency === 'high'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  Oldest: {fmtMins(workload.oldest_pending_mins)}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => onNavigate('jobs')}
+              className="text-xs font-bold text-[var(--text-2)] hover:text-[var(--text)]
+                transition-colors flex items-center gap-1">
+              Go to Jobs →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sheet Summary Footer ── */}
+      {summaryData?.meta && (
+        <div className="flex items-center justify-between py-3 border-t border-[var(--border)]">
+          <div className="flex items-center gap-4 text-[10px] text-[var(--text-3)]">
+            <span>
+              Sheet <span className="font-mono font-bold text-[var(--text-2)]">
+                {summaryData.meta.sheet_number || '—'}
+              </span>
+            </span>
+            <span className={`font-bold uppercase ${
+              summaryData.meta.status === 'OPEN'
+                ? 'text-emerald-600'
+                : 'text-[var(--text-3)]'
+            }`}>
+              {summaryData.meta.status}
+            </span>
+          </div>
+          <button
+            onClick={() => onNavigate('daysheet')}
+            className="text-[10px] font-bold text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
+            View Day Sheet →
+          </button>
+        </div>
+      )}
+
+      {/* ── Modals ── */}
       {showNewJob && (
         <NewJobModal
           onClose={() => setShowNewJob(false)}
           onSuccess={() => setShowNewJob(false)}
         />
       )}
-
       {showLateJob && (
         <LateJobModal
           onClose={() => setShowLateJob(false)}
