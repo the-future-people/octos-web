@@ -387,25 +387,37 @@ export default function Overview({ onNavigate }) {
 
       {/* ── Sheet Summary Footer ── */}
       {summaryData?.meta && (
-        <div className="flex items-center justify-between py-3 border-t border-[var(--border)]">
-          <div className="flex items-center gap-4 text-[10px] text-[var(--text-3)]">
-            <span>
-              Sheet <span className="font-mono font-bold text-[var(--text-2)]">
+        <div className="flex items-center justify-between px-4 py-3
+          bg-[var(--panel)] border border-[var(--border)] rounded-xl">
+          <div className="flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${
+              summaryData.meta.status === 'OPEN' ? 'bg-emerald-500' : 'bg-zinc-400'
+            }`} />
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[var(--text-3)]">Day Sheet</span>
+              <span className="font-mono font-bold text-[var(--text-2)]">
                 {summaryData.meta.sheet_number || '—'}
               </span>
-            </span>
-            <span className={`font-bold uppercase ${
-              summaryData.meta.status === 'OPEN'
-                ? 'text-emerald-600'
-                : 'text-[var(--text-3)]'
-            }`}>
-              {summaryData.meta.status}
-            </span>
+              <span className="w-px h-3 bg-[var(--border)]" />
+              <span className={`font-bold uppercase text-[10px] tracking-wider ${
+                summaryData.meta.status === 'OPEN'
+                  ? 'text-emerald-600'
+                  : 'text-[var(--text-3)]'
+              }`}>
+                {summaryData.meta.status}
+              </span>
+            </div>
           </div>
           <button
             onClick={() => onNavigate('daysheet')}
-            className="text-[10px] font-bold text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
-            View Day Sheet →
+            className="text-xs font-bold text-[var(--text-3)] hover:text-[var(--text)]
+              transition-colors flex items-center gap-1.5">
+            View Day Sheet
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
           </button>
         </div>
       )}
