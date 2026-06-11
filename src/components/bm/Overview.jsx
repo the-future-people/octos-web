@@ -354,37 +354,6 @@ export default function Overview({ onNavigate }) {
         )}
       </div>
 
-      {/* ── Payment Queue Alert ── */}
-      {(workload?.pending_payment ?? 0) > 0 && (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                pendingUrgency === 'high' ? 'bg-red-500' : 'bg-amber-400'
-              }`} />
-              <span className="text-sm font-bold text-[var(--text)]">
-                {workload.pending_payment} job{workload.pending_payment !== 1 ? 's' : ''} waiting for payment
-              </span>
-              {workload.oldest_pending_mins != null && (
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  pendingUrgency === 'high'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  Oldest: {fmtMins(workload.oldest_pending_mins)}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => onNavigate('jobs')}
-              className="text-xs font-bold text-[var(--text-2)] hover:text-[var(--text)]
-                transition-colors flex items-center gap-1">
-              Go to Jobs →
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Sheet Summary Footer ── */}
       {summaryData?.meta && (
         <div className="flex items-center justify-between px-4 py-3
@@ -419,6 +388,37 @@ export default function Overview({ onNavigate }) {
               <polyline points="12 5 19 12 12 19"/>
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* ── Payment Queue Alert ── */}
+      {(workload?.pending_payment ?? 0) > 0 && (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                pendingUrgency === 'high' ? 'bg-red-500' : 'bg-amber-400'
+              }`} />
+              <span className="text-sm font-bold text-[var(--text)]">
+                {workload.pending_payment} job{workload.pending_payment !== 1 ? 's' : ''} waiting for payment
+              </span>
+              {workload.oldest_pending_mins != null && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  pendingUrgency === 'high'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  Oldest: {fmtMins(workload.oldest_pending_mins)}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => onNavigate('jobs')}
+              className="text-xs font-bold text-[var(--text-2)] hover:text-[var(--text)]
+                transition-colors flex items-center gap-1">
+              Go to Jobs →
+            </button>
+          </div>
         </div>
       )}
 
