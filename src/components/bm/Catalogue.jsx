@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { getServices } from '../../api/bm'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -152,10 +153,27 @@ function CreateServiceModal({ onClose }) {
   const { user } = useAuth()
   const [name,        setName]        = useState('')
   const [category,    setCategory]    = useState('INSTANT')
+  const [unit,        setUnit]        = useState('PER_PAGE')
+  const [paperSize,   setPaperSize]   = useState('A4')
   const [description, setDescription] = useState('')
   const [basePrice,   setBasePrice]   = useState('')
+  const [colorMult,   setColorMult]   = useState('1.00')
   const [error,       setError]       = useState('')
   const [image,       setImage]       = useState(null)
+  const [success,     setSuccess]     = useState(false)
+  const [createdName, setCreatedName] = useState('')
+
+  // Consumable mappings
+  const { data: stockItems = [] } = useQuery({
+    queryKey: ['stock'],
+    queryFn:  () => client.get('/api/v1/inventory/stock/').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const [mappings, setMappings] = useState([])  // [{ consumable_id, quantity_per_unit, applies_to_color, applies_to_bw }]
+
+  const addMapping = () => setMappings(m => [...m, { consumable_id: '', quantity_per_unit: '1', applies_to_color: true, applies_to_bw: true }])
+  const removeMapping = (i) => setMappings(m => m.filter((_, idx) => idx !== i))
+  const updateMapping = (i, key, val) => setMappings(m => m.map((row, idx) => idx === i ? { ...row, [key]: val } : row))
 
   const { mutate, isPending } = useMutation({
     mutationFn: () => {
@@ -165,16 +183,31 @@ function CreateServiceModal({ onClose }) {
       form.append('description', description)
       form.append('code',        name.trim().toUpperCase().replace(/\s+/g, '-').slice(0, 20))
       form.append('base_price',  parseFloat(basePrice))
-      form.append('unit',        'PER_PIECE')
+      form.append('color_multiplier', parseFloat(colorMult))
+      form.append('unit',        unit)
+      form.append('paper_size',  paperSize)
       if (image) form.append('image', image)
+      const validMappings = mappings
+        .filter(m => m.consumable_id && parseFloat(m.quantity_per_unit) > 0)
+        .map(m => ({
+          consumable_id:      parseInt(m.consumable_id),
+          quantity_per_unit:  parseFloat(m.quantity_per_unit),
+          applies_to_color:   m.applies_to_color,
+          applies_to_bw:      m.applies_to_bw,
+        }))
+      if (validMappings.length) {
+        form.append('consumable_mappings', JSON.stringify(validMappings))
+      }
       return client.post('/api/v1/jobs/services/create/', form, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['services'] })
       queryClient.invalidateQueries({ queryKey: ['pricing'] })
-      onClose()
+      queryClient.invalidateQueries({ queryKey: ['stock'] })
+      setCreatedName(res.data.name || name)
+      setSuccess(true)
     },
     onError: (err) => {
       const d = err.response?.data
@@ -191,19 +224,26 @@ function CreateServiceModal({ onClose }) {
     mutate()
   }
 
+  if (success) return <JobSuccessOverlay
+    message="Service created"
+    jobNumber={createdName}
+    onDone={onClose}
+  />
+
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-[var(--border)]">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-[var(--border)] shrink-0">
           <div className="font-black text-base text-[var(--text)]">New Service</div>
           <div className="text-xs text-[var(--text-3)] mt-0.5">Add a service to the catalogue</div>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+
+          {/* Name */}
           <div>
             <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-              Service Name
+              Service Name <span className="text-red-500">*</span>
             </label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. A4 B&W Photocopy 1-sided"
@@ -211,6 +251,7 @@ function CreateServiceModal({ onClose }) {
                 rounded-xl outline-none focus:border-[var(--border-dark)]" />
           </div>
 
+          {/* Category */}
           <div>
             <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
               Category
@@ -229,17 +270,68 @@ function CreateServiceModal({ onClose }) {
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
-              Base Price (GHS)
-            </label>
-            <input type="number" min="0" step="0.50" value={basePrice}
-              onChange={e => setBasePrice(e.target.value)}
-              placeholder="e.g. 3.00"
-              className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)]
-                rounded-xl outline-none focus:border-[var(--border-dark)] font-mono" />
+          {/* Unit + Paper Size */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Pricing Unit
+              </label>
+              <select value={unit} onChange={e => setUnit(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)]
+                  rounded-xl outline-none focus:border-[var(--border-dark)]">
+                <option value="PER_PAGE">Per Page</option>
+                <option value="PER_PIECE">Per Piece</option>
+                <option value="PER_JOB">Per Job</option>
+                <option value="PER_SHEET">Per Sheet</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Paper Size
+              </label>
+              <select value={paperSize} onChange={e => setPaperSize(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)]
+                  rounded-xl outline-none focus:border-[var(--border-dark)]">
+                <option value="A4">A4</option>
+                <option value="A3">A3</option>
+                <option value="A5">A5</option>
+                <option value="A2">A2</option>
+                <option value="CUSTOM">Custom</option>
+                <option value="N/A">N/A</option>
+              </select>
+            </div>
           </div>
 
+          {/* Pricing */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Base Price (GHS) <span className="text-red-500">*</span>
+              </label>
+              <input type="number" min="0" step="0.50" value={basePrice}
+                onChange={e => setBasePrice(e.target.value)}
+                placeholder="e.g. 3.00"
+                className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)]
+                  rounded-xl outline-none focus:border-[var(--border-dark)] font-mono" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
+                Colour Multiplier
+              </label>
+              <input type="number" min="1" step="0.10" value={colorMult}
+                onChange={e => setColorMult(e.target.value)}
+                placeholder="1.00"
+                className="w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)]
+                  rounded-xl outline-none focus:border-[var(--border-dark)] font-mono" />
+              {basePrice && colorMult && parseFloat(colorMult) > 1 && (
+                <p className="text-[10px] text-amber-600 mt-1">
+                  Colour = {`GHS ${(parseFloat(basePrice) * parseFloat(colorMult)).toFixed(2)}`}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
           <div>
             <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
               Description (optional)
@@ -250,6 +342,56 @@ function CreateServiceModal({ onClose }) {
                 rounded-xl outline-none focus:border-[var(--border-dark)] resize-none" />
           </div>
 
+          {/* Consumable Mappings */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                Consumable Mappings
+              </label>
+              <button onClick={addMapping}
+                className="text-[10px] font-bold text-[var(--text-2)] hover:text-[var(--text)]
+                  px-2 py-1 rounded-lg border border-[var(--border)] hover:border-[var(--border-dark)] transition-colors">
+                + Add
+              </button>
+            </div>
+            <p className="text-[10px] text-[var(--text-3)] mb-2">
+              Link consumables that get used when this service is performed.
+            </p>
+            {mappings.length === 0 ? (
+              <div className="text-[10px] text-[var(--text-3)] italic px-3 py-2 bg-[var(--bg)]
+                border border-dashed border-[var(--border)] rounded-xl text-center">
+                No consumables linked — toner auto-mapped from paper selection
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {mappings.map((m, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-[var(--bg)]
+                    border border-[var(--border)] rounded-xl px-3 py-2">
+                    <select value={m.consumable_id}
+                      onChange={e => updateMapping(i, 'consumable_id', e.target.value)}
+                      className="flex-1 text-xs bg-transparent outline-none">
+                      <option value="">Select consumable…</option>
+                      {stockItems.map(s => (
+                        <option key={s.consumable} value={s.consumable}>
+                          {s.name} ({s.unit_label})
+                        </option>
+                      ))}
+                    </select>
+                    <input type="number" min="0.001" step="0.001"
+                      value={m.quantity_per_unit}
+                      onChange={e => updateMapping(i, 'quantity_per_unit', e.target.value)}
+                      className="w-20 text-xs font-mono px-2 py-1 bg-[var(--panel)]
+                        border border-[var(--border)] rounded-lg outline-none"
+                      placeholder="qty" />
+                    <button onClick={() => removeMapping(i)}
+                      className="text-red-400 hover:text-red-600 text-xs font-bold shrink-0">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Image */}
           <div>
             <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1.5">
               Service Image (optional)
@@ -275,7 +417,7 @@ function CreateServiceModal({ onClose }) {
           )}
         </div>
 
-        <div className="px-6 pb-5 flex justify-end gap-3">
+        <div className="px-6 pb-5 pt-3 border-t border-[var(--border)] flex justify-end gap-3 shrink-0">
           <button onClick={onClose}
             className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
               hover:text-[var(--text)] transition-colors">Cancel</button>
@@ -290,7 +432,6 @@ function CreateServiceModal({ onClose }) {
     document.body
   )
 }
-
 // ── Service Card ──────────────────────────────────────────────────────────────
 function ServiceCard({ service, pricing, onEditPricing }) {
   const cat = CATEGORY_CONFIG[service.category] || CATEGORY_CONFIG.INSTANT
