@@ -1,5 +1,5 @@
 // src/components/bm/NewJobModal.jsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServices, calculatePrice, createJob, getCustomers } from '../../api/bm'
@@ -33,6 +33,18 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [selRingSize,   setSelRingSize]   = useState(null)
   const [selOutputMode, setSelOutputMode] = useState(null)
 
+  // Debounced values for pricing query — prevents a request on every keystroke
+  const [debouncedQty,   setDebouncedQty]   = useState(1)
+  const [debouncedPages, setDebouncedPages] = useState(1)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQty(selQty), 400)
+    return () => clearTimeout(t)
+  }, [selQty])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPages(selPages), 400)
+    return () => clearTimeout(t)
+  }, [selPages])
+
   const isBinding  = (s) => s?.name?.toLowerCase().includes('binding')
   const isPassport = (s) => s?.name?.toLowerCase().includes('passport')
   const theme = JOB_TYPE_THEME[jobType]
@@ -44,12 +56,12 @@ export default function NewJobModal({ onClose, onSuccess }) {
   })
 
   const { data: selPrice } = useQuery({
-    queryKey: ['selPrice', selected?.id, selQty, selPages, selRingSize, selOutputMode],
+    queryKey: ['selPrice', selected?.id, debouncedQty, debouncedPages, selRingSize, selOutputMode],
     queryFn: () => calculatePrice({
       service:  selected.id,
       branch:   user?.branch || 2,
-      quantity: selQty,
-      pages:    selPages,
+      quantity: debouncedQty,
+      pages:    debouncedPages,
       ...(selRingSize   ? { ring_size:   selRingSize   } : {}),
       ...(selOutputMode ? { output_mode: selOutputMode } : {}),
     }).then(r => r.data),
