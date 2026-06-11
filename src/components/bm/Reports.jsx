@@ -506,7 +506,6 @@ function YearlyTab() {
     }),
     staleTime: 60_000,
   })
-  const months       = data || {}
 
   const months       = data || {}
   const totalRevenue = Object.values(months).reduce((s, m) => s + m.total, 0)
