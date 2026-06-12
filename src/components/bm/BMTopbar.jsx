@@ -198,12 +198,21 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
         {/* ── Right section ───────────────────────────────────────── */}
         <div className="flex items-center gap-3">
 
-          {/* Active indicator */}
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--green-text)]"
-               aria-label="Branch active">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--green-text)] animate-pulse" aria-hidden="true" />
-            <span className="hidden sm:inline">Active</span>
-          </div>
+          {/* Sheet status pill */}
+          {lockData?.sheet_number && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1
+              bg-[var(--panel)] border border-[var(--border)] rounded-full text-xs font-semibold
+              text-[var(--text-2)]">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                lockData?.sheet_status === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
+              }`} />
+              <span className="font-mono font-bold text-[var(--text)]">{lockData.sheet_number}</span>
+              <span className="w-px h-3 bg-[var(--border)]" />
+              <span className={lockData?.sheet_status === 'OPEN' ? 'text-emerald-600' : 'text-[var(--text-3)]'}>
+                {lockData?.sheet_status || 'OPEN'}
+              </span>
+            </div>
+          )}
 
           {/* Notification bell */}
           <NotificationBell />
