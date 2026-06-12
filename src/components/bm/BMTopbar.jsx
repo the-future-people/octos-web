@@ -200,7 +200,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
 
           {/* Sheet status pill */}
           {lockData?.sheet_number && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1
+            <div className="flex items-center gap-1.5 px-2.5 py-1
               bg-[var(--panel)] border border-[var(--border)] rounded-full text-xs font-semibold
               text-[var(--text-2)]">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
