@@ -36,16 +36,23 @@ function StatCard({ label, value, color, textColor, sub }) {
 }
 
 // ── Workload Tile ─────────────────────────────────────────────────────────────
-function WorkloadTile({ icon, label, count, color, urgency, sub, onClick }) {
-  const base = 'bg-[var(--panel)] border rounded-xl p-4 flex items-start gap-3 transition-colors'
-  const borderColor = urgency === 'high'
-    ? 'border-red-200 hover:border-red-300'
-    : urgency === 'medium'
-    ? 'border-amber-200 hover:border-amber-300'
-    : 'border-[var(--border)] hover:border-[var(--border-dark)]'
+const GLOW = {
+  none:   '',
+  blue:   'shadow-[0_0_12px_2px_rgba(59,130,246,0.25)] border-blue-200',
+  amber:  'shadow-[0_0_14px_3px_rgba(251,191,36,0.35)] border-amber-300',
+  orange: 'shadow-[0_0_16px_4px_rgba(249,115,22,0.40)] border-orange-400',
+  red:    'shadow-[0_0_20px_5px_rgba(239,68,68,0.45)] border-red-400',
+}
 
+function WorkloadTile({ icon, label, count, color, glow = 'none', pulse = false, sub, onClick }) {
   return (
-    <button onClick={onClick} className={`${base} ${borderColor} w-full text-left`}>
+    <button
+      onClick={onClick}
+      className={`bg-[var(--panel)] border rounded-xl p-4 flex items-start gap-3
+        transition-all duration-500 w-full text-left
+        ${GLOW[glow] || 'border-[var(--border)]'}
+        ${pulse ? 'animate-pulse' : ''}`}
+    >
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
         {icon}
       </div>
@@ -54,16 +61,19 @@ function WorkloadTile({ icon, label, count, color, urgency, sub, onClick }) {
           {label}
         </div>
         <div className={`font-mono font-black text-xl mt-0.5 ${
-          urgency === 'high' ? 'text-red-600' :
-          urgency === 'medium' ? 'text-amber-600' :
+          glow === 'red'    ? 'text-red-600'    :
+          glow === 'orange' ? 'text-orange-500' :
+          glow === 'amber'  ? 'text-amber-600'  :
+          glow === 'blue'   ? 'text-blue-600'   :
           'text-[var(--text)]'
         }`}>
           {count ?? '—'}
         </div>
         {sub && (
           <div className={`text-[10px] mt-0.5 ${
-            urgency === 'high' ? 'text-red-500' :
-            urgency === 'medium' ? 'text-amber-600' :
+            glow === 'red'    ? 'text-red-500'    :
+            glow === 'orange' ? 'text-orange-400' :
+            glow === 'amber'  ? 'text-amber-600'  :
             'text-[var(--text-3)]'
           }`}>{sub}</div>
         )}
@@ -115,11 +125,21 @@ export default function Overview({ onNavigate }) {
   const stats   = statsData || {}
   const revenue = summaryData?.revenue || {}
 
-  // Workload urgency helpers
-  const pendingUrgency = (workload?.oldest_pending_mins ?? 0) > 30 ? 'high'
-    : (workload?.oldest_pending_mins ?? 0) > 10 ? 'medium' : 'low'
-  const overdueUrgency = (workload?.overdue ?? 0) > 0 ? 'high' : 'low'
-  const pickupUrgency  = (workload?.ready_for_pickup ?? 0) > 0 ? 'medium' : 'low'
+  // Workload glow helpers
+  const pendingCount = workload?.pending_payment ?? 0
+  const pendingMins  = workload?.oldest_pending_mins ?? 0
+  const pendingGlow  = pendingCount === 0 ? 'none'
+    : pendingMins > 15 ? 'red'
+    : pendingMins > 5  ? 'orange'
+    : 'amber'
+  const pendingPulse = pendingCount > 0 && pendingMins > 5
+
+  const overdueGlow  = (workload?.overdue ?? 0) > 0 ? 'red' : 'none'
+  const overduePulse = (workload?.overdue ?? 0) > 0
+
+  const productionGlow = (workload?.in_production ?? 0) > 0 ? 'blue' : 'none'
+  const pickupGlow     = (workload?.ready_for_pickup ?? 0) > 0 ? 'amber' : 'none'
+  const feedbackGlow   = (workload?.awaiting_feedback ?? 0) > 0 ? 'blue' : 'none'
 
   return (
     <div className="p-5 sm:p-6 space-y-6">
@@ -267,8 +287,9 @@ export default function Overview({ onNavigate }) {
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" className={
-                    pendingUrgency === 'high' ? 'text-red-600' :
-                    pendingUrgency === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                    pendingGlow === 'red' ? 'text-red-600' :
+                    pendingGlow === 'orange' ? 'text-orange-500' :
+                    pendingGlow === 'amber' ? 'text-amber-600' : 'text-blue-600'
                   }>
                   <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
                   <line x1="1" y1="10" x2="23" y2="10"/>
@@ -277,10 +298,12 @@ export default function Overview({ onNavigate }) {
               label="Pending Payment"
               count={workload?.pending_payment ?? '—'}
               color={
-                pendingUrgency === 'high' ? 'bg-red-50' :
-                pendingUrgency === 'medium' ? 'bg-amber-50' : 'bg-blue-50'
+                pendingGlow === 'red' ? 'bg-red-50' :
+                pendingGlow === 'orange' ? 'bg-orange-50' :
+                pendingGlow === 'amber' ? 'bg-amber-50' : 'bg-blue-50'
               }
-              urgency={pendingUrgency}
+              glow={pendingGlow}
+              pulse={pendingPulse}
               sub={workload?.oldest_pending_mins != null
                 ? `Oldest: ${fmtMins(workload.oldest_pending_mins)}`
                 : null}
@@ -297,7 +320,7 @@ export default function Overview({ onNavigate }) {
               label="In Production"
               count={workload?.in_production ?? '—'}
               color="bg-blue-50"
-              urgency="low"
+              glow={productionGlow}
               sub="Confirmed + In Progress"
               onClick={() => onNavigate('jobs')}
             />
@@ -305,7 +328,7 @@ export default function Overview({ onNavigate }) {
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" className={
-                    pickupUrgency === 'medium' ? 'text-amber-600' : 'text-emerald-600'
+                    pickupGlow === 'amber' ? 'text-amber-600' : 'text-emerald-600'
                   }>
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                   <circle cx="12" cy="10" r="3"/>
@@ -313,8 +336,8 @@ export default function Overview({ onNavigate }) {
               }
               label="Ready for Pickup"
               count={workload?.ready_for_pickup ?? '—'}
-              color={pickupUrgency === 'medium' ? 'bg-amber-50' : 'bg-emerald-50'}
-              urgency={pickupUrgency}
+              color={pickupGlow === 'amber' ? 'bg-amber-50' : 'bg-emerald-50'}
+              glow={pickupGlow}
               sub="Awaiting collection"
               onClick={() => onNavigate('jobs')}
             />
@@ -328,7 +351,7 @@ export default function Overview({ onNavigate }) {
               label="Awaiting Feedback"
               count={workload?.awaiting_feedback ?? '—'}
               color="bg-violet-50"
-              urgency="low"
+              glow={feedbackGlow}
               sub="Sample sent · Revision"
               onClick={() => onNavigate('jobs')}
             />
@@ -336,7 +359,7 @@ export default function Overview({ onNavigate }) {
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" className={
-                    overdueUrgency === 'high' ? 'text-red-600' : 'text-zinc-400'
+                    overdueGlow === 'red' ? 'text-red-600' : 'text-zinc-400'
                   }>
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="12" y1="8" x2="12" y2="12"/>
@@ -345,82 +368,15 @@ export default function Overview({ onNavigate }) {
               }
               label="Overdue"
               count={workload?.overdue ?? '—'}
-              color={overdueUrgency === 'high' ? 'bg-red-50' : 'bg-zinc-50'}
-              urgency={overdueUrgency}
+              color={overdueGlow === 'red' ? 'bg-red-50' : 'bg-zinc-50'}
+              glow={overdueGlow}
+              pulse={overduePulse}
               sub="Past deadline"
               onClick={() => onNavigate('jobs')}
             />
           </div>
         )}
       </div>
-
-      {/* ── Sheet Summary Footer ── */}
-      {summaryData?.meta && (
-        <div className="flex items-center justify-between px-4 py-3
-          bg-[var(--panel)] border border-[var(--border)] rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${
-              summaryData.meta.status === 'OPEN' ? 'bg-emerald-500' : 'bg-zinc-400'
-            }`} />
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-[var(--text-3)]">Day Sheet</span>
-              <span className="font-mono font-bold text-[var(--text-2)]">
-                {summaryData.meta.sheet_number || '—'}
-              </span>
-              <span className="w-px h-3 bg-[var(--border)]" />
-              <span className={`font-bold uppercase text-[10px] tracking-wider ${
-                summaryData.meta.status === 'OPEN'
-                  ? 'text-emerald-600'
-                  : 'text-[var(--text-3)]'
-              }`}>
-                {summaryData.meta.status}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate('daysheet')}
-            className="text-xs font-bold text-[var(--text-3)] hover:text-[var(--text)]
-              transition-colors flex items-center gap-1.5">
-            View Day Sheet
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* ── Payment Queue Alert ── */}
-      {(workload?.pending_payment ?? 0) > 0 && (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                pendingUrgency === 'high' ? 'bg-red-500' : 'bg-amber-400'
-              }`} />
-              <span className="text-sm font-bold text-[var(--text)]">
-                {workload.pending_payment} job{workload.pending_payment !== 1 ? 's' : ''} waiting for payment
-              </span>
-              {workload.oldest_pending_mins != null && (
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  pendingUrgency === 'high'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  Oldest: {fmtMins(workload.oldest_pending_mins)}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => onNavigate('jobs')}
-              className="text-xs font-bold text-[var(--text-2)] hover:text-[var(--text)]
-                transition-colors flex items-center gap-1">
-              Go to Jobs →
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Modals ── */}
       {showNewJob && (
