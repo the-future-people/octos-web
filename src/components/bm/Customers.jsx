@@ -158,6 +158,16 @@ export default function Customers() {
                     <div className="text-xs text-[var(--text-3)] mt-0.5">
                       {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Rep: ${toTitleCase(c.full_name)} · ` : ''}{c.phone}
                     </div>
+                    {c.affiliation_name && c.affiliation_active && (
+                      <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5
+                        bg-blue-50 border border-blue-200 rounded text-[10px] font-semibold text-blue-700">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        {c.affiliation_name}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border
@@ -179,6 +189,16 @@ export default function Customers() {
                     {c.customer_type !== 'INDIVIDUAL' && c.full_name && (
                       <div className="text-[10px] text-[var(--text-3)] truncate mt-0.5">
                         Rep: {toTitleCase(c.full_name)}
+                      </div>
+                    )}
+                    {c.affiliation_name && c.affiliation_active && (
+                      <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5
+                        bg-blue-50 border border-blue-200 rounded text-[10px] font-semibold text-blue-700">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        {c.affiliation_name}
                       </div>
                     )}
                   </div>

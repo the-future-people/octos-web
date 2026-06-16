@@ -296,6 +296,16 @@ export default function NewJobModal({ onClose, onSuccess }) {
                     <div className="text-xs text-[var(--text-3)]">
                       {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Rep: ${c.full_name} · ` : ''}{c.phone}
                     </div>
+                    {c.affiliation_name && c.affiliation_active && (
+                      <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5
+                        bg-blue-50 border border-blue-200 rounded text-[10px] font-semibold text-blue-700">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        </svg>
+                        {c.affiliation_name}
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
