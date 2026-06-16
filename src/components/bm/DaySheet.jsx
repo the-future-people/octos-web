@@ -10,7 +10,8 @@ function HourlyChart({ data, height = 140 }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !data?.length) return
-    const maxCount = Math.max(...data.map(d => d.count), 1)
+    const maxCount   = Math.max(...data.map(d => d.count), 1)
+    const maxRevenue = Math.max(...data.map(d => d.revenue || 0), 1)
     const dpr = window.devicePixelRatio || 1
     const W   = canvas.offsetWidth
     const H   = height
@@ -20,35 +21,71 @@ function HourlyChart({ data, height = 140 }) {
     canvas.style.height = H + 'px'
     const ctx = canvas.getContext('2d')
     ctx.scale(dpr, dpr)
-    const padL = 8, padR = 8, padT = 10, padB = 28
+    const padL = 8, padR = 8, padT = 14, padB = 28
     const cW   = W - padL - padR
     const cH   = H - padT - padB
-    const barW = (cW / data.length) * 0.55
-    const gap  = cW / data.length
     const isDark  = document.documentElement.dataset.theme === 'dark'
     const lblClr  = isDark ? '#6b6b69' : '#a3a3a3'
     const peakIdx = data.reduce((mi, d, i) => d.count > data[mi].count ? i : mi, 0)
+    const gap     = cW / data.length
+    // Two bars per slot: blue (jobs) + green (revenue), with a 1px gap between
+    const totalBarW = gap * 0.72
+    const singleW   = (totalBarW - 2) / 2
     ctx.clearRect(0, 0, W, H)
     data.forEach((d, i) => {
+      const slotX   = padL + i * gap
+      const centerX = slotX + gap / 2
+      const blueX   = centerX - singleW - 1
+      const greenX  = centerX + 1
+      const isPeak  = i === peakIdx && d.count > 0
+
+      // ── Blue bar — job count ──────────────────────────────
       const bH = d.count > 0 ? Math.max((d.count / maxCount) * cH, 4) : 2
-      const x  = padL + i * gap + (gap - barW) / 2
-      const y  = padT + cH - bH
-      const isPeak = i === peakIdx && d.count > 0
+      const bY = padT + cH - bH
       ctx.fillStyle = isPeak ? '#6366f1' : (d.count > 0 ? '#c7d2fe' : '#f1f5f9')
       ctx.beginPath()
-      ctx.roundRect(x, y, barW, bH, 3)
+      ctx.roundRect(blueX, bY, singleW, bH, 2)
       ctx.fill()
+
+      // Count label above blue bar
       if (d.count > 0) {
         ctx.fillStyle = isPeak ? '#4338ca' : '#94a3b8'
-        ctx.font      = `bold ${dpr > 1 ? 9 : 10}px sans-serif`
+        ctx.font      = `bold ${dpr > 1 ? 8 : 9}px sans-serif`
         ctx.textAlign = 'center'
-        ctx.fillText(d.count, padL + i * gap + gap / 2, y - 3)
+        ctx.fillText(d.count, blueX + singleW / 2, bY - 3)
       }
+
+      // ── Green bar — revenue intensity ─────────────────────
+      const rev    = d.revenue || 0
+      const gH     = rev > 0 ? Math.max((rev / maxRevenue) * cH, 4) : 2
+      const gY     = padT + cH - gH
+      ctx.fillStyle = rev > 0
+        ? (rev === maxRevenue ? '#059669' : '#6ee7b7')
+        : '#f1f5f9'
+      ctx.beginPath()
+      ctx.roundRect(greenX, gY, singleW, gH, 2)
+      ctx.fill()
+
+      // Hour label
       ctx.fillStyle = lblClr
       ctx.font      = '10px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText(d.label, padL + i * gap + gap / 2, H - 8)
+      ctx.fillText(d.label, centerX, H - 8)
     })
+
+    // ── Legend ────────────────────────────────────────────────
+    const legendY = 8
+    ctx.fillStyle = '#c7d2fe'
+    ctx.fillRect(padL, legendY, 8, 7)
+    ctx.fillStyle = isDark ? '#9ca3af' : '#6b7280'
+    ctx.font      = '9px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText('Jobs', padL + 11, legendY + 7)
+
+    ctx.fillStyle = '#6ee7b7'
+    ctx.fillRect(padL + 42, legendY, 8, 7)
+    ctx.fillStyle = isDark ? '#9ca3af' : '#6b7280'
+    ctx.fillText('Revenue', padL + 53, legendY + 7)
   }, [data, height])
   return (
     <div style={{ minWidth: '520px' }}>
