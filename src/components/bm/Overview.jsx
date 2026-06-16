@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getJobStats, getTodaySummary, getLockStatus, getWorkload } from '../../api/bm'
 import NewJobModal from './NewJobModal'
 import LateJobModal from './LateJobModal'
+import NewCustomerModal from './NewCustomerModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -83,8 +84,9 @@ function WorkloadTile({ icon, label, count, color, glow = 'none', pulse = false,
 }
 
 export default function Overview({ onNavigate }) {
-  const [showNewJob,  setShowNewJob]  = useState(false)
-  const [showLateJob, setShowLateJob] = useState(false)
+  const [showNewJob,      setShowNewJob]      = useState(false)
+  const [showLateJob,     setShowLateJob]     = useState(false)
+  const [showNewCustomer, setShowNewCustomer] = useState(false)
 
   const { data: summaryData } = useQuery({
     queryKey: ['todaySummary'],
@@ -162,19 +164,21 @@ export default function Overview({ onNavigate }) {
           </span>
         </button>
         <button
+          onClick={() => setShowNewCustomer(true)}
           className="flex items-center gap-3 px-5 py-4 bg-[var(--panel)]
             border border-[var(--border)] text-[var(--text)] rounded-xl
             font-bold text-sm hover:border-[var(--border-dark)] transition-colors"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15 3 21 3 21 9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
           </svg>
-          Outsource Job
+          New Customer
           <span className="text-[var(--text-3)] text-xs font-normal ml-auto hidden sm:block">
-            Route to another branch
+            Register a customer
           </span>
         </button>
 
@@ -389,6 +393,12 @@ export default function Overview({ onNavigate }) {
         <LateJobModal
           onClose={() => setShowLateJob(false)}
           onSuccess={() => setShowLateJob(false)}
+        />
+      )}
+      {showNewCustomer && (
+        <NewCustomerModal
+          onClose={() => setShowNewCustomer(false)}
+          onSuccess={() => setShowNewCustomer(false)}
         />
       )}
     </div>
