@@ -71,6 +71,27 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
   const [error, setError] = useState('')
   const [successCustomer, setSuccessCustomer] = useState(null)
   const { status: phoneStatus, lookup: lookupPhone, reset: resetLookup } = usePhonenLookup()
+  const [affiliationSearch, setAffiliationSearch] = useState('')
+  const [affiliationResults, setAffiliationResults] = useState([])
+  const [selectedAffiliation, setSelectedAffiliation] = useState(null)
+  const affiliationTimerRef = useRef(null)
+
+  const searchAffiliations = (q) => {
+    setAffiliationSearch(q)
+    if (selectedAffiliation) setSelectedAffiliation(null)
+    clearTimeout(affiliationTimerRef.current)
+    if (q.trim().length < 2) { setAffiliationResults([]); return }
+    affiliationTimerRef.current = setTimeout(async () => {
+      try {
+        const { getCustomers } = await import('../../api/bm')
+        const res = await getCustomers({ search: q, page_size: 5 })
+        const results = Array.isArray(res.data) ? res.data : (res.data?.results || [])
+        setAffiliationResults(
+          results.filter(c => c.customer_type === 'BUSINESS' || c.customer_type === 'INSTITUTION')
+        )
+      } catch { setAffiliationResults([]) }
+    }, 400)
+  }
 
   const set = (key, val) => {
     setForm(f => ({ ...f, [key]: val }))
@@ -105,7 +126,7 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     if ((isBusiness || isInstitution) && !form.address.trim())      { setError('Address is required.'); return }
     if (phoneStatus?.found === true)            { setError('This phone number is already registered.'); return }
     if (phoneStatus === 'checking')             { setError('Please wait — checking phone number...'); return }
-    mutate(form)
+    mutate({ ...form, ...(selectedAffiliation ? { affiliation: selectedAffiliation.id } : {}) })
   }
 
   const TYPE_OPTIONS = [
@@ -296,6 +317,62 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
                 <option value="FEMALE">Female</option>
                 <option value="OTHER">Other</option>
               </select>
+            </div>
+          )}
+
+          {/* Affiliation — individuals only */}
+          {isIndividual && (
+            <div>
+              <label className={LABEL_CLS}>Affiliated with (optional)</label>
+              {selectedAffiliation ? (
+                <div className="flex items-center justify-between px-3 py-2 bg-blue-50
+                  border border-blue-200 rounded-lg">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-blue-800 truncate">
+                      {selectedAffiliation.company_name || selectedAffiliation.full_name}
+                    </div>
+                    <div className="text-[10px] text-blue-600 mt-0.5">
+                      {selectedAffiliation.customer_type}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedAffiliation(null); setAffiliationSearch('') }}
+                    className="text-blue-400 hover:text-blue-700 transition-colors ml-2 shrink-0">
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    value={affiliationSearch}
+                    onChange={e => searchAffiliations(e.target.value)}
+                    placeholder="Search business or institution..."
+                    className={INPUT_CLS}
+                  />
+                  {affiliationResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--panel)]
+                      border border-[var(--border)] rounded-xl shadow-lg z-20 overflow-hidden">
+                      {affiliationResults.map(c => (
+                        <button key={c.id}
+                          onClick={() => {
+                            setSelectedAffiliation(c)
+                            setAffiliationSearch('')
+                            setAffiliationResults([])
+                          }}
+                          className="w-full px-4 py-2.5 text-left hover:bg-[var(--bg)]
+                            border-b border-[var(--border)] last:border-0 transition-colors">
+                          <div className="text-xs font-semibold text-[var(--text)] truncate">
+                            {c.company_name || c.full_name}
+                          </div>
+                          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                            {c.customer_type} · {c.phone}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
