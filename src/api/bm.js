@@ -26,6 +26,9 @@ export const getJobStats      = (params) =>
 export const getWorkload      = () =>
   client.get('/api/v1/jobs/workload/')
 
+export const getEODPrediction = () =>
+  client.get('/api/v1/analytics/prediction/')
+
 export const getJobDetail     = (jobId) =>
   client.get(`/api/v1/jobs/${jobId}/`)
 

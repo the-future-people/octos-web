@@ -1,7 +1,7 @@
 // src/components/bm/DaySheet.jsx
 import { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getTodaySummary, getLockStatus } from '../../api/bm'
+import { getTodaySummary, getLockStatus, getEODPrediction } from '../../api/bm'
 import CloseSheetModal from './CloseSheetModal'
 import client from '../../api/client'
 
@@ -89,6 +89,13 @@ export default function DaySheet() {
     queryFn:  () => getLockStatus().then(r => r.data),
     refetchInterval: 30_000,
     staleTime: 0,
+  })
+
+  const { data: prediction } = useQuery({
+    queryKey: ['eodPrediction'],
+    queryFn:  () => getEODPrediction().then(r => r.data),
+    refetchInterval: 300_000,
+    staleTime: 240_000,
   })
 
   if (isLoading) return (
@@ -257,7 +264,9 @@ export default function DaySheet() {
         <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
           tracking-widest mb-2">Pace & Predictions</div>
         <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+          {/* Top row — jobs/hour + avg job value */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <div>
               <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
                 tracking-wider mb-1">Jobs / Hour</div>
@@ -273,23 +282,6 @@ export default function DaySheet() {
             </div>
             <div>
               <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                tracking-wider mb-1">Predicted EOD Jobs</div>
-              <div className="font-mono font-black text-xl text-[var(--text)]">
-                {pace.predicted_jobs_eod ?? '—'}
-              </div>
-              <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                {pace.confidence_pct}% confidence
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                tracking-wider mb-1">Predicted Revenue</div>
-              <div className="font-mono font-black text-xl text-[var(--text)]">
-                {fmt(pace.predicted_revenue_eod)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
                 tracking-wider mb-1">Avg Job Value</div>
               <div className="font-mono font-black text-xl text-[var(--text)]">
                 {fmt(pace.avg_job_value_today)}
@@ -298,21 +290,111 @@ export default function DaySheet() {
                 7d avg: {fmt(pace.avg_job_value_7d)}
               </div>
             </div>
+            <div>
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                tracking-wider mb-1">Data Signal</div>
+              <div className="font-mono font-black text-xl text-[var(--text)]">
+                {prediction?.data_weeks ?? '—'}
+                <span className="text-xs font-normal text-[var(--text-3)] ml-1">wks</span>
+              </div>
+              <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                {prediction?.method === 'curve' ? 'Curve model' : 'Linear fallback'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                tracking-wider mb-1">Weather</div>
+              <div className="font-mono font-black text-xl text-[var(--text)]">
+                {prediction?.weather_factor != null
+                  ? `${Math.round(prediction.weather_factor * 100)}%`
+                  : '—'}
+              </div>
+              <div className="text-[10px] text-[var(--text-3)] mt-0.5 truncate">
+                {prediction?.weather_note || 'No impact'}
+              </div>
+            </div>
           </div>
 
-          {/* Confidence bar */}
-          {pace.confidence_pct != null && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-[var(--text-3)]">Prediction confidence</span>
-                <span className="text-[10px] font-bold text-[var(--text)]">{pace.confidence_pct}%</span>
+          {/* Prediction interval panel */}
+          {prediction && (
+            <div className="border border-[var(--border)] rounded-xl overflow-hidden mb-4">
+              {/* Header */}
+              <div className="px-4 py-2.5 bg-[var(--bg)] border-b border-[var(--border)]
+                flex items-center justify-between">
+                <span className="text-[10px] font-black text-[var(--text-2)] uppercase tracking-wider">
+                  EOD Forecast
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-20 bg-[var(--border)] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        prediction.confidence_pct >= 70 ? 'bg-emerald-500' :
+                        prediction.confidence_pct >= 45 ? 'bg-amber-400' : 'bg-zinc-400'
+                      }`}
+                      style={{ width: `${prediction.confidence_pct}%` }}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-black ${
+                    prediction.confidence_pct >= 70 ? 'text-emerald-600' :
+                    prediction.confidence_pct >= 45 ? 'text-amber-600' : 'text-[var(--text-3)]'
+                  }`}>
+                    {prediction.confidence_pct}% confidence
+                  </span>
+                </div>
               </div>
-              <div className="h-1.5 bg-[var(--bg)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${pace.confidence_pct}%` }}
-                />
+
+              {/* Two columns — jobs + revenue */}
+              <div className="grid grid-cols-2 divide-x divide-[var(--border)]">
+                {/* Jobs */}
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                    tracking-wider mb-1">Likely EOD Jobs</div>
+                  <div className="font-mono font-black text-2xl text-[var(--text)]">
+                    {prediction.jobs_point}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-[10px] text-[var(--text-3)]">Range</span>
+                    <span className="text-xs font-bold text-[var(--text-2)]">
+                      {prediction.jobs_low} – {prediction.jobs_high}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Revenue */}
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                    tracking-wider mb-1">Likely EOD Revenue</div>
+                  <div className="font-mono font-black text-2xl text-violet-600">
+                    {fmt(prediction.revenue_point)}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-[10px] text-[var(--text-3)]">Range</span>
+                    <span className="text-xs font-bold text-[var(--text-2)]">
+                      {fmt(prediction.revenue_low)} – {fmt(prediction.revenue_high)}
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Weather note if applicable */}
+              {prediction.weather_note && (
+                <div className="px-4 py-2 bg-blue-50 border-t border-blue-100
+                  flex items-center gap-2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" className="text-blue-500 shrink-0">
+                    <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"/>
+                    <line x1="8" y1="16" x2="8.01" y2="16"/>
+                    <line x1="8" y1="20" x2="8.01" y2="20"/>
+                    <line x1="12" y1="18" x2="12.01" y2="18"/>
+                    <line x1="12" y1="22" x2="12.01" y2="22"/>
+                    <line x1="16" y1="16" x2="16.01" y2="16"/>
+                    <line x1="16" y1="20" x2="16.01" y2="20"/>
+                  </svg>
+                  <span className="text-[10px] text-blue-700 font-semibold">
+                    {prediction.weather_note}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
