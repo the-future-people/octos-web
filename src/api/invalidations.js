@@ -67,6 +67,15 @@ export const invalidateAfterCustomerRegistered = (queryClient) => {
   queryClient.invalidateQueries({ queryKey: ['customers'] })
 }
 
+// ── Credit settled (Cashier) ──────────────────────────────────────────────────
+export const invalidateAfterCreditSettled = (queryClient) => {
+  queryClient.invalidateQueries({ queryKey: ['creditAccounts'] })
+  queryClient.invalidateQueries({ queryKey: ['todaySummary'] })
+  queryClient.invalidateQueries({ queryKey: ['jobStats'] })
+  queryClient.invalidateQueries({ queryKey: ['cashierSummary'] })
+  queryClient.invalidateQueries({ queryKey: ['shiftStatus'] })
+}
+
 // ── Notifications bell ────────────────────────────────────────────────────────
 export const invalidateNotifications = (queryClient) => {
   queryClient.invalidateQueries({ queryKey: ['notifCount'] })

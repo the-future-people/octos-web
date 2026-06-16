@@ -4,6 +4,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getCreditAccounts, settleCreditAccount } from '../../api/cashier'
+import { invalidateAfterCreditSettled } from '../../api/invalidations'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -22,11 +24,13 @@ function SettleModal({ account, onClose }) {
   const [ref,     setRef]     = useState('')
   const [error,   setError]   = useState('')
 
+  const [settled, setSettled] = useState(false)
+
   const { mutate, isPending } = useMutation({
     mutationFn: (payload) => settleCreditAccount(account.id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['creditAccounts'] })
-      onClose()
+      invalidateAfterCreditSettled(queryClient)
+      setSettled(true)
     },
     onError: (err) => setError(err.response?.data?.detail || 'Settlement failed.'),
   })
@@ -147,6 +151,13 @@ function SettleModal({ account, onClose }) {
           </button>
         </div>
       </div>
+      {settled && (
+        <JobSuccessOverlay
+          jobNumber={`GHS ${parseFloat(amount).toFixed(2)}`}
+          message="Settlement confirmed"
+          onDone={() => { setSettled(false); onClose() }}
+        />
+      )}
     </div>
   )
 }
