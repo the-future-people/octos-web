@@ -1,5 +1,6 @@
 // src/components/bm/NewCustomerModal.jsx
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCustomer, lookupCustomer } from '../../api/bm'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
@@ -157,8 +158,8 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
   const isBusiness    = form.customer_type === 'BUSINESS'
   const isInstitution = form.customer_type === 'INSTITUTION'
 
-  const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
+  const modal = createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
       <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden animate-slideUp">
 
         {/* Header */}
@@ -484,7 +485,8 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   )
 
   return (
