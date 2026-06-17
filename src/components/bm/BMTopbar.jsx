@@ -128,12 +128,6 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
     ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
     : user?.email?.[0]?.toUpperCase() || '??'
 
-  const timeLabel = minsToClose != null && minsToClose > 0 && minsToClose <= 30
-    ? `${minsToClose}m to close`
-    : minsToClose != null && minsToClose <= 0
-    ? 'Closing now'
-    : null
-
   const closeTimeFormatted = closeSchedule?.shift_end
     ? new Date(closeSchedule.shift_end).toLocaleTimeString('en-US', { 
         hour: 'numeric', 
@@ -237,19 +231,6 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
             </button>
           )}
 
-          {/* Close warning - visible on all screen sizes */}
-          {timeLabel && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1
-              bg-[var(--amber-bg)] border border-[var(--amber-border)]
-              rounded-full text-xs font-bold text-[var(--amber-text)]
-              animate-pulse sm:animate-none"
-              role="alert"
-              aria-live="polite">
-              <span aria-hidden="true">⚠</span>
-              <span className="hidden sm:inline">{timeLabel}</span>
-              <span className="sm:hidden">{minsToClose}m</span>
-            </div>
-          )}
 
           {/* Loading indicator for lock status */}
           {lockLoading && !lockData && (
