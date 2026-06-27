@@ -16,6 +16,7 @@ import Performance  from '../../components/bm/Performance'
 import Staff        from '../../components/bm/Staff'
 import Inbox        from '../../components/bm/Inbox'
 import DailyGreeting from '../../components/layout/DailyGreeting'
+import PersonalNotes from '../../components/shared/PersonalNotes'
 
 const SECTIONS = [
   {
@@ -25,6 +26,7 @@ const SECTIONS = [
       { id: 'daysheet',    label: 'Day Sheet',        icon: 'calendar' },
       { id: 'jobs',        label: 'Jobs',             icon: 'briefcase'},
       { id: 'inbox',       label: 'Inbox',            icon: 'inbox'    },
+      { id: 'notes',       label: 'My Notes',         icon: 'lock'     },
     ]
   },
   {
@@ -63,6 +65,7 @@ export default function BMPortal() {
       case 'performance': return <Performance />
       case 'staff':       return <Staff />
       case 'inbox':       return <Inbox />
+      case 'notes':       return <PersonalNotes onIdleRedirect={() => setActiveSection('overview')} />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
