@@ -682,71 +682,99 @@ function CheckpointReminderModal({ checkpoint, onDone }) {
   const queryClient = useQueryClient()
   const note = checkpoint.note
   const c = colorClasses(note.color)
+  const [closing, setClosing] = useState(false)
 
-  const { mutate: doAcknowledge, isPending: acking } = useMutation({
+  const { mutate: doAcknowledge } = useMutation({
     mutationFn: () => acknowledgeCheckpoint(checkpoint.id),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['dueReminders'] })
       queryClient.invalidateQueries({ queryKey: ['personalNotes'] })
-      onDone()
     },
   })
 
-  const { mutate: doComplete, isPending: completing } = useMutation({
+  const { mutate: doComplete } = useMutation({
     mutationFn: () => completeTask(note.id),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['dueReminders'] })
       queryClient.invalidateQueries({ queryKey: ['personalNotes'] })
-      onDone()
     },
   })
+
+  // Optimistic close — fade out immediately, mutation fires in background
+  const handleStillWorking = () => {
+    setClosing(true)
+    doAcknowledge()
+    setTimeout(onDone, 200)
+  }
+
+  const handleComplete = () => {
+    setClosing(true)
+    doComplete()
+    setTimeout(onDone, 200)
+  }
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
-      <div className={`w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden border-2 ${c.bg} ${c.border}`}>
-        <div className="px-6 pt-6 pb-4 text-center">
-          <div className="w-12 h-12 rounded-full bg-black/10 flex items-center justify-center mx-auto mb-3">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-[var(--text-2)]">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </div>
-          <p className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
-            Task Reminder
-          </p>
-          <h3 className="text-base font-black text-[var(--text)] mt-1">
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 transition-opacity duration-200"
+      style={{ opacity: closing ? 0 : 1 }}
+    >
+      <div
+        style={{
+          background: c.bg,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 20px 50px rgba(0,0,0,0.25)',
+          transform: closing ? 'scale(0.96)' : 'scale(1)',
+          transition: 'transform 200ms ease',
+        }}
+        className="w-full max-w-sm rounded-2xl overflow-hidden"
+      >
+        {/* Header strip */}
+        <div style={{ background: HEADER_TASK.bg }} className="px-5 py-2 flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+            <rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/>
+          </svg>
+          <span style={{ fontSize: '10px', fontWeight: 500, color: '#fff', letterSpacing: '0.3px' }}>
+            TASK REMINDER
+          </span>
+        </div>
+
+        <div className="px-6 pt-5 pb-4 text-center">
+          <h3 style={{ fontFamily: 'Georgia, serif', color: c.text }} className="text-lg font-normal">
             {note.title || 'Untitled task'}
           </h3>
           {note.body && (
-            <p className="text-sm text-[var(--text-2)] mt-2 leading-relaxed line-clamp-3">
+            <p style={{ color: c.textMuted }} className="text-sm mt-2 leading-relaxed line-clamp-3">
               {note.body}
             </p>
           )}
           {note.due_date && (
-            <p className={`text-xs font-bold mt-3 ${dueLabel(note.due_date).urgent ? 'text-red-600' : 'text-[var(--text-3)]'}`}>
+            <div
+              style={{ background: 'rgba(0,0,0,0.06)', color: dueLabel(note.due_date).urgent ? '#b45309' : c.textMuted }}
+              className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-xs font-medium"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
               {dueLabel(note.due_date).text}
-            </p>
+            </div>
           )}
         </div>
+
         <div className="px-6 pb-6 space-y-2">
           <button
-            onClick={() => doComplete()}
-            disabled={completing || acking}
-            className="w-full py-2.5 bg-emerald-600 text-white text-sm font-bold
-              rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40
-              flex items-center justify-center gap-2">
+            onClick={handleComplete}
+            style={{ background: '#16a34a', color: '#fff' }}
+            className="w-full py-2.5 text-sm font-medium rounded-xl hover:opacity-90
+              transition-opacity flex items-center justify-center gap-2">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            {completing ? 'Completing…' : 'Mark Complete'}
+            Mark complete
           </button>
           <button
-            onClick={() => doAcknowledge()}
-            disabled={completing || acking}
-            className="w-full py-2.5 bg-black/5 text-[var(--text-2)] text-sm font-bold
-              rounded-xl hover:bg-black/10 transition-colors disabled:opacity-40">
-            {acking ? 'Saving…' : "Still working on it"}
+            onClick={handleStillWorking}
+            style={{ background: 'rgba(0,0,0,0.06)', color: c.text }}
+            className="w-full py-2.5 text-sm font-medium rounded-xl hover:opacity-80 transition-opacity">
+            Still working on it
           </button>
         </div>
       </div>
