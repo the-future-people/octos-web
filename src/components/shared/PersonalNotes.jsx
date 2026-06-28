@@ -9,18 +9,25 @@ import {
 } from '../../api/personalNotes'
 
 const COLORS = [
-  { id: 'amber',  bg: 'bg-amber-50',  border: 'border-amber-200',  dot: 'bg-amber-400'  },
-  { id: 'blue',   bg: 'bg-blue-50',   border: 'border-blue-200',   dot: 'bg-blue-400'   },
-  { id: 'green',  bg: 'bg-green-50',  border: 'border-green-200',  dot: 'bg-green-400'  },
-  { id: 'violet', bg: 'bg-violet-50', border: 'border-violet-200', dot: 'bg-violet-400' },
-  { id: 'rose',   bg: 'bg-rose-50',   border: 'border-rose-200',   dot: 'bg-rose-400'   },
-  { id: 'slate',  bg: 'bg-slate-50',  border: 'border-slate-200',  dot: 'bg-slate-400'  },
+  { id: 'amber',  bg: '#FEF3E2', text: '#5c3d10', textMuted: '#7c6a4f', dot: '#d97706' },
+  { id: 'blue',   bg: '#E8F1FA', text: '#1e3a5f', textMuted: '#4a6a8a', dot: '#2563eb' },
+  { id: 'green',  bg: '#EBF5E9', text: '#1e4620', textMuted: '#4a6b4c', dot: '#16a34a' },
+  { id: 'violet', bg: '#F1EDF9', text: '#3b2a5e', textMuted: '#6a5a8a', dot: '#7c3aed' },
+  { id: 'rose',   bg: '#FBEAEE', text: '#5e2a3a', textMuted: '#8a5a6a', dot: '#e11d48' },
+  { id: 'slate',  bg: '#EEF0F2', text: '#2c3640', textMuted: '#5a6670', dot: '#475569' },
 ]
+
+const HEADER_NOTE = { bg: '#B8A47A' }
+const HEADER_TASK = { bg: '#E8884F' }
 
 const IDLE_TIMEOUT_MS = 30_000
 
 function colorClasses(colorId) {
   return COLORS.find(c => c.id === colorId) || COLORS[0]
+}
+
+function headerStyle(noteType) {
+  return noteType === 'TASK' ? HEADER_TASK : HEADER_NOTE
 }
 
 function timeAgo(dateStr) {
@@ -205,6 +212,163 @@ function PinGate({ onUnlock }) {
 }
 
 // ── Note Editor Modal ─────────────────────────────────────────────────────────
+// ── Warm Date/Time Picker ───────────────────────────────────────────────────
+
+function WarmDateTimePicker({ value, onChange, accentColor }) {
+  const [open, setOpen] = useState(false)
+  const initial = value ? new Date(value) : new Date()
+  const [viewMonth, setViewMonth] = useState(initial.getMonth())
+  const [viewYear, setViewYear]   = useState(initial.getFullYear())
+  const pickerRef = useRef(null)
+
+  const selected = value ? new Date(value) : null
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const monthName = new Date(viewYear, viewMonth).toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
+  const firstDay  = new Date(viewYear, viewMonth, 1).getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  const isSameDay = (d) => selected &&
+    selected.getDate() === d && selected.getMonth() === viewMonth && selected.getFullYear() === viewYear
+
+  const pickDay = (d) => {
+    const base = selected || new Date()
+    const next = new Date(viewYear, viewMonth, d, base.getHours(), base.getMinutes())
+    onChange(toLocalInputValue(next))
+  }
+
+  const adjustTime = (field, delta) => {
+    const base = selected || new Date()
+    const next = new Date(base)
+    if (field === 'hour')   next.setHours((next.getHours() + delta + 24) % 24)
+    if (field === 'minute') next.setMinutes((next.getMinutes() + delta + 60) % 60)
+    onChange(toLocalInputValue(next))
+  }
+
+  const hour12   = selected ? (selected.getHours() % 12 || 12) : 12
+  const minuteStr = selected ? String(selected.getMinutes()).padStart(2, '0') : '00'
+  const ampm     = selected ? (selected.getHours() >= 12 ? 'PM' : 'AM') : 'AM'
+
+  const label = selected
+    ? `${selected.toLocaleDateString('en-GH', { day: '2-digit', month: 'short' })}, ${hour12}:${minuteStr} ${ampm}`
+    : 'Set date and time'
+
+  return (
+    <div className="relative" ref={pickerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-xs font-medium"
+        style={{ color: accentColor }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        {label}
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-50 bottom-full mb-2 left-0 rounded-2xl p-4"
+          style={{ background: '#FFFCF7', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.12)', width: '260px' }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <button type="button" onClick={() => {
+              if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
+              else setViewMonth(m => m - 1)
+            }} className="text-[#92600a] hover:opacity-70">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <span style={{ fontFamily: 'Georgia, serif', fontSize: '13px', color: '#5c3d10' }}>{monthName}</span>
+            <button type="button" onClick={() => {
+              if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) }
+              else setViewMonth(m => m + 1)
+            }} className="text-[#92600a] hover:opacity-70">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mb-1.5">
+            {['S','M','T','W','T','F','S'].map((d, i) => (
+              <span key={i} style={{ fontSize: '10px', color: '#a08b66' }} className="text-center">{d}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-4">
+            {cells.map((d, i) => (
+              <button
+                type="button"
+                key={i}
+                disabled={!d}
+                onClick={() => d && pickDay(d)}
+                style={{
+                  fontSize: '12px',
+                  color: isSameDay(d) ? '#fff' : '#7c6a4f',
+                  background: isSameDay(d) ? '#E8884F' : 'transparent',
+                  borderRadius: '50%',
+                  padding: '6px 0',
+                  visibility: d ? 'visible' : 'hidden',
+                }}
+                className="hover:opacity-80 transition-opacity"
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid rgba(146,96,10,0.1)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92600a" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => adjustTime('hour', -1)} className="text-[#92600a] text-xs px-1">−</button>
+              <span style={{ fontSize: '13px', color: '#5c3d10', fontWeight: 500, minWidth: '14px', textAlign: 'center' }}>{hour12}</span>
+              <button type="button" onClick={() => adjustTime('hour', 1)} className="text-[#92600a] text-xs px-1">+</button>
+            </div>
+            <span style={{ color: '#a08b66' }}>:</span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => adjustTime('minute', -5)} className="text-[#92600a] text-xs px-1">−</button>
+              <span style={{ fontSize: '13px', color: '#5c3d10', fontWeight: 500, minWidth: '20px', textAlign: 'center' }}>{minuteStr}</span>
+              <button type="button" onClick={() => adjustTime('minute', 5)} className="text-[#92600a] text-xs px-1">+</button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const base = selected || new Date()
+                const next = new Date(base)
+                next.setHours((next.getHours() + 12) % 24)
+                onChange(toLocalInputValue(next))
+              }}
+              style={{ fontSize: '11px', color: '#a08b66', marginLeft: '4px' }}
+            >
+              {ampm}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function toLocalInputValue(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 function NoteEditor({ note, onClose }) {
   const queryClient = useQueryClient()
@@ -260,7 +424,7 @@ function NoteEditor({ note, onClose }) {
     reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
   })
 
-  // Debounced auto-save — fires 800ms after the last keystroke
+  // Debounced auto-save — silent safety net, never the primary save action
   const triggerSave = useCallback(() => {
     clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
@@ -276,7 +440,8 @@ function NoteEditor({ note, onClose }) {
     return () => clearTimeout(saveTimerRef.current)
   }, [title, body, color, reminderAt, noteType, dueDate, triggerSave])
 
-  const handleClose = () => {
+  // Done — deliberate, immediate save and close, no debounce wait
+  const handleDone = () => {
     clearTimeout(saveTimerRef.current)
     if (title.trim() || body.trim()) {
       const payload = buildPayload()
@@ -288,42 +453,49 @@ function NoteEditor({ note, onClose }) {
 
   const handleConvertToTask = () => {
     setNoteType('TASK')
-    // Default due date: 24 hours from now, user can change it
     if (!dueDate) {
       const tomorrow = new Date(Date.now() + 24 * 3600 * 1000)
-      setDueDate(tomorrow.toISOString().slice(0, 16))
+      setDueDate(toLocalInputValue(tomorrow))
     }
   }
 
   const c = colorClasses(color)
+  const header = headerStyle(noteType)
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
-      <div className={`w-full max-w-lg rounded-2xl shadow-2xl flex flex-col
-        max-h-[88vh] overflow-hidden border-2 ${c.bg} ${c.border}`}>
+      <div
+        style={{ background: c.bg, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 20px 50px rgba(0,0,0,0.25)' }}
+        className="w-full max-w-lg rounded-2xl flex flex-col max-h-[88vh] overflow-hidden"
+      >
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-black/5">
+        {/* Header strip — matches card header */}
+        <div style={{ background: header.bg }} className="px-5 py-2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1.5">
+            {isTask ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+                <rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/>
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            )}
+            <span style={{ fontSize: '10px', fontWeight: 500, color: '#fff', letterSpacing: '0.3px' }}>
+              {isTask ? 'TASK' : 'NOTE'}
+            </span>
+          </div>
           <div className="flex gap-1.5">
             {COLORS.map(col => (
               <button key={col.id} onClick={() => setColor(col.id)}
-                className={`w-5 h-5 rounded-full ${col.dot} transition-transform
-                  ${color === col.id ? 'ring-2 ring-offset-1 ring-[var(--text)] scale-110' : 'opacity-50 hover:opacity-80'}`}
+                style={{
+                  width: '16px', height: '16px', borderRadius: '50%', background: col.dot,
+                  opacity: color === col.id ? 1 : 0.45,
+                  boxShadow: color === col.id ? '0 0 0 2px rgba(255,255,255,0.8)' : 'none',
+                }}
               />
             ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {noteType === 'TASK' && (
-              <span className="px-2 py-0.5 rounded-full bg-black/10 text-[10px] font-bold
-                text-[var(--text-2)] uppercase tracking-wider">
-                Task
-              </span>
-            )}
-            <button onClick={handleClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full
-                hover:bg-black/5 text-[var(--text-3)] transition-colors">
-              ✕
-            </button>
           </div>
         </div>
 
@@ -333,36 +505,35 @@ function NoteEditor({ note, onClose }) {
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Title"
-            className="w-full bg-transparent outline-none text-lg font-bold
-              text-[var(--text)] placeholder:text-[var(--text-3)] placeholder:font-bold"
+            style={{ fontFamily: 'Georgia, serif', color: c.text }}
+            className="w-full bg-transparent outline-none text-xl font-normal
+              placeholder:opacity-50"
           />
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Write your note…"
-            rows={9}
-            className="w-full bg-transparent outline-none text-sm text-[var(--text-2)]
-              placeholder:text-[var(--text-3)] resize-none leading-relaxed"
+            rows={8}
+            style={{ color: c.textMuted }}
+            className="w-full bg-transparent outline-none text-sm
+              placeholder:opacity-50 resize-none leading-relaxed"
           />
 
-          {/* Task due date field — only when noteType === TASK */}
           {noteType === 'TASK' && (
-            <div className="bg-black/5 rounded-xl px-3 py-2.5 flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" className="text-[var(--text-3)] shrink-0">
-                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <span className="text-xs font-semibold text-[var(--text-2)] shrink-0">Due</span>
-              <input
-                type="datetime-local"
+            <div
+              style={{ background: 'rgba(0,0,0,0.04)' }}
+              className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2"
+            >
+              <WarmDateTimePicker
                 value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="text-xs bg-transparent outline-none text-[var(--text)] flex-1"
+                onChange={setDueDate}
+                accentColor={c.text}
               />
               <button
                 onClick={() => { setNoteType('NOTE'); setDueDate('') }}
-                className="text-[var(--text-3)] hover:text-[var(--red-text)] text-xs shrink-0">
+                style={{ color: c.textMuted }}
+                className="text-xs hover:opacity-70 shrink-0"
+              >
                 Remove
               </button>
             </div>
@@ -370,30 +541,29 @@ function NoteEditor({ note, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-black/5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="px-5 py-3 flex items-center justify-between gap-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             {noteType === 'NOTE' ? (
               <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2" className="text-[var(--text-3)] shrink-0">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-                <input
-                  type="datetime-local"
+                <WarmDateTimePicker
                   value={reminderAt}
-                  onChange={e => setReminderAt(e.target.value)}
-                  placeholder="Reminder"
-                  className="text-xs bg-transparent outline-none text-[var(--text-2)] flex-1 min-w-0"
+                  onChange={setReminderAt}
+                  accentColor={c.textMuted}
                 />
                 {reminderAt && (
-                  <button onClick={() => setReminderAt('')}
-                    className="text-[var(--text-3)] hover:text-[var(--red-text)] text-xs shrink-0">✕</button>
+                  <button
+                    onClick={() => setReminderAt('')}
+                    style={{ color: c.textMuted }}
+                    className="text-xs hover:opacity-70 shrink-0">
+                    Clear
+                  </button>
                 )}
                 <button
                   onClick={handleConvertToTask}
-                  className="text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text)]
-                    underline shrink-0 ml-1">
-                  Convert to Task
+                  style={{ color: c.text }}
+                  className="text-xs font-medium underline shrink-0 ml-auto"
+                >
+                  Convert to task
                 </button>
               </>
             ) : (
@@ -406,19 +576,27 @@ function NoteEditor({ note, onClose }) {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                {completing ? 'Completing…' : 'Mark Complete'}
+                {completing ? 'Completing…' : 'Mark complete'}
+              </button>
+            )}
+            {!isNew && (
+              <button
+                onClick={() => doDelete()}
+                disabled={deleting}
+                className="text-xs font-medium text-[var(--red-text)] hover:opacity-70
+                  transition-opacity shrink-0">
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
             )}
           </div>
-          {!isNew && (
-            <button
-              onClick={() => doDelete()}
-              disabled={deleting}
-              className="text-xs font-semibold text-[var(--red-text)] hover:opacity-70
-                transition-opacity shrink-0">
-              {deleting ? 'Deleting…' : 'Delete'}
-            </button>
-          )}
+          <button
+            onClick={handleDone}
+            style={{ background: c.text, color: c.bg }}
+            className="px-5 py-2 rounded-xl text-sm font-medium hover:opacity-90
+              transition-opacity shrink-0"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>
@@ -429,59 +607,74 @@ function NoteEditor({ note, onClose }) {
 
 function NoteCard({ note, onOpen }) {
   const c = colorClasses(note.color)
-  const hasReminder = !!note.reminder_at && !note.reminder_dismissed
   const isTask = note.note_type === 'TASK'
   const isComplete = note.status === 'COMPLETE'
   const due = isTask && note.due_date ? dueLabel(note.due_date) : null
+  const header = headerStyle(note.note_type)
 
   return (
     <button
       onClick={() => onOpen(note)}
-      className={`text-left rounded-2xl border-2 p-4 flex flex-col gap-2 h-40
-        hover:shadow-md transition-shadow relative ${c.bg} ${c.border}
-        ${isComplete ? 'opacity-60' : ''}`}
+      style={{
+        background: c.bg,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.08)',
+      }}
+      className={`text-left rounded-2xl flex flex-col h-40 overflow-hidden
+        hover:shadow-md transition-shadow relative
+        ${isComplete ? 'opacity-55' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className={`font-bold text-sm text-[var(--text)] line-clamp-1
-          ${isComplete ? 'line-through' : ''}`}>
+      {/* Header strip */}
+      <div
+        style={{ background: isComplete ? '#9ca3af' : header.bg }}
+        className="px-3.5 py-1.5 flex items-center gap-1.5 shrink-0"
+      >
+        {isComplete ? (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        ) : isTask ? (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+            <rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/>
+          </svg>
+        ) : (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        )}
+        <span style={{ fontSize: '10px', fontWeight: 500, color: '#fff', letterSpacing: '0.3px' }}>
+          {isComplete ? 'DONE' : isTask ? 'TASK' : 'NOTE'}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div className="px-3.5 py-3 flex flex-col gap-2 flex-1 min-h-0">
+        <h3
+          style={{ fontFamily: 'Georgia, serif', color: c.text }}
+          className={`font-normal text-base leading-tight line-clamp-1 shrink-0
+            ${isComplete ? 'line-through' : ''}`}
+        >
           {note.title || 'Untitled'}
         </h3>
-        <div className="flex items-center gap-1 shrink-0 mt-0.5">
-          {isTask && !isComplete && (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" className="text-[var(--text-2)]">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          )}
-          {isComplete && (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
-              className="text-emerald-600">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          )}
-          {hasReminder && !isTask && (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" className="text-[var(--text-2)]">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-          )}
+        <p
+          style={{ color: c.textMuted }}
+          className={`text-xs leading-relaxed line-clamp-3 flex-1
+            ${isComplete ? 'line-through' : ''}`}
+        >
+          {note.body || <span className="italic opacity-60">Empty note</span>}
+        </p>
+        <div
+          style={{ color: isComplete ? '#9ca3af' : due?.urgent ? '#b45309' : c.textMuted }}
+          className="text-[10px] font-medium flex items-center gap-1 shrink-0"
+        >
+          {due && !isComplete && <i className="ti ti-clock" style={{ fontSize: '11px' }} aria-hidden="true" />}
+          {isComplete ? `Completed ${timeAgo(note.completed_at)}` :
+           due ? due.text : timeAgo(note.updated_at)}
         </div>
-      </div>
-      <p className={`text-xs text-[var(--text-2)] line-clamp-4 flex-1 leading-relaxed
-        ${isComplete ? 'line-through' : ''}`}>
-        {note.body || <span className="text-[var(--text-3)] italic">Empty note</span>}
-      </p>
-      <div className={`text-[10px] font-bold
-        ${isComplete ? 'text-[var(--text-3)]' :
-          due?.urgent ? 'text-red-600' : 'text-[var(--text-3)]'}`}>
-        {isComplete ? `Completed ${timeAgo(note.completed_at)}` :
-         due ? due.text : timeAgo(note.updated_at)}
       </div>
     </button>
   )
 }
-
 // ── Main Export ──────────────────────────────────────────────────────────────
 // ── Checkpoint Reminder Modal ───────────────────────────────────────────────
 
