@@ -27,3 +27,9 @@ export const getDueReminders = () =>
 
 export const dismissReminder = (id) =>
   client.post(`/api/v1/personal-notes/${id}/dismiss-reminder/`)
+
+export const completeTask = (id) =>
+  client.post(`/api/v1/personal-notes/${id}/complete/`)
+
+export const acknowledgeCheckpoint = (id) =>
+  client.post(`/api/v1/personal-notes/checkpoints/${id}/acknowledge/`)

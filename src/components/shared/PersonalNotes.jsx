@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getPinStatus, setPin, verifyPin,
   getNotes, createNote, updateNote, deleteNote,
+  completeTask, acknowledgeCheckpoint, getDueReminders,
 } from '../../api/personalNotes'
 
 const COLORS = [
@@ -28,6 +29,17 @@ function timeAgo(dateStr) {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
+}
+
+function dueLabel(dateStr) {
+  const due  = new Date(dateStr)
+  const now  = new Date()
+  const diff = Math.floor((due - now) / 1000)
+  const dateStrFmt = due.toLocaleDateString('en-GH', { day: '2-digit', month: 'short' })
+  if (diff < 0) return { text: `Overdue · ${dateStrFmt}`, urgent: true }
+  if (diff < 86400) return { text: `Due today, ${due.toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })}`, urgent: true }
+  if (diff < 172800) return { text: `Due tomorrow`, urgent: false }
+  return { text: `Due ${dateStrFmt}`, urgent: false }
 }
 
 // ── PIN Gate ─────────────────────────────────────────────────────────────────
@@ -197,12 +209,17 @@ function PinGate({ onUnlock }) {
 function NoteEditor({ note, onClose }) {
   const queryClient = useQueryClient()
   const isNew = !note?.id
+  const isTask = note?.note_type === 'TASK'
 
   const [title, setTitle] = useState(note?.title || '')
   const [body, setBody]   = useState(note?.body || '')
   const [color, setColor] = useState(note?.color || 'amber')
   const [reminderAt, setReminderAt] = useState(
     note?.reminder_at ? note.reminder_at.slice(0, 16) : ''
+  )
+  const [noteType, setNoteType] = useState(note?.note_type || 'NOTE')
+  const [dueDate, setDueDate]   = useState(
+    note?.due_date ? note.due_date.slice(0, 16) : ''
   )
   const [noteId, setNoteId] = useState(note?.id || null)
   const saveTimerRef = useRef(null)
@@ -228,39 +245,54 @@ function NoteEditor({ note, onClose }) {
     },
   })
 
+  const { mutate: doComplete, isPending: completing } = useMutation({
+    mutationFn: () => completeTask(noteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personalNotes'] })
+      onClose()
+    },
+  })
+
+  const buildPayload = () => ({
+    title, body, color,
+    note_type: noteType,
+    due_date: noteType === 'TASK' && dueDate ? new Date(dueDate).toISOString() : null,
+    reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
+  })
+
   // Debounced auto-save — fires 800ms after the last keystroke
   const triggerSave = useCallback(() => {
     clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      const payload = {
-        title,
-        body,
-        color,
-        reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
-      }
-      if (!title.trim() && !body.trim()) return // nothing to save yet
+      if (!title.trim() && !body.trim()) return
+      const payload = buildPayload()
       if (noteId) doUpdate(payload)
       else doCreate(payload)
     }, 800)
-  }, [title, body, color, reminderAt, noteId])
+  }, [title, body, color, reminderAt, noteType, dueDate, noteId])
 
   useEffect(() => {
     triggerSave()
     return () => clearTimeout(saveTimerRef.current)
-  }, [title, body, color, reminderAt, triggerSave])
+  }, [title, body, color, reminderAt, noteType, dueDate, triggerSave])
 
-  // Save immediately on close (so nothing is lost if user closes fast)
   const handleClose = () => {
     clearTimeout(saveTimerRef.current)
     if (title.trim() || body.trim()) {
-      const payload = {
-        title, body, color,
-        reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
-      }
+      const payload = buildPayload()
       if (noteId) doUpdate(payload)
       else doCreate(payload)
     }
     onClose()
+  }
+
+  const handleConvertToTask = () => {
+    setNoteType('TASK')
+    // Default due date: 24 hours from now, user can change it
+    if (!dueDate) {
+      const tomorrow = new Date(Date.now() + 24 * 3600 * 1000)
+      setDueDate(tomorrow.toISOString().slice(0, 16))
+    }
   }
 
   const c = colorClasses(color)
@@ -280,11 +312,19 @@ function NoteEditor({ note, onClose }) {
               />
             ))}
           </div>
-          <button onClick={handleClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full
-              hover:bg-black/5 text-[var(--text-3)] transition-colors">
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {noteType === 'TASK' && (
+              <span className="px-2 py-0.5 rounded-full bg-black/10 text-[10px] font-bold
+                text-[var(--text-2)] uppercase tracking-wider">
+                Task
+              </span>
+            )}
+            <button onClick={handleClose}
+              className="w-7 h-7 flex items-center justify-center rounded-full
+                hover:bg-black/5 text-[var(--text-3)] transition-colors">
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -300,28 +340,74 @@ function NoteEditor({ note, onClose }) {
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Write your note…"
-            rows={10}
+            rows={9}
             className="w-full bg-transparent outline-none text-sm text-[var(--text-2)]
               placeholder:text-[var(--text-3)] resize-none leading-relaxed"
           />
+
+          {/* Task due date field — only when noteType === TASK */}
+          {noteType === 'TASK' && (
+            <div className="bg-black/5 rounded-xl px-3 py-2.5 flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" className="text-[var(--text-3)] shrink-0">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span className="text-xs font-semibold text-[var(--text-2)] shrink-0">Due</span>
+              <input
+                type="datetime-local"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="text-xs bg-transparent outline-none text-[var(--text)] flex-1"
+              />
+              <button
+                onClick={() => { setNoteType('NOTE'); setDueDate('') }}
+                className="text-[var(--text-3)] hover:text-[var(--red-text)] text-xs shrink-0">
+                Remove
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-black/5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" className="text-[var(--text-3)] shrink-0">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-            <input
-              type="datetime-local"
-              value={reminderAt}
-              onChange={e => setReminderAt(e.target.value)}
-              className="text-xs bg-transparent outline-none text-[var(--text-2)] flex-1"
-            />
-            {reminderAt && (
-              <button onClick={() => setReminderAt('')}
-                className="text-[var(--text-3)] hover:text-[var(--red-text)] text-xs">✕</button>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {noteType === 'NOTE' ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" className="text-[var(--text-3)] shrink-0">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <input
+                  type="datetime-local"
+                  value={reminderAt}
+                  onChange={e => setReminderAt(e.target.value)}
+                  placeholder="Reminder"
+                  className="text-xs bg-transparent outline-none text-[var(--text-2)] flex-1 min-w-0"
+                />
+                {reminderAt && (
+                  <button onClick={() => setReminderAt('')}
+                    className="text-[var(--text-3)] hover:text-[var(--red-text)] text-xs shrink-0">✕</button>
+                )}
+                <button
+                  onClick={handleConvertToTask}
+                  className="text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text)]
+                    underline shrink-0 ml-1">
+                  Convert to Task
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => doComplete()}
+                disabled={completing || isNew}
+                className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5
+                  rounded-lg hover:bg-emerald-200 transition-colors disabled:opacity-40
+                  flex items-center gap-1.5 shrink-0">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                {completing ? 'Completing…' : 'Mark Complete'}
+              </button>
             )}
           </div>
           {!isNew && (
@@ -344,46 +430,157 @@ function NoteEditor({ note, onClose }) {
 function NoteCard({ note, onOpen }) {
   const c = colorClasses(note.color)
   const hasReminder = !!note.reminder_at && !note.reminder_dismissed
+  const isTask = note.note_type === 'TASK'
+  const isComplete = note.status === 'COMPLETE'
+  const due = isTask && note.due_date ? dueLabel(note.due_date) : null
 
   return (
     <button
       onClick={() => onOpen(note)}
       className={`text-left rounded-2xl border-2 p-4 flex flex-col gap-2 h-40
-        hover:shadow-md transition-shadow ${c.bg} ${c.border}`}
+        hover:shadow-md transition-shadow relative ${c.bg} ${c.border}
+        ${isComplete ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-bold text-sm text-[var(--text)] line-clamp-1">
+        <h3 className={`font-bold text-sm text-[var(--text)] line-clamp-1
+          ${isComplete ? 'line-through' : ''}`}>
           {note.title || 'Untitled'}
         </h3>
-        {hasReminder && (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" className="text-[var(--text-2)] shrink-0 mt-0.5">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-        )}
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          {isTask && !isComplete && (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" className="text-[var(--text-2)]">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          )}
+          {isComplete && (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+              className="text-emerald-600">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          )}
+          {hasReminder && !isTask && (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" className="text-[var(--text-2)]">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          )}
+        </div>
       </div>
-      <p className="text-xs text-[var(--text-2)] line-clamp-4 flex-1 leading-relaxed">
+      <p className={`text-xs text-[var(--text-2)] line-clamp-4 flex-1 leading-relaxed
+        ${isComplete ? 'line-through' : ''}`}>
         {note.body || <span className="text-[var(--text-3)] italic">Empty note</span>}
       </p>
-      <div className="text-[10px] text-[var(--text-3)] font-medium">
-        {timeAgo(note.updated_at)}
+      <div className={`text-[10px] font-bold
+        ${isComplete ? 'text-[var(--text-3)]' :
+          due?.urgent ? 'text-red-600' : 'text-[var(--text-3)]'}`}>
+        {isComplete ? `Completed ${timeAgo(note.completed_at)}` :
+         due ? due.text : timeAgo(note.updated_at)}
       </div>
     </button>
   )
 }
 
 // ── Main Export ──────────────────────────────────────────────────────────────
+// ── Checkpoint Reminder Modal ───────────────────────────────────────────────
+
+function CheckpointReminderModal({ checkpoint, onDone }) {
+  const queryClient = useQueryClient()
+  const note = checkpoint.note
+  const c = colorClasses(note.color)
+
+  const { mutate: doAcknowledge, isPending: acking } = useMutation({
+    mutationFn: () => acknowledgeCheckpoint(checkpoint.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dueReminders'] })
+      queryClient.invalidateQueries({ queryKey: ['personalNotes'] })
+      onDone()
+    },
+  })
+
+  const { mutate: doComplete, isPending: completing } = useMutation({
+    mutationFn: () => completeTask(note.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dueReminders'] })
+      queryClient.invalidateQueries({ queryKey: ['personalNotes'] })
+      onDone()
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+      <div className={`w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden border-2 ${c.bg} ${c.border}`}>
+        <div className="px-6 pt-6 pb-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-black/10 flex items-center justify-center mx-auto mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className="text-[var(--text-2)]">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <p className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+            Task Reminder
+          </p>
+          <h3 className="text-base font-black text-[var(--text)] mt-1">
+            {note.title || 'Untitled task'}
+          </h3>
+          {note.body && (
+            <p className="text-sm text-[var(--text-2)] mt-2 leading-relaxed line-clamp-3">
+              {note.body}
+            </p>
+          )}
+          {note.due_date && (
+            <p className={`text-xs font-bold mt-3 ${dueLabel(note.due_date).urgent ? 'text-red-600' : 'text-[var(--text-3)]'}`}>
+              {dueLabel(note.due_date).text}
+            </p>
+          )}
+        </div>
+        <div className="px-6 pb-6 space-y-2">
+          <button
+            onClick={() => doComplete()}
+            disabled={completing || acking}
+            className="w-full py-2.5 bg-emerald-600 text-white text-sm font-bold
+              rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40
+              flex items-center justify-center gap-2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            {completing ? 'Completing…' : 'Mark Complete'}
+          </button>
+          <button
+            onClick={() => doAcknowledge()}
+            disabled={completing || acking}
+            className="w-full py-2.5 bg-black/5 text-[var(--text-2)] text-sm font-bold
+              rounded-xl hover:bg-black/10 transition-colors disabled:opacity-40">
+            {acking ? 'Saving…' : "Still working on it"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Export ──────────────────────────────────────────────────────────────
 
 export default function PersonalNotes({ onIdleRedirect }) {
-  const [unlocked, setUnlocked] = useState(false)
-  const [openNote, setOpenNote] = useState(null)
+  const [unlocked, setUnlocked]   = useState(false)
+  const [openNote, setOpenNote]   = useState(null)
   const [creatingNew, setCreatingNew] = useState(false)
+  const [tab, setTab]             = useState('active') // active | completed
   const idleTimerRef = useRef(null)
 
   const { data: notes, isLoading } = useQuery({
     queryKey: ['personalNotes'],
     queryFn:  () => getNotes().then(r => r.data),
     enabled:  unlocked,
+  })
+
+  const { data: dueReminders } = useQuery({
+    queryKey: ['dueReminders'],
+    queryFn:  () => getDueReminders().then(r => r.data),
+    enabled:  unlocked,
+    refetchInterval: 30_000,
   })
 
   // ── Idle timeout — resets on any interaction while unlocked ────────────────
@@ -411,9 +608,15 @@ export default function PersonalNotes({ onIdleRedirect }) {
     return <PinGate onUnlock={() => setUnlocked(true)} />
   }
 
+  const activeNotes    = (notes || []).filter(n => n.status !== 'COMPLETE')
+  const completedNotes = (notes || []).filter(n => n.status === 'COMPLETE')
+  const visibleNotes   = tab === 'active' ? activeNotes : completedNotes
+
+  const nextCheckpoint = dueReminders?.checkpoints?.[0]
+
   return (
     <div className="p-5 sm:p-6">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">My Notes</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">
@@ -431,6 +634,24 @@ export default function PersonalNotes({ onIdleRedirect }) {
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-black/5 p-1 rounded-xl max-w-xs">
+        {[
+          { key: 'active',    label: `Active (${activeNotes.length})` },
+          { key: 'completed', label: `Completed (${completedNotes.length})` },
+        ].map(t => (
+          <button key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors
+              ${tab === t.key
+                ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
+                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+              }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => (
@@ -438,17 +659,21 @@ export default function PersonalNotes({ onIdleRedirect }) {
               rounded-2xl animate-pulse" />
           ))}
         </div>
-      ) : !notes?.length ? (
+      ) : !visibleNotes.length ? (
         <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
           flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm font-semibold text-[var(--text-2)]">No notes yet</p>
+          <p className="text-sm font-semibold text-[var(--text-2)]">
+            {tab === 'active' ? 'No notes yet' : 'No completed tasks yet'}
+          </p>
           <p className="text-xs text-[var(--text-3)] mt-1">
-            Create your first private note — only you can see it
+            {tab === 'active'
+              ? 'Create your first private note — only you can see it'
+              : 'Tasks you complete will show up here'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {notes.map(note => (
+          {visibleNotes.map(note => (
             <NoteCard key={note.id} note={note} onOpen={setOpenNote} />
           ))}
         </div>
@@ -459,6 +684,12 @@ export default function PersonalNotes({ onIdleRedirect }) {
       )}
       {creatingNew && (
         <NoteEditor note={null} onClose={() => setCreatingNew(false)} />
+      )}
+      {nextCheckpoint && !openNote && !creatingNew && (
+        <CheckpointReminderModal
+          checkpoint={nextCheckpoint}
+          onDone={() => {}}
+        />
       )}
     </div>
   )
