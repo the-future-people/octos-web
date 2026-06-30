@@ -29,6 +29,12 @@ export const getWorkload      = () =>
 export const getEODPrediction = () =>
   client.get('/api/v1/analytics/prediction/')
 
+export const downloadBranchStatement = (dateFrom, dateTo) =>
+  client.get('/api/v1/finance/branch-statement/', {
+    params: { date_from: dateFrom, date_to: dateTo },
+    responseType: 'blob',
+  })
+
 export const getJobDetail     = (jobId) =>
   client.get(`/api/v1/jobs/${jobId}/`)
 

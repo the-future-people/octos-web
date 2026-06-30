@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
+import { downloadBranchStatement } from '../../api/bm'
 
 const fmt = (n) =>
   `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -1115,21 +1116,133 @@ function JobLedgerTab() {
   )
 }
 
+// ── Investor Statement Tab ───────────────────────────────────────────────────
+
+function InvestorStatementTab() {
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
+  const [error,    setError]    = useState('')
+
+  const { mutate: doDownload, isPending } = useMutation({
+    mutationFn: () => downloadBranchStatement(dateFrom, dateTo),
+    onSuccess: (res) => {
+      const blob = new Blob([res.data], { type: 'application/pdf' })
+      const url  = window.URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `branch-statement-${dateFrom}-to-${dateTo}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    },
+    onError: (err) => {
+      setError(err.response?.data?.detail || 'Could not generate statement.')
+    },
+  })
+
+  const handleGenerate = () => {
+    setError('')
+    if (!dateFrom || !dateTo) { setError('Select both a start and end date.'); return }
+    if (dateFrom > dateTo)    { setError('Start date must be before end date.'); return }
+    doDownload()
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Investor Statement"
+        subtitle="Generate a presentable financial statement for banks, investors, or partners"
+      />
+
+      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-6 max-w-lg">
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+              From
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+              To
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
+            rounded-lg text-xs text-[var(--red-text)]">
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleGenerate}
+          disabled={isPending}
+          className="w-full py-2.5 bg-[var(--text)] text-white text-sm font-bold
+            rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40
+            flex items-center justify-center gap-2"
+        >
+          {isPending ? (
+            'Generating…'
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Generate & Download Statement
+            </>
+          )}
+        </button>
+
+        <p className="text-[10px] text-[var(--text-3)] mt-4 leading-relaxed">
+          This document includes revenue, job volume, customer growth, and payment
+          breakdown for the selected period. Restricted access — handle as you would
+          any sensitive business document.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS = ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Job Ledger']
 
 export default function Reports() {
+  const { user } = useAuth()
+  const canGenerateStatement = user?.can_generate_branch_statement
+
+  const tabs = canGenerateStatement
+    ? [...TABS, 'Investor Statement']
+    : TABS
+
   const [tab, setTab] = useState('Daily')
 
   const renderTab = () => {
     switch (tab) {
-      case 'Daily':      return <DailyTab />
-      case 'Weekly':     return <WeeklyTab />
-      case 'Monthly':    return <MonthlyTab />
-      case 'Yearly':     return <YearlyTab />
-      case 'Job Ledger': return <JobLedgerTab />
-      default:           return <DailyTab />
+      case 'Daily':              return <DailyTab />
+      case 'Weekly':             return <WeeklyTab />
+      case 'Monthly':            return <MonthlyTab />
+      case 'Yearly':             return <YearlyTab />
+      case 'Job Ledger':         return <JobLedgerTab />
+      case 'Investor Statement': return <InvestorStatementTab />
+      default:                   return <DailyTab />
     }
   }
 
@@ -1139,7 +1252,7 @@ export default function Reports() {
         <h1 className="text-lg font-bold text-[var(--text)]">Reports & Filing</h1>
       </div>
       <div className="flex border-b border-[var(--border)] mb-6 -mx-5 sm:-mx-6 px-5 sm:px-6">
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`py-3 mr-6 text-sm font-bold border-b-2 transition-colors whitespace-nowrap
               ${tab === t ? 'border-[var(--text)] text-[var(--text)]' : 'border-transparent text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
