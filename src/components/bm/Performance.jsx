@@ -297,40 +297,7 @@ export default function Performance() {
 
         </div>
 
-        {/* Walk-in vs Registered */}
-        {summary.total > 0 && (
-          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5">
-            <div className="text-sm font-bold text-[var(--text)] mb-4">Customer Mix</div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-[var(--text-2)]">Walk-in</span>
-                  <span className="text-xs font-mono font-bold text-[var(--text)]">
-                    {summary.walkin} ({Math.round(summary.walkin / summary.total * 100)}%)
-                  </span>
-                </div>
-                <div className="h-2 bg-[var(--bg)] rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round(summary.walkin / summary.total * 100)}%` }} />
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-[var(--text-2)]">Registered</span>
-                  <span className="text-xs font-mono font-bold text-[var(--text)]">
-                    {summary.total - summary.walkin} ({Math.round((summary.total - summary.walkin) / summary.total * 100)}%)
-                  </span>
-                </div>
-                <div className="h-2 bg-[var(--bg)] rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round((summary.total - summary.walkin) / summary.total * 100)}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </>)}
+        </>)}
     </div>
   )
 }

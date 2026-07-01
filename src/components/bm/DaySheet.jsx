@@ -492,6 +492,37 @@ export default function DaySheet() {
               )}
             </div>
           </div>
+
+          {/* Customer Mix — single push-pull bar */}
+          {jobs.total > 0 && (
+            <div className="mt-5 pt-4 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+                  Customer Mix
+                </div>
+                <div className="flex items-center gap-3 text-[10px] font-semibold">
+                  <span className="flex items-center gap-1.5 text-[var(--text-2)]">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                    Registered {jobs.registered} ({Math.round(jobs.registered / jobs.total * 100)}%)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[var(--text-2)]">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                    Walk-in {jobs.walkin} ({Math.round(jobs.walkin / jobs.total * 100)}%)
+                  </span>
+                </div>
+              </div>
+              <div className="h-3 rounded-full overflow-hidden flex w-full bg-[var(--bg)]">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-500"
+                  style={{ width: `${(jobs.registered / jobs.total) * 100}%` }}
+                />
+                <div
+                  className="h-full bg-amber-400 transition-all duration-500"
+                  style={{ width: `${(jobs.walkin / jobs.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
