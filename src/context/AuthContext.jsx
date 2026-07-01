@@ -24,12 +24,17 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const [justLoggedIn, setJustLoggedIn] = useState(false)
+
   const login = (tokens, userData) => {
     localStorage.setItem('access_token',  tokens.access)
     localStorage.setItem('refresh_token', tokens.refresh)
     setUser(userData)
     setLoading(false)
+    setJustLoggedIn(true)
   }
+
+  const clearJustLoggedIn = () => setJustLoggedIn(false)
 
   const logout = () => {
     localStorage.removeItem('access_token')
@@ -42,7 +47,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, getAccessToken }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, getAccessToken, justLoggedIn, clearJustLoggedIn }}>
       {children}
     </AuthContext.Provider>
   )

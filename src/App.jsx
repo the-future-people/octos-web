@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import DailyGreeting from './components/layout/DailyGreeting'
+import PortalPreloader from './components/layout/PortalPreloader'
 import LoginPage from './pages/auth/LoginPage'
 import CashierPortal from './pages/cashier/CashierPortal'
 import BMPortal        from './pages/bm/BMPortal'
@@ -41,7 +42,9 @@ export default function App() {
               path="/bm/*"
               element={
                 <ProtectedRoute allowedRoles={['BRANCH_MANAGER']}>
-                  <BMPortal />
+                  <PortalPreloader>
+                    <BMPortal />
+                  </PortalPreloader>
                 </ProtectedRoute>
               }
             />
