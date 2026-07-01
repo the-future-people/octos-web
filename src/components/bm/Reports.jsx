@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
+import { reportMissingDayDisruption } from '../../api/bm'
 import { downloadBranchStatement } from '../../api/bm'
 
 const fmt = (n) =>
@@ -84,8 +85,184 @@ function EmptyState({ icon, title, subtitle, action }) {
 
 // ── Daily Tab ─────────────────────────────────────────────────────────────────
 
+function buildDailySequence(sheets) {
+  // Build a complete day-by-day sequence for the current month,
+  // filling gaps with ghost entries so missing days are visible.
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const daysInMonth = now.getDate() // only up to today, not future days
+
+  const sheetsByDate = {}
+  sheets.forEach(s => { sheetsByDate[s.date] = s })
+
+  const sequence = []
+  for (let day = daysInMonth; day >= 1; day--) {
+    const d = new Date(year, month, day)
+    const iso = d.toISOString().split('T')[0]
+    const sheet = sheetsByDate[iso]
+    if (sheet) {
+      sequence.push({ type: 'sheet', date: iso, sheet })
+    } else {
+      sequence.push({ type: 'missing', date: iso })
+    }
+  }
+  return sequence
+}
+
+function DisruptionBadge({ sheet }) {
+  if (!sheet.disruption_reason) return null
+  const statusStyle = {
+    PENDING_REVIEW: 'bg-amber-100 text-amber-700',
+    APPROVED:       'bg-emerald-100 text-emerald-700',
+    REJECTED:       'bg-red-100 text-red-700',
+  }[sheet.disruption_status] || 'bg-zinc-100 text-zinc-600'
+
+  const reasonLabel = {
+    POWER_OUTAGE: 'Power Outage', FLOODING: 'Flooding',
+    SECURITY_INCIDENT: 'Security Incident', FORCE_MAJEURE: 'Force Majeure', OTHER: 'Other',
+  }[sheet.disruption_reason] || sheet.disruption_reason
+
+  return (
+    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${statusStyle}`}>
+      {reasonLabel} · {sheet.disruption_status?.replace('_', ' ')}
+    </span>
+  )
+}
+
+function MissingDayCard({ date, onMarkDisrupted }) {
+  const d = new Date(date)
+  return (
+    <div className="bg-[var(--panel)] border border-dashed border-[var(--red-border)] rounded-xl
+      flex items-center gap-4 px-5 py-4">
+      <div className="shrink-0 w-14 text-center opacity-50">
+        <div className="text-[10px] font-bold text-[var(--text-3)] tracking-widest">{d.toLocaleDateString('en-GH',{month:'short'}).toUpperCase()}</div>
+        <div className="text-3xl font-black text-[var(--text)] leading-none">{d.getDate()}</div>
+        <div className="text-[10px] text-[var(--text-3)]">{d.toLocaleDateString('en-GH',{weekday:'short'})}</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-bold text-[var(--red-text)]">
+          No sheet recorded — {d.toLocaleDateString('en-GH',{weekday:'long', day:'numeric', month:'long'})}
+        </div>
+        <div className="text-xs text-[var(--text-3)] mt-0.5">
+          Branch may not have operated this day. Mark as disrupted if this was a genuine non-operating day.
+        </div>
+      </div>
+      <button
+        onClick={() => onMarkDisrupted(date)}
+        className="shrink-0 px-3 py-1.5 text-[10px] font-bold border border-[var(--red-border)]
+          text-[var(--red-text)] rounded-lg hover:bg-[var(--red-bg)] transition-colors">
+        Report Disruption
+      </button>
+    </div>
+  )
+}
+
+
+function MarkDisruptedModal({ date, onClose }) {
+  const queryClient = useQueryClient()
+  const [reason,   setReason]   = useState('POWER_OUTAGE')
+  const [evidence, setEvidence] = useState('')
+  const [notes,    setNotes]    = useState('')
+  const [error,    setError]    = useState('')
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => reportMissingDayDisruption({ date, reason, evidence, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sheets-monthly'] })
+      onClose()
+    },
+    onError: (err) => setError(err.response?.data?.detail || 'Could not submit disruption report.'),
+  })
+
+  const handleSubmit = () => {
+    setError('')
+    if (!evidence.trim()) { setError('Evidence is required — a URL, reference number, or provable source.'); return }
+    mutate()
+  }
+
+  const REASONS = [
+    { value: 'POWER_OUTAGE',      label: 'Power Outage' },
+    { value: 'FLOODING',          label: 'Flooding' },
+    { value: 'SECURITY_INCIDENT', label: 'Security Incident' },
+    { value: 'FORCE_MAJEURE',     label: 'Force Majeure' },
+    { value: 'OTHER',             label: 'Other' },
+  ]
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <h3 className="text-lg font-black text-[var(--text)] mb-1">Report Disruption</h3>
+        <p className="text-xs text-[var(--text-3)] mb-5">
+          {new Date(date).toLocaleDateString('en-GH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          — this will be reviewed by the business owner before it's approved.
+        </p>
+
+        <div className="mb-4">
+          <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+            Reason
+          </label>
+          <select value={reason} onChange={e => setReason(e.target.value)}
+            className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+              rounded-lg text-sm outline-none focus:border-[var(--border-dark)]">
+            {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+            Evidence <span className="text-[var(--red-text)]">*</span>
+          </label>
+          <input
+            value={evidence}
+            onChange={e => setEvidence(e.target.value)}
+            placeholder="News link, ECG reference number, photo URL, etc."
+            className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
+              rounded-lg text-sm outline-none focus:border-[var(--border-dark)]"
+          />
+          <p className="text-[10px] text-[var(--text-3)] mt-1">
+            Required — provide something provable. This will be verified before approval.
+          </p>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
+            Notes (optional)
+          </label>
+          <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Additional context…"
+            className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
+              rounded-lg outline-none focus:border-[var(--border-dark)] resize-none" />
+        </div>
+
+        {error && (
+          <div className="mb-4 px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
+            rounded-lg text-xs text-[var(--red-text)]">{error}</div>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 text-sm font-semibold text-[var(--text-2)] border
+              border-[var(--border)] rounded-xl hover:border-[var(--border-dark)] transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={isPending}
+            className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold
+              rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
+            {isPending ? 'Submitting…' : 'Submit for Review'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+
 function DailyTab() {
   const [expanded, setExpanded] = useState(null)
+  const [disruptingDate, setDisruptingDate] = useState(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['sheets-monthly'],
     queryFn: () => getSheets({ period: 'month' }).then(r => r.data),
@@ -94,57 +271,88 @@ function DailyTab() {
   const sheets = Array.isArray(data) ? data : (data?.results || [])
   const monthName = new Date().toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
 
+  const sequence = buildDailySequence(sheets)
+
   if (isLoading) return <div className="space-y-2">{[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}</div>
 
   return (
     <div>
-      <SectionHeader title="Daily Sheets" subtitle={`Closed sheets for ${monthName} — read-only records`} />
-      {sheets.length === 0 ? (
-        <EmptyState icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>} title="No sheets this month" subtitle="Closed daily sheets will appear here" />
-      ) : (
-        <div className="space-y-2">
-          {sheets.map(sheet => {
-            const d      = new Date(sheet.date)
-            const total  = parseFloat(sheet.total_cash||0) + parseFloat(sheet.total_momo||0) + parseFloat(sheet.total_pos||0)
-            const isOpen = expanded === sheet.id
+      <SectionHeader title="Daily Sheets" subtitle={`Every day this month — ${monthName}, including gaps`} />
+      <div className="space-y-2">
+        {sequence.map(item => {
+          if (item.type === 'missing') {
             return (
-              <div key={sheet.id} className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-                <button onClick={() => setExpanded(isOpen ? null : sheet.id)}
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[var(--bg)] transition-colors text-left">
-                  <div className="shrink-0 w-14 text-center">
-                    <div className="text-[10px] font-bold text-[var(--text-3)] tracking-widest">{d.toLocaleDateString('en-GH',{month:'short'}).toUpperCase()}</div>
-                    <div className="text-3xl font-black text-[var(--text)] leading-none">{d.getDate()}</div>
-                    <div className="text-[10px] text-[var(--text-3)]">{d.toLocaleDateString('en-GH',{weekday:'short'})}</div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-[var(--text)]">{d.toLocaleDateString('en-GH',{weekday:'long'})} · {d.getDate()} {d.toLocaleDateString('en-GH',{month:'long',year:'numeric'})}</div>
-                    <div className="text-xs text-[var(--text-3)] mt-0.5">
-                      <span className="font-mono font-semibold">{sheet.total_jobs_created ?? '—'} jobs</span>
-                      <span className="mx-2">·</span>
-                      <span className="font-mono font-bold text-[var(--text)]">{fmt(total)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_BADGE[sheet.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{statusLabel(sheet.status)}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`text-[var(--text-3)] transition-transform ${isOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
-                  </div>
-                </button>
-                {isOpen && (
-                  <div className="px-5 pb-4 border-t border-[var(--border)]">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                      {[{label:'Cash',value:fmt(sheet.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(sheet.total_momo),color:'text-amber-600'},{label:'POS',value:fmt(sheet.total_pos),color:'text-blue-600'},{label:'Net in Till',value:fmt(sheet.net_cash_in_till),color:'text-[var(--text)]'}].map(c=>(
-                        <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
-                          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                          <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <MissingDayCard key={item.date} date={item.date}
+                onMarkDisrupted={setDisruptingDate} />
             )
-          })}
-        </div>
+          }
+
+          const sheet = item.sheet
+          const d      = new Date(sheet.date)
+          const total  = parseFloat(sheet.total_cash||0) + parseFloat(sheet.total_momo||0) + parseFloat(sheet.total_pos||0)
+          const isOpen = expanded === sheet.id
+          const isDisrupted = sheet.is_disrupted
+
+          return (
+            <div key={sheet.id}
+              className={`bg-[var(--panel)] border rounded-xl overflow-hidden
+                ${isDisrupted ? 'border-amber-300' : 'border-[var(--border)]'}`}>
+              <button onClick={() => setExpanded(isOpen ? null : sheet.id)}
+                className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[var(--bg)] transition-colors text-left">
+                <div className="shrink-0 w-14 text-center">
+                  <div className="text-[10px] font-bold text-[var(--text-3)] tracking-widest">{d.toLocaleDateString('en-GH',{month:'short'}).toUpperCase()}</div>
+                  <div className="text-3xl font-black text-[var(--text)] leading-none">{d.getDate()}</div>
+                  <div className="text-[10px] text-[var(--text-3)]">{d.toLocaleDateString('en-GH',{weekday:'short'})}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-[var(--text)]">{d.toLocaleDateString('en-GH',{weekday:'long'})} · {d.getDate()} {d.toLocaleDateString('en-GH',{month:'long',year:'numeric'})}</div>
+                  <div className="text-xs text-[var(--text-3)] mt-0.5">
+                    <span className="font-mono font-semibold">{sheet.total_jobs_created ?? '—'} jobs</span>
+                    <span className="mx-2">·</span>
+                    <span className="font-mono font-bold text-[var(--text)]">{fmt(total)}</span>
+                  </div>
+                  {isDisrupted && (
+                    <div className="mt-1.5"><DisruptionBadge sheet={sheet} /></div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isDisrupted && (
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_BADGE[sheet.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{statusLabel(sheet.status)}</span>
+                  )}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`text-[var(--text-3)] transition-transform ${isOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </button>
+              {isOpen && (
+                <div className="px-5 pb-4 border-t border-[var(--border)]">
+                  {isDisrupted && (
+                    <div className="mt-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                      <div className="font-bold mb-1">Disruption reported</div>
+                      {sheet.disruption_notes && <div className="mb-1">{sheet.disruption_notes}</div>}
+                      <div className="text-[10px] text-amber-600">Evidence: {sheet.disruption_evidence}</div>
+                      {sheet.disruption_status === 'REJECTED' && sheet.disruption_rejection_reason && (
+                        <div className="mt-1.5 text-[10px] text-[var(--red-text)]">
+                          Rejected: {sheet.disruption_rejection_reason}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    {[{label:'Cash',value:fmt(sheet.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(sheet.total_momo),color:'text-amber-600'},{label:'POS',value:fmt(sheet.total_pos),color:'text-blue-600'},{label:'Net in Till',value:fmt(sheet.net_cash_in_till),color:'text-[var(--text)]'}].map(c=>(
+                      <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
+                        <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
+                        <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {disruptingDate && (
+        <MarkDisruptedModal date={disruptingDate} onClose={() => setDisruptingDate(null)} />
       )}
     </div>
   )

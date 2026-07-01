@@ -35,6 +35,20 @@ export const downloadBranchStatement = (dateFrom, dateTo) =>
     responseType: 'blob',
   })
 
+export const markSheetDisrupted = (sheetId, payload) =>
+  client.post(`/api/v1/finance/sheets/${sheetId}/mark-disrupted/`, payload)
+
+export const reportMissingDayDisruption = (payload) =>
+  client.post('/api/v1/finance/sheets/report-disruption/', payload)
+
+export const approveDisruption = (sheetId) =>
+  client.post(`/api/v1/finance/sheets/${sheetId}/approve-disruption/`)
+
+export const rejectDisruption = (sheetId, rejectionReason) =>
+  client.post(`/api/v1/finance/sheets/${sheetId}/reject-disruption/`, {
+    rejection_reason: rejectionReason,
+  })
+
 export const getJobDetail     = (jobId) =>
   client.get(`/api/v1/jobs/${jobId}/`)
 
