@@ -9,7 +9,8 @@ import { useAuth } from '../../context/AuthContext'
 import { getTodaySummary, getLockStatus, getWorkload } from '../../api/bm'
 import client from '../../api/client'
 
-const MAX_WAIT_MS = 2000
+const MIN_WAIT_MS = 2500
+const MAX_WAIT_MS = 5000
 
 export default function PortalPreloader({ children }) {
   const { justLoggedIn, clearJustLoggedIn, user } = useAuth()
@@ -19,12 +20,20 @@ export default function PortalPreloader({ children }) {
   useEffect(() => {
     if (!justLoggedIn) return
 
+    const startedAt = Date.now()
     let settled = false
+
     const finish = () => {
       if (settled) return
       settled = true
       setReady(true)
       clearJustLoggedIn()
+    }
+
+    const finishNoEarlierThanMin = () => {
+      const elapsed = Date.now() - startedAt
+      const remaining = Math.max(MIN_WAIT_MS - elapsed, 0)
+      setTimeout(finish, remaining)
     }
 
     const capTimer = setTimeout(finish, MAX_WAIT_MS)
@@ -56,7 +65,7 @@ export default function PortalPreloader({ children }) {
       }),
     ]
 
-    Promise.all(prefetches.map(p => p.catch(() => null))).then(finish)
+    Promise.all(prefetches.map(p => p.catch(() => null))).then(finishNoEarlierThanMin)
 
     return () => clearTimeout(capTimer)
   }, [justLoggedIn])
