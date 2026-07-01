@@ -34,6 +34,7 @@ const STATUS_BADGE = {
 const statusLabel = (s) => ({ AUTO_CLOSED: 'Auto-closed' }[s] || (s?.charAt(0) + s?.slice(1).toLowerCase()))
 
 const getSheets      = (params)            => client.get('/api/v1/finance/sheets/', { params })
+const getSheetSummary = (id)               => client.get(`/api/v1/finance/sheets/${id}/summary/`)
 const prepareWeekly  = ()                  => client.post('/api/v1/finance/weekly/prepare/')
 const submitWeekly   = (id, notes)         => client.post(`/api/v1/finance/weekly/${id}/submit/`, { bm_notes: notes })
 const getMonthlyClose= (month, year)       => client.get(`/api/v1/finance/monthly-close/?month=${month}&year=${year}`)
@@ -259,6 +260,78 @@ function MarkDisruptedModal({ date, onClose }) {
 }
 
 
+function DailyExpandedDetail({ sheetId, sheet, isDisrupted }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['sheet-summary', sheetId],
+    queryFn:  () => getSheetSummary(sheetId).then(r => r.data),
+    staleTime: 120_000,
+  })
+
+  const inventory = data?.inventory || []
+  const consumed = inventory.filter(i => parseFloat(i.consumed || 0) > 0)
+  const jobs = data?.jobs || {}
+  const total = jobs.total || 0
+  const registeredPct = total > 0 ? Math.round((jobs.registered / total) * 100) : 0
+  const walkinPct = total > 0 ? 100 - registeredPct : 0
+
+  return (
+    <div className="px-5 pb-4 border-t border-[var(--border)]">
+      {isDisrupted && (
+        <div className="mt-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+          <div className="font-bold mb-1">Disruption reported</div>
+          {sheet.disruption_notes && <div className="mb-1">{sheet.disruption_notes}</div>}
+          <div className="text-[10px] text-amber-600">Evidence: {sheet.disruption_evidence}</div>
+          {sheet.disruption_status === 'REJECTED' && sheet.disruption_rejection_reason && (
+            <div className="mt-1.5 text-[10px] text-[var(--red-text)]">
+              Rejected: {sheet.disruption_rejection_reason}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        {[{label:'Cash',value:fmt(sheet.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(sheet.total_momo),color:'text-amber-600'},{label:'POS',value:fmt(sheet.total_pos),color:'text-blue-600'},{label:'Net in Till',value:fmt(sheet.net_cash_in_till),color:'text-[var(--text)]'}].map(c=>(
+          <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
+            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
+            <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {!isLoading && total > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Customer Mix</span>
+            <span className="text-[10px] text-[var(--text-3)]">
+              Registered {registeredPct}% · Walk-in {walkinPct}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden flex w-full bg-[var(--bg)]">
+            <div className="h-full bg-blue-500" style={{ width: `${registeredPct}%` }} />
+            <div className="h-full bg-amber-400" style={{ width: `${walkinPct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {!isLoading && consumed.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+            Consumed ({consumed.length} items)
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {consumed.map((item, i) => (
+              <div key={i} className="bg-[var(--bg)] rounded-lg px-3 py-2">
+                <div className="text-xs font-semibold text-[var(--text)] truncate">{item.consumable}</div>
+                <div className="text-[10px] text-[var(--text-3)] mt-0.5">-{item.consumed} {item.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 function DailyTab() {
   const [expanded, setExpanded] = useState(null)
   const [disruptingDate, setDisruptingDate] = useState(null)
@@ -323,28 +396,7 @@ function DailyTab() {
                 </div>
               </button>
               {isOpen && (
-                <div className="px-5 pb-4 border-t border-[var(--border)]">
-                  {isDisrupted && (
-                    <div className="mt-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                      <div className="font-bold mb-1">Disruption reported</div>
-                      {sheet.disruption_notes && <div className="mb-1">{sheet.disruption_notes}</div>}
-                      <div className="text-[10px] text-amber-600">Evidence: {sheet.disruption_evidence}</div>
-                      {sheet.disruption_status === 'REJECTED' && sheet.disruption_rejection_reason && (
-                        <div className="mt-1.5 text-[10px] text-[var(--red-text)]">
-                          Rejected: {sheet.disruption_rejection_reason}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                    {[{label:'Cash',value:fmt(sheet.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(sheet.total_momo),color:'text-amber-600'},{label:'POS',value:fmt(sheet.total_pos),color:'text-blue-600'},{label:'Net in Till',value:fmt(sheet.net_cash_in_till),color:'text-[var(--text)]'}].map(c=>(
-                      <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
-                        <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                        <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <DailyExpandedDetail sheetId={sheet.id} sheet={sheet} isDisrupted={isDisrupted} />
               )}
             </div>
           )
@@ -360,6 +412,94 @@ function DailyTab() {
 
 // ── Weekly Tab ────────────────────────────────────────────────────────────────
 
+function isWeeklyFilingWindowOpen() {
+  const now = new Date()
+  const isSaturday = now.getDay() === 6
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const isMonthEnd = now.getDate() === lastDayOfMonth
+  const isAfter5pm = now.getHours() >= 17
+  return (isSaturday || isMonthEnd) && isAfter5pm
+}
+
+function WeeklyExpandedDetail({ report }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['weekly-detail', report.id],
+    queryFn:  () => client.get(`/api/v1/finance/weekly/${report.id}/`).then(r => r.data),
+    staleTime: 120_000,
+  })
+
+  const r = data || report
+  const inventory = r.inventory_snapshot?.items || []
+  const consumed = inventory.filter(i => parseFloat(i.consumed || 0) > 0)
+  const topServices = r.top_services || []
+  const registered = r.total_jobs_registered || 0
+  const walkin = r.total_jobs_walkin || 0
+  const total = registered + walkin
+  const registeredPct = total > 0 ? Math.round((registered / total) * 100) : 0
+  const walkinPct = total > 0 ? 100 - registeredPct : 0
+
+  return (
+    <div className="px-5 pb-4 border-t border-[var(--border)]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        {[{label:'Total',value:fmt(report.total_collected),color:'text-[var(--text)]'},{label:'Cash',value:fmt(report.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(report.total_momo),color:'text-amber-600'},{label:'Jobs',value:report.total_jobs_created ?? '—',color:'text-blue-600'}].map(c=>(
+          <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
+            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
+            <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {!isLoading && total > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">Customer Mix</span>
+            <span className="text-[10px] text-[var(--text-3)]">
+              Registered {registeredPct}% · Walk-in {walkinPct}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden flex w-full bg-[var(--bg)]">
+            <div className="h-full bg-blue-500" style={{ width: `${registeredPct}%` }} />
+            <div className="h-full bg-amber-400" style={{ width: `${walkinPct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {!isLoading && topServices.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+            Top Services
+          </div>
+          <div className="space-y-1.5">
+            {topServices.map((s, i) => (
+              <div key={i} className="flex items-center justify-between bg-[var(--bg)] rounded-lg px-3 py-2">
+                <span className="text-xs font-semibold text-[var(--text)] truncate">{s.name}</span>
+                <span className="text-xs font-mono font-bold text-[var(--text)] shrink-0 ml-2">{fmt(s.revenue)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isLoading && consumed.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+            Consumed ({consumed.length} items)
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {consumed.map((item, i) => (
+              <div key={i} className="bg-[var(--bg)] rounded-lg px-3 py-2">
+                <div className="text-xs font-semibold text-[var(--text)] truncate">{item.consumable}</div>
+                <div className="text-[10px] text-[var(--text-3)] mt-0.5">-{item.consumed} {item.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 function WeeklyTab() {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(null)
@@ -367,6 +507,7 @@ function WeeklyTab() {
   const [notesText, setNotesText] = useState('')
   const [submitId, setSubmitId] = useState(null)
   const [submitNotes, setSubmitNotes] = useState('')
+  const filingOpen = isWeeklyFilingWindowOpen()
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ['weekly-reports'],
@@ -404,10 +545,18 @@ function WeeklyTab() {
   return (
     <div>
       <SectionHeader title="Weekly Filing" subtitle="Monday – Saturday consolidated operations report"
-        action={<button onClick={() => prepareMut.mutate()} disabled={prepareMut.isPending} className="px-4 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{prepareMut.isPending ? 'Preparing…' : 'Prepare This Week'}</button>}
+        action={filingOpen && (
+          <button onClick={() => prepareMut.mutate()} disabled={prepareMut.isPending} className="px-4 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{prepareMut.isPending ? 'Preparing…' : 'Prepare This Week'}</button>
+        )}
       />
 
-      {!draft ? (
+      {!filingOpen ? (
+        <EmptyState
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+          title="Weekly filing isn't open yet"
+          subtitle="Filing opens at 5pm on Saturday, or on the last day of the month if it falls earlier in the week"
+        />
+      ) : !draft ? (
         <EmptyState
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
           title="No filing for this week"
