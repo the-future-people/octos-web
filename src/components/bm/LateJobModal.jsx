@@ -1,32 +1,20 @@
 // src/components/bm/LateJobModal.jsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, getCustomers } from '../../api/bm'
+import { getServices, calculatePrice, getBulkPricing, createLateJob, getCustomers } from '../../api/bm'
+import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
-import client from '../../api/client'
+import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toFixed(2)}`
 }
 
-function normalisePhone(val) {
-  if (!val) return val
-  val = val.trim().replace(/[\s\-().]/g, '')
-  if (val.startsWith('+233')) return '0' + val.slice(4)
-  if (val.startsWith('233') && val.length >= 12) return '0' + val.slice(3)
-  return val
-}
-
-const THEME = {
-  accent: 'bg-amber-500',
-  tab:    'bg-amber-500',
-  tint:   'bg-amber-50',
-}
-
 const JOB_TYPE_THEME = {
-  INSTANT:    { accent: 'bg-amber-600',  tab: 'bg-amber-600',  tint: 'bg-amber-50'   },
-  PRODUCTION: { accent: 'bg-amber-700',  tab: 'bg-amber-700',  tint: 'bg-amber-50'   },
-  DESIGN:     { accent: 'bg-amber-800',  tab: 'bg-amber-800',  tint: 'bg-amber-50'   },
+  INSTANT:    { accent: 'bg-rose-700', tab: 'bg-rose-700', tint: 'bg-rose-50' },
+  PRODUCTION: { accent: 'bg-rose-800', tab: 'bg-rose-800', tint: 'bg-rose-50' },
+  DESIGN:     { accent: 'bg-rose-900', tab: 'bg-rose-900', tint: 'bg-rose-50' },
 }
 
 export default function LateJobModal({ onClose, onSuccess }) {
@@ -39,12 +27,25 @@ export default function LateJobModal({ onClose, onSuccess }) {
   const [customer,      setCustomer]      = useState(null)
   const [custSearch,    setCustSearch]    = useState('')
   const [reason,        setReason]        = useState('')
+  const [cashTendered,  setCashTendered]  = useState('')
   const [error,         setError]         = useState('')
+  const [successJob,    setSuccessJob]    = useState(null)
   const [selected,      setSelected]      = useState(null)
   const [selQty,        setSelQty]        = useState(1)
   const [selPages,      setSelPages]      = useState(1)
   const [selRingSize,   setSelRingSize]   = useState(null)
   const [selOutputMode, setSelOutputMode] = useState(null)
+
+  const [debouncedQty,   setDebouncedQty]   = useState(1)
+  const [debouncedPages, setDebouncedPages] = useState(1)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQty(selQty), 400)
+    return () => clearTimeout(t)
+  }, [selQty])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPages(selPages), 400)
+    return () => clearTimeout(t)
+  }, [selPages])
 
   const isBinding  = (s) => s?.name?.toLowerCase().includes('binding')
   const isPassport = (s) => s?.name?.toLowerCase().includes('passport')
@@ -56,25 +57,85 @@ export default function LateJobModal({ onClose, onSuccess }) {
     staleTime: 60_000,
   })
 
-  const { data: selPrice } = useQuery({
-    queryKey: ['selPrice', selected?.id, selQty, selPages, selRingSize, selOutputMode],
+  const branchId = user?.branch || 2
+  const { data: bulkPricing = {} } = useQuery({
+    queryKey: ['bulkPricing', branchId],
+    queryFn:  () => getBulkPricing(branchId).then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const needsNetworkPrice = !!(selRingSize || selOutputMode)
+
+  const localPrice = useMemo(() => {
+    if (!selected || needsNetworkPrice) return null
+    const rule = bulkPricing[selected.id] || bulkPricing[String(selected.id)]
+    if (!rule) return null
+
+    const base       = parseFloat(rule.base_price)
+    const multiplier = parseFloat(rule.color_multiplier)
+    const unit       = (rule.unit || '').toUpperCase().replace('PER_', '')
+
+    let total
+    if (['COPY', 'PIECE', 'PAGE', 'SHEET'].includes(unit)) {
+      total = base * debouncedPages * debouncedQty
+    } else if (['SQFT', 'SQCM', 'SQM'].includes(unit)) {
+      total = base * multiplier * debouncedQty
+    } else if (unit === 'JOB') {
+      total = base * multiplier
+    } else {
+      total = base * debouncedPages * debouncedQty
+    }
+    return { total: total.toFixed(2) }
+  }, [selected, bulkPricing, debouncedQty, debouncedPages, needsNetworkPrice])
+
+  const { data: networkPrice } = useQuery({
+    queryKey: ['selPrice', selected?.id, debouncedQty, debouncedPages, selRingSize, selOutputMode],
     queryFn: () => calculatePrice({
       service:  selected.id,
-      branch:   user?.branch || 2,
-      quantity: selQty,
-      pages:    selPages,
+      branch:   branchId,
+      quantity: debouncedQty,
+      pages:    debouncedPages,
       ...(selRingSize   ? { ring_size:   selRingSize   } : {}),
       ...(selOutputMode ? { output_mode: selOutputMode } : {}),
     }).then(r => r.data),
-    enabled: !!selected,
+    enabled: !!selected && needsNetworkPrice,
     staleTime: 3_000,
   })
+
+  const selPrice = needsNetworkPrice ? networkPrice : localPrice
+
+  const SERVICE_ALIASES = [
+    { patterns: ['black', 'blk', 'bw', 'b&w', 'mono', 'monochrome', 'grayscale'], resolves: 'b&w' },
+    { patterns: ['colour', 'color', 'col', 'clr'],                                 resolves: 'colour' },
+    { patterns: ['print'],                                                          resolves: 'print' },
+    { patterns: ['copy', 'cop', 'copi'],                                            resolves: 'cop'   },
+    { patterns: ['bind', 'ring'],                                                   resolves: 'bind'  },
+    { patterns: ['passport', 'pass', 'pas'],                                        resolves: 'passport' },
+    { patterns: ['laminate', 'lam'],                                                resolves: 'laminat' },
+  ]
+
+  const resolveToken = (tok) => {
+    for (const { patterns, resolves } of SERVICE_ALIASES) {
+      if (patterns.some(p => p.startsWith(tok) || tok.startsWith(p))) return resolves
+    }
+    return tok
+  }
+
+  const matchesSearch = (name, query) => {
+    if (!query) return true
+    const target = name.toLowerCase()
+    const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    return tokens.every(tok => {
+      const resolved = resolveToken(tok)
+      return target.includes(tok) || target.includes(resolved)
+    })
+  }
 
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
       .filter(s => s.is_active && s.category === jobType)
-      .filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()))
+      .filter(s => matchesSearch(s.name, search))
       .forEach(s => {
         const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
         if (!groups[key]) groups[key] = []
@@ -85,7 +146,7 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
   const { data: custResults = [] } = useQuery({
     queryKey: ['custLookup', custSearch],
-    queryFn:  () => getCustomers({ search: normalisePhone(custSearch), page_size: 5 }).then(r => {
+    queryFn:  () => getCustomers({ search: custSearch.trim(), page_size: 5 }).then(r => {
       const d = r.data
       return Array.isArray(d) ? d : (d?.results || [])
     }),
@@ -119,22 +180,20 @@ export default function LateJobModal({ onClose, onSuccess }) {
   const cartTotal = cart.reduce((s, i) => s + parseFloat(i._price || 0), 0)
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (payload) => client.post('/api/v1/jobs/late/', payload),
+    mutationFn: (payload) => createLateJob(payload),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['jobStats']     })
-      queryClient.invalidateQueries({ queryKey: ['recentJobs']   })
-      queryClient.invalidateQueries({ queryKey: ['todaySummary'] })
-      onSuccess?.(res.data)
-      onClose()
+      invalidateAfterJobCreated(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
+      setSuccessJob(res.data?.job_number || res.data?.id || '—')
     },
     onError: (err) => {
       const d = err.response?.data
-      if (!d)              { setError('Failed to create job.'); return }
+      if (!d) { setError('Failed to record job.'); return }
       if (typeof d === 'string') { setError(d); return }
-      if (d.detail)        { setError(Array.isArray(d.detail) ? d.detail.join(' · ') : d.detail); return }
+      if (d.detail) { setError(d.detail); return }
       if (d.non_field_errors) { setError(Array.isArray(d.non_field_errors) ? d.non_field_errors[0] : d.non_field_errors); return }
       const first = Object.values(d).flat().find(v => typeof v === 'string')
-      setError(first || 'Failed to create late job.')
+      setError(first || 'Failed to record job.')
     },
   })
 
@@ -145,11 +204,12 @@ export default function LateJobModal({ onClose, onSuccess }) {
     if (!reason.trim())     { setError('Reason is required — this record is audited by HQ.'); return }
 
     const payload = {
-      job_type:             jobType,
-      branch:               user?.branch || 2,
+      job_type:            jobType,
+      branch:              user?.branch || 2,
       intake_channel:       'WALK_IN',
       deposit_percentage:   100,
       post_closing_reason:  reason.trim(),
+      ...(cashTendered ? { cash_tendered: cashTendered } : {}),
       line_items: cart.map(item => ({
         service:     item.service.id,
         quantity:    item.quantity,
@@ -164,32 +224,32 @@ export default function LateJobModal({ onClose, onSuccess }) {
     mutate(payload)
   }
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 animate-fadeIn"
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col
-        overflow-hidden animate-slideUp bg-amber-50 border-2 border-amber-300">
+  const modal = createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
+      <div className={`rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col
+        overflow-hidden animate-slideUp transition-colors duration-300 ${theme.tint}
+        border-2 border-rose-300`}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-amber-200 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-rose-200 shrink-0">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-amber-500 text-lg">⏰</span>
-              <div className="font-bold text-lg text-amber-900">Record Late Job</div>
+              <span className="text-rose-500 text-lg">⏰</span>
+              <div className="font-bold text-lg text-rose-900">Record Late Job</div>
             </div>
-            <div className="text-xs text-amber-600 mt-0.5">Post-closing · audited by HQ</div>
+            <div className="text-xs text-rose-600 mt-0.5">Post-closing · audited by HQ</div>
           </div>
           <button onClick={onClose}
             className="w-7 h-7 flex items-center justify-center rounded-full
-              hover:bg-amber-200 text-amber-600 transition-colors text-lg">✕
+              hover:bg-rose-200 text-rose-600 transition-colors text-lg">✕
           </button>
         </div>
 
         {/* Warning banner */}
-        <div className="mx-6 mt-4 px-4 py-3 bg-amber-100 border border-amber-300
+        <div className="mx-6 mt-4 px-4 py-3 bg-rose-100 border border-rose-300
           rounded-xl flex items-start gap-2.5 shrink-0">
-          <span className="text-amber-500 shrink-0 mt-0.5">⚠</span>
-          <div className="text-xs text-amber-800 leading-relaxed">
+          <span className="text-rose-500 shrink-0 mt-0.5">⚠</span>
+          <div className="text-xs text-rose-800 leading-relaxed">
             Shift has ended. This job is flagged as post-closing and logged against your account.
             If the cashier has signed off, the job will be held — you keep the cash tonight
             and hand over to the cashier tomorrow morning.
@@ -198,14 +258,14 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
         {/* Job type tabs */}
         <div className="px-6 pt-4 shrink-0">
-          <div className="grid grid-cols-3 gap-1 bg-amber-200/50 p-1 rounded-xl">
+          <div className="grid grid-cols-3 gap-1 bg-rose-200/50 p-1 rounded-xl">
             {['INSTANT', 'PRODUCTION', 'DESIGN'].map(t => (
               <button key={t}
                 onClick={() => { setJobType(t); setCart([]); setSelected(null) }}
                 className={`py-2 text-sm font-bold rounded-lg transition-colors
                   ${jobType === t
                     ? `${JOB_TYPE_THEME[t].tab} text-white shadow-sm`
-                    : 'text-amber-700 hover:text-amber-900'
+                    : 'text-rose-700 hover:text-rose-900'
                   }`}>
                 {t.charAt(0) + t.slice(1).toLowerCase()}
               </button>
@@ -216,18 +276,20 @@ export default function LateJobModal({ onClose, onSuccess }) {
         {/* Customer input */}
         <div className="px-6 pt-3 shrink-0">
           <div className="relative">
-            <input type="text" value={custSearch}
+            <input
+              type="text"
+              value={custSearch}
               onChange={e => { setCustSearch(e.target.value); setCustomer(null) }}
               placeholder="Whose job is this? (leave blank for walk-in)"
               className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
                 ${customer
                   ? 'bg-green-50 border-green-300 text-green-800 font-semibold'
-                  : 'bg-white/70 border-amber-200 text-amber-800 placeholder-amber-400 focus:border-amber-400'
+                  : 'bg-white/70 border-rose-200 text-rose-800 placeholder-rose-400 focus:border-rose-400'
                 }`}
             />
             {custSearch && (
               <button onClick={() => { setCustSearch(''); setCustomer(null) }}
-                className="absolute right-3 top-2.5 text-amber-400 hover:text-amber-600 text-sm">✕</button>
+                className="absolute right-3 top-2.5 text-rose-400 hover:text-rose-600 text-sm">✕</button>
             )}
             {custResults.length > 0 && !customer && (
               <div className="absolute top-11 left-0 right-0 bg-[var(--panel)]
@@ -257,28 +319,28 @@ export default function LateJobModal({ onClose, onSuccess }) {
         <div className="flex flex-1 overflow-hidden mt-3 gap-0">
 
           {/* Left — services */}
-          <div className="flex-1 flex flex-col overflow-hidden px-6 border-r border-amber-200">
+          <div className="flex-1 flex flex-col overflow-hidden px-6 border-r border-rose-200">
             <input type="text" value={search}
               onChange={e => { setSearch(e.target.value); setSelected(null) }}
               placeholder="Search services..."
-              className="w-full px-3 py-2 text-sm bg-white/60 border border-amber-200
-                rounded-lg outline-none focus:border-amber-400 mb-3 shrink-0"
+              className="w-full px-3 py-2 text-sm bg-white/60 border border-rose-200
+                rounded-lg outline-none focus:border-rose-400 mb-3 shrink-0"
             />
 
             <div className="flex-1 overflow-y-auto space-y-3 pb-2">
               {Object.keys(grouped).length === 0 ? (
-                <div className="text-sm text-amber-600 text-center py-8">No services found</div>
+                <div className="text-sm text-rose-600 text-center py-8">No services found</div>
               ) : (
                 Object.entries(grouped).map(([grp, items]) => (
                   <div key={grp}>
-                    <div className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-1.5">{grp}</div>
+                    <div className="text-[9px] font-bold text-rose-600 uppercase tracking-widest mb-1.5">{grp}</div>
                     <div className="flex flex-wrap gap-1.5">
                       {items.map(s => (
                         <button key={s.id} onClick={() => selectService(s)}
                           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
                             ${selected?.id === s.id
                               ? `${theme.accent} text-white border-transparent`
-                              : 'bg-white/60 border-amber-200 text-amber-800 hover:border-amber-400'
+                              : 'bg-white/60 border-rose-200 text-rose-800 hover:border-rose-400'
                             }`}>
                           {s.name}
                         </button>
@@ -291,17 +353,17 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
             {/* Inline editor */}
             {selected && (
-              <div className="shrink-0 border-t border-amber-200 pt-3 pb-1">
-                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-2">{selected.name}</div>
+              <div className="shrink-0 border-t border-rose-200 pt-3 pb-1">
+                <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-2">{selected.name}</div>
 
                 {isPassport(selected) && (
                   <div className="mb-2">
-                    <label className="text-[9px] font-bold text-amber-600 uppercase tracking-wider block mb-1">Output Mode</label>
+                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Output Mode</label>
                     <div className="flex gap-1.5">
                       {[{label:'Print',value:'PRINT'},{label:'Print + Digital',value:'PRINT_DIGITAL'},{label:'Digital Only',value:'DIGITAL'}].map(opt => (
                         <button key={opt.value} onClick={() => setSelOutputMode(opt.value)}
                           className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-colors
-                            ${selOutputMode === opt.value ? `${theme.accent} text-white border-transparent` : 'bg-white/60 border-amber-200 text-amber-700'}`}>
+                            ${selOutputMode === opt.value ? `${theme.accent} text-white border-transparent` : 'bg-white/60 border-rose-200 text-rose-700'}`}>
                           {opt.label}
                         </button>
                       ))}
@@ -311,12 +373,12 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
                 {isBinding(selected) && (
                   <div className="mb-2">
-                    <label className="text-[9px] font-bold text-amber-600 uppercase tracking-wider block mb-1">Ring Size (mm)</label>
+                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Ring Size (mm)</label>
                     <div className="flex flex-wrap gap-1">
                       {[6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36].map(size => (
                         <button key={size} onClick={() => setSelRingSize(size)}
                           className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors
-                            ${selRingSize === size ? `${theme.accent} text-white border-transparent` : 'bg-white/60 border-amber-200 text-amber-700'}`}>
+                            ${selRingSize === size ? `${theme.accent} text-white border-transparent` : 'bg-white/60 border-rose-200 text-rose-700'}`}>
                           {size}
                         </button>
                       ))}
@@ -326,18 +388,18 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <div>
-                    <label className="text-[9px] font-bold text-amber-600 uppercase tracking-wider block mb-1">
+                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">
                       {isBinding(selected) ? 'Documents' : 'Sheets'}
                     </label>
                     <input type="number" min="1" value={selPages}
                       onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-amber-200 rounded-lg outline-none" />
+                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-amber-600 uppercase tracking-wider block mb-1">Copies</label>
+                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Copies</label>
                     <input type="number" min="1" value={selQty}
                       onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-amber-200 rounded-lg outline-none" />
+                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
                   </div>
                 </div>
 
@@ -359,34 +421,34 @@ export default function LateJobModal({ onClose, onSuccess }) {
             )}
           </div>
 
-          {/* Right — cart + reason */}
+          {/* Right — cart + reason + cash tendered */}
           <div className="w-60 flex flex-col px-4 shrink-0">
             <div className="flex items-center justify-between mb-3 shrink-0">
-              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Cart</span>
-              <span className="text-xs text-amber-600">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">Cart</span>
+              <span className="text-xs text-rose-600">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
             </div>
 
             {cart.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <svg className="w-8 h-8 text-amber-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-rose-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                     d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <p className="text-xs text-amber-600">No items yet</p>
-                <p className="text-[10px] text-amber-500 mt-1">Select a service to begin</p>
+                <p className="text-xs text-rose-600">No items yet</p>
+                <p className="text-[10px] text-rose-500 mt-1">Select a service to begin</p>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto space-y-1.5 pb-2">
                 {cart.map(item => (
                   <div key={item._id}
-                    className="flex items-start justify-between gap-2 px-3 py-2 bg-white/60 border border-amber-200 rounded-lg">
+                    className="flex items-start justify-between gap-2 px-3 py-2 bg-white/60 border border-rose-200 rounded-lg">
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold text-amber-900 truncate leading-tight">{item.service.name}</div>
-                      <div className="text-[10px] text-amber-600 mt-0.5">{item.quantity} × {item.pages}pp</div>
+                      <div className="text-xs font-semibold text-rose-900 truncate leading-tight">{item.service.name}</div>
+                      <div className="text-[10px] text-rose-600 mt-0.5">{item.quantity} × {item.pages}pp</div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="font-mono text-xs font-bold text-amber-800">{fmt(item._price)}</span>
-                      <button onClick={() => removeFromCart(item._id)} className="text-amber-300 hover:text-red-500 transition-colors">
+                      <span className="font-mono text-xs font-bold text-rose-800">{fmt(item._price)}</span>
+                      <button onClick={() => removeFromCart(item._id)} className="text-rose-300 hover:text-red-500 transition-colors">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                         </svg>
@@ -398,23 +460,35 @@ export default function LateJobModal({ onClose, onSuccess }) {
             )}
 
             {cart.length > 0 && (
-              <div className="shrink-0 pt-2 border-t border-amber-200">
+              <div className="shrink-0 pt-2 border-t border-rose-200">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Total</span>
-                  <span className="font-mono font-black text-base text-amber-900">{fmt(cartTotal)}</span>
+                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Total</span>
+                  <span className="font-mono font-black text-base text-rose-900">{fmt(cartTotal)}</span>
                 </div>
               </div>
             )}
 
+            {/* Cash tendered (optional) */}
+            <div className="shrink-0 mt-3 pt-3 border-t border-rose-200">
+              <label className="text-[9px] font-bold text-rose-700 uppercase tracking-wider block mb-1.5">
+                Cash Tendered <span className="text-rose-400 normal-case font-normal">(optional)</span>
+              </label>
+              <input type="number" min="0" step="0.01" value={cashTendered}
+                onChange={e => setCashTendered(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-2 py-2 text-xs bg-white/70 border border-rose-200 rounded-lg
+                  outline-none focus:border-rose-400 text-rose-900 placeholder-rose-400" />
+            </div>
+
             {/* Reason field */}
-            <div className="shrink-0 mt-3 pt-3 border-t border-amber-200">
-              <label className="text-[9px] font-bold text-amber-700 uppercase tracking-wider block mb-1.5">
+            <div className="shrink-0 mt-3 pt-3 border-t border-rose-200">
+              <label className="text-[9px] font-bold text-rose-700 uppercase tracking-wider block mb-1.5">
                 Reason <span className="text-red-500">*</span>
               </label>
               <textarea rows={3} value={reason} onChange={e => setReason(e.target.value)}
                 placeholder="Why is this job recorded after closing? Audited by HQ."
-                className="w-full px-2 py-2 text-xs bg-white/70 border border-amber-200 rounded-lg
-                  outline-none focus:border-amber-400 resize-none text-amber-900 placeholder-amber-400" />
+                className="w-full px-2 py-2 text-xs bg-white/70 border border-rose-200 rounded-lg
+                  outline-none focus:border-rose-400 resize-none text-rose-900 placeholder-rose-400" />
             </div>
           </div>
         </div>
@@ -426,14 +500,14 @@ export default function LateJobModal({ onClose, onSuccess }) {
         )}
 
         {/* Footer */}
-        <div className="px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-amber-200">
+        <div className="px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-rose-200">
           <button onClick={onClose}
-            className="px-4 py-2.5 text-sm font-semibold text-amber-700 hover:text-amber-900 transition-colors">
+            className="px-4 py-2.5 text-sm font-semibold text-rose-700 hover:text-rose-900 transition-colors">
             Cancel
           </button>
           <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
-            className="px-5 py-2.5 bg-amber-500 text-white text-sm font-bold rounded-xl
-              disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center gap-2">
+            className={`px-5 py-2.5 text-white text-sm font-bold rounded-xl
+              disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center gap-2 ${theme.accent}`}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
@@ -442,6 +516,23 @@ export default function LateJobModal({ onClose, onSuccess }) {
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body,
+  )
+
+  return (
+    <>
+      {modal}
+      {successJob && (
+        <JobSuccessOverlay
+          jobNumber={successJob}
+          onDone={() => {
+            setSuccessJob(null)
+            onSuccess?.()
+            onClose()
+          }}
+        />
+      )}
+    </>
   )
 }
