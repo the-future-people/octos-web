@@ -15,6 +15,7 @@ import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModa
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
 import ShiftEndingModal from '../../components/cashier/ShiftEndingModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
+import SignOffSuccessOverlay from '../../components/cashier/SignOffSuccessOverlay'
 import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
 import { getLockStatus } from '../../api/bm'
 
@@ -118,8 +119,16 @@ export default function CashierPortal() {
 
   const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
 
-  // Portal-lock overlay takes precedence over everything else once true
-  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff
+  // Bridges the gap right after wizard success, before the next
+  // shiftStatus poll (30s) confirms is_signed_off=true. The success
+  // overlay shows first; once its countdown finishes, this clears
+  // and showPortalLocked takes over (backed by isSignedOff by then,
+  // either from the poll or because it was already true).
+  const [justSignedOff, setJustSignedOff] = useState(false)
+
+  const showSignOffSuccess = justSignedOff
+  const showPortalLocked = !showSignOffSuccess &&
+    (lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff)
 
   // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
   useEffect(() => {
@@ -297,13 +306,25 @@ export default function CashierPortal() {
       )}
 
       {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF */}
-      {!showPortalLocked && showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
+      {!showPortalLocked && !showSignOffSuccess && showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
         <SignOffWizard
           floatId={floatId}
           expectedCash={expectedCash}
           openingFloat={openingFloat}
           pendingJobs={pendingJobs}
-          onSuccess={() => setShowSignOff(false)}
+          onSuccess={() => {
+            setShowSignOff(false)
+            setJustSignedOff(true)
+          }}
+        />
+      )}
+
+      {/* Sign-off success countdown — actually logs the cashier out
+          when it finishes, matching the "Logging off in X" copy */}
+      {showSignOffSuccess && (
+        <SignOffSuccessOverlay
+          firstName={user?.first_name}
+          onDone={() => logout()}
         />
       )}
 
