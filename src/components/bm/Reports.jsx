@@ -131,8 +131,36 @@ function DisruptionBadge({ sheet }) {
   )
 }
 
-function MissingDayCard({ date, onMarkDisrupted }) {
+function MissingDayCard({ date, holidayName, onMarkDisrupted }) {
   const d = new Date(date)
+  const isSunday = d.getDay() === 0
+
+  // Sunday and declared holidays are expected closures — muted,
+  // no disruption action, distinct from a genuinely unexplained gap.
+  if (isSunday || holidayName) {
+    const label = isSunday
+      ? 'Business Closed — Sunday'
+      : `Business Closed — ${holidayName}`
+    const sub = isSunday
+      ? 'Enjoy your weekend! 🎉'
+      : `Closed today for ${holidayName}.`
+
+    return (
+      <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
+        flex items-center gap-4 px-5 py-4 opacity-70">
+        <div className="shrink-0 w-14 text-center opacity-50">
+          <div className="text-[10px] font-bold text-[var(--text-3)] tracking-widest">{d.toLocaleDateString('en-GH',{month:'short'}).toUpperCase()}</div>
+          <div className="text-3xl font-black text-[var(--text)] leading-none">{d.getDate()}</div>
+          <div className="text-[10px] text-[var(--text-3)]">{d.toLocaleDateString('en-GH',{weekday:'short'})}</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-[var(--text-2)]">{label}</div>
+          <div className="text-xs text-[var(--text-3)] mt-0.5">{sub}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-[var(--panel)] border border-dashed border-[var(--red-border)] rounded-xl
       flex items-center gap-4 px-5 py-4">
@@ -331,6 +359,84 @@ function DailyExpandedDetail({ sheetId, sheet, isDisrupted }) {
   )
 }
 
+function DeclareHolidayInline() {
+  const queryClient = useQueryClient()
+  const [expanded, setExpanded] = useState(false)
+  const [date, setDate] = useState('')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => client.post('/api/v1/finance/holidays/declare/', { date, name }),
+    onSuccess: (res) => {
+      setSuccess(res.data?.detail || 'Holiday declared.')
+      setError('')
+      setDate('')
+      setName('')
+      queryClient.invalidateQueries({ queryKey: ['sheets-monthly'] })
+      setTimeout(() => { setSuccess(''); setExpanded(false) }, 2500)
+    },
+    onError: (err) => {
+      setError(err.response?.data?.detail || 'Could not declare holiday.')
+    },
+  })
+
+  const handleSubmit = () => {
+    setError('')
+    if (!date)         { setError('Select a date.'); return }
+    if (!name.trim())  { setError('Enter a holiday name.'); return }
+    mutate()
+  }
+
+  if (!expanded) {
+    return (
+      <button onClick={() => setExpanded(true)}
+        className="mb-4 flex items-center gap-2 text-xs font-bold text-[var(--text-3)]
+          hover:text-[var(--text)] transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Declare a public holiday
+      </button>
+    )
+  }
+
+  return (
+    <div className="mb-4 bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">
+          Declare Public Holiday
+        </span>
+        <button onClick={() => setExpanded(false)}
+          className="text-[var(--text-3)] hover:text-[var(--text)] transition-colors text-sm">✕</button>
+      </div>
+      <p className="text-[10px] text-[var(--text-3)] mb-3">
+        Declare the actual date the branch will be closed — e.g. if a midweek holiday
+        is observed on Friday instead, declare Friday, not the original date.
+      </p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">Date</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm outline-none focus:border-[var(--border-dark)]" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">Holiday Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Independence Day"
+            className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm outline-none focus:border-[var(--border-dark)]" />
+        </div>
+      </div>
+      {error && <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-lg text-xs text-[var(--red-text)]">{error}</div>}
+      {success && <div className="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700">{success}</div>}
+      <button onClick={handleSubmit} disabled={isPending}
+        className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40">
+        {isPending ? 'Declaring…' : 'Declare Holiday'}
+      </button>
+    </div>
+  )
+}
 
 function DailyTab() {
   const [expanded, setExpanded] = useState(null)
@@ -344,6 +450,14 @@ function DailyTab() {
   const sheets = Array.isArray(data) ? data : (data?.results || [])
   const monthName = new Date().toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
 
+  const { data: holidaysData } = useQuery({
+    queryKey: ['holidays'],
+    queryFn: () => client.get('/api/v1/finance/holidays/').then(r => r.data),
+    staleTime: 300_000,
+  })
+  const holidaysByDate = {}
+  ;(holidaysData || []).forEach(h => { holidaysByDate[h.date] = h.name })
+
   const sequence = buildDailySequence(sheets)
 
   if (isLoading) return <div className="space-y-2">{[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}</div>
@@ -351,11 +465,13 @@ function DailyTab() {
   return (
     <div>
       <SectionHeader title="Daily Sheets" subtitle={`Every day this month — ${monthName}, including gaps`} />
+      <DeclareHolidayInline />
       <div className="space-y-2">
         {sequence.map(item => {
           if (item.type === 'missing') {
             return (
               <MissingDayCard key={item.date} date={item.date}
+                holidayName={holidaysByDate[item.date]}
                 onMarkDisrupted={setDisruptingDate} />
             )
           }

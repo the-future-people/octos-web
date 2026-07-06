@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
 import useBranchSocket from '../../hooks/useBranchSocket'
+import { getLockStatus } from '../../api/bm'
+import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
 import AttendantTopbar     from '../../components/attendant/AttendantTopbar'
 import AttendantOverview   from '../../components/attendant/AttendantOverview'
 import AttendantMyJobs     from '../../components/attendant/AttendantMyJobs'
@@ -80,6 +82,19 @@ export default function AttendantPortal() {
     staleTime: 60_000,
     retry: false,
   })
+
+  // Poll branch lock status — drives the Sunday/holiday/shift-locked overlay.
+  // Attendants have no sign-off action yet, so their lock is purely
+  // time-based: can_create_jobs flips false once job_lock_at passes.
+  const { data: lockData } = useQuery({
+    queryKey: ['lockStatus'],
+    queryFn:  () => getLockStatus().then(r => r.data),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  })
+
+  const isTimeLocked = lockData ? !lockData.can_create_jobs : false
+  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isTimeLocked
 
   const sections = [...new Set(NAV.map(n => n.section))]
 
@@ -245,14 +260,20 @@ export default function AttendantPortal() {
         </div>
       </div>
 
+      {/* Portal lock — Sunday, holiday, or past job_lock_at. Takes
+          priority over everything else on this portal. */}
+      {showPortalLocked && (
+        <PortalLockedOverlay lockData={lockData} isLocked={isTimeLocked} />
+      )}
+
       {/* Modals — lifted to portal level */}
-      {showNewJob && (
+      {!showPortalLocked && showNewJob && (
         <NewJobModal
           onClose={() => setShowNewJob(false)}
           onSuccess={() => setShowNewJob(false)}
         />
       )}
-      {showNewCustomer && (
+      {!showPortalLocked && showNewCustomer && (
         <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
           onSuccess={() => setShowNewCustomer(false)}

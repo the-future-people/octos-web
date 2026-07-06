@@ -15,6 +15,8 @@ import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModa
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
 import ShiftEndingModal from '../../components/cashier/ShiftEndingModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
+import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
+import { getLockStatus } from '../../api/bm'
 
 const TABS = [
   {
@@ -80,6 +82,14 @@ export default function CashierPortal() {
     staleTime: 0,
   })
 
+  // Poll branch lock status — drives the Sunday/holiday/shift-ended overlay
+  const { data: lockData } = useQuery({
+    queryKey: ['lockStatus'],
+    queryFn:  () => getLockStatus().then(r => r.data),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  })
+
   const floatStatus      = shiftData?.float_status
   const floatId          = shiftData?.float_id
   const shouldPrompt     = shiftData?.should_prompt
@@ -107,6 +117,9 @@ export default function CashierPortal() {
   }, [shouldPrompt, shiftPromptShown, minutesRemaining])
 
   const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
+
+  // Portal-lock overlay takes precedence over everything else once true
+  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff
 
   // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
   useEffect(() => {
@@ -251,8 +264,15 @@ export default function CashierPortal() {
 
       {/* ── Modals ── */}
 
+      {/* Portal lock — Sunday, holiday, or shift ended. Takes priority
+          over everything else, including float acknowledgement, since
+          a closed/off day means there's nothing to acknowledge. */}
+      {showPortalLocked && (
+        <PortalLockedOverlay lockData={lockData} isLocked={isSignedOff} />
+      )}
+
       {/* Float acknowledgement — morning, blocks until done */}
-      {showFloatAck && (
+      {!showPortalLocked && showFloatAck && (
         <FloatAcknowledgeModal
           floatId={floatId}
           openingFloat={openingFloat}
@@ -277,7 +297,7 @@ export default function CashierPortal() {
       )}
 
       {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF */}
-      {showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
+      {!showPortalLocked && showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
         <SignOffWizard
           floatId={floatId}
           expectedCash={expectedCash}
