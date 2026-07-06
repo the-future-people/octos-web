@@ -35,3 +35,12 @@ export const markNotificationRead = (id) =>
 
 export const markAllNotificationsRead = () =>
   client.post('/api/v1/notifications/read-all/')
+
+export const getIntakeHeldJobs = () =>
+  client.get('/api/v1/jobs/intake-held/')
+
+export const resolveHandover = (jobId) =>
+  client.post(`/api/v1/jobs/${jobId}/resolve-handover/`)
+
+export const disputeHandover = (jobId) =>
+  client.post(`/api/v1/jobs/${jobId}/dispute-handover/`)

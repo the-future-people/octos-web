@@ -12,6 +12,7 @@ import Receipts from '../../components/cashier/Receipts'
 import TodaysLog from '../../components/cashier/TodaysLog'
 import CreditAccounts from '../../components/cashier/CreditAccounts'
 import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
+import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
 import ShiftEndingModal from '../../components/cashier/ShiftEndingModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
 
@@ -89,6 +90,12 @@ export default function CashierPortal() {
 
   // Show float acknowledge modal — fires on PENDING_ACK (morning)
   const showFloatAck = floatStatus === 'PENDING_ACK' && !!floatId
+
+  // Show intake-held modal — only after float is acknowledged, per
+  // business rule: float comes first (near-certain, daily), intake-held
+  // resolution second (conditional, only when overnight jobs exist).
+  const [intakeHeldPending, setIntakeHeldPending] = useState(true)
+  const showIntakeHeld = !showFloatAck && intakeHeldPending
 
   // Show shift ending warning — fires once when should_prompt first becomes true
   useEffect(() => {
@@ -264,8 +271,13 @@ export default function CashierPortal() {
         />
       )}
 
+      {/* Intake-held handover — only after float ack clears */}
+      {showIntakeHeld && (
+        <IntakeHeldModal onAllResolved={() => setIntakeHeldPending(false)} />
+      )}
+
       {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF */}
-      {showSignOff && !showFloatAck && floatId && !isSignedOff && (
+      {showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
         <SignOffWizard
           floatId={floatId}
           expectedCash={expectedCash}
