@@ -347,6 +347,7 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
   )
 
   const [done, setDone] = useState(false)
+  const [phase, setPhase] = useState('message') // 'message' -> 'countdown'
   const [secondsLeft, setSecondsLeft] = useState(10)
 
   const { mutate, isPending } = useMutation({
@@ -365,17 +366,23 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
     },
   })
 
-  // Countdown drives the single post-sign-off screen — no separate
-  // success overlay. Reaching 0 logs the cashier out for real.
+  // Phase 1: plain success message, held for 5s before the countdown
+  // even appears. Phase 2: countdown from 10, reaching 0 logs out.
   useEffect(() => {
-    if (!done) return
+    if (!done || phase !== 'message') return
+    const t = setTimeout(() => setPhase('countdown'), 5000)
+    return () => clearTimeout(t)
+  }, [done, phase])
+
+  useEffect(() => {
+    if (!done || phase !== 'countdown') return
     if (secondsLeft <= 0) {
       onLogout?.()
       return
     }
     const t = setTimeout(() => setSecondsLeft(s => s - 1), 1000)
     return () => clearTimeout(t)
-  }, [done, secondsLeft, onLogout])
+  }, [done, phase, secondsLeft, onLogout])
 
   const TOTAL_STEPS = 5
 
@@ -401,9 +408,11 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
             Sign Off Successful{firstName ? `, ${firstName}` : ''}!
           </h2>
           <p className="text-sm text-zinc-500 mb-1">Your shift has ended for today.</p>
-          <p className="text-xs text-zinc-400 mt-3">
-            Logging off in <span className="font-bold text-zinc-600">{secondsLeft}</span>…
-          </p>
+          {phase === 'countdown' && (
+            <p className="text-xs text-zinc-400 mt-3">
+              Logging off in <span className="font-bold text-zinc-600">{secondsLeft}</span>…
+            </p>
+          )}
         </div>
       </div>,
       document.body
