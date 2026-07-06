@@ -1,5 +1,5 @@
 // src/components/cashier/SignOffWizard.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
@@ -331,7 +331,7 @@ function ProgressBar({ step, total }) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function SignOffWizard({ floatId, expectedCash, openingFloat, pendingJobs, onSuccess }) {
+export default function SignOffWizard({ floatId, expectedCash, openingFloat, pendingJobs, firstName, onLogout }) {
   const queryClient = useQueryClient()
   const [step,          setStep]          = useState(1)
   const [ackQueue,      setAckQueue]      = useState(false)
@@ -347,6 +347,7 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
   )
 
   const [done, setDone] = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState(10)
 
   const { mutate, isPending } = useMutation({
     mutationFn: () => client.post(`/api/v1/finance/floats/${floatId}/sign-off/`, {
@@ -358,12 +359,23 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shiftStatus'] })
       setDone(true)
-      setTimeout(() => onSuccess?.(), 2500)
     },
     onError: (err) => {
       setError(err.response?.data?.detail || 'Sign-off failed. Please try again.')
     },
   })
+
+  // Countdown drives the single post-sign-off screen — no separate
+  // success overlay. Reaching 0 logs the cashier out for real.
+  useEffect(() => {
+    if (!done) return
+    if (secondsLeft <= 0) {
+      onLogout?.()
+      return
+    }
+    const t = setTimeout(() => setSecondsLeft(s => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [done, secondsLeft, onLogout])
 
   const TOTAL_STEPS = 5
 
@@ -385,9 +397,13 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
-          <h2 className="text-2xl font-black text-zinc-900 mb-2">Shift Complete!</h2>
-          <p className="text-sm text-zinc-500 mb-1">You have successfully signed off.</p>
-          <p className="text-xs text-zinc-400 mt-3">Returning to portal…</p>
+          <h2 className="text-2xl font-black text-zinc-900 mb-2">
+            Sign Off Successful{firstName ? `, ${firstName}` : ''}!
+          </h2>
+          <p className="text-sm text-zinc-500 mb-1">Your shift has ended for today.</p>
+          <p className="text-xs text-zinc-400 mt-3">
+            Logging off in <span className="font-bold text-zinc-600">{secondsLeft}</span>…
+          </p>
         </div>
       </div>,
       document.body
