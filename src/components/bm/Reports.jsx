@@ -455,8 +455,9 @@ function DailyTab() {
     queryFn: () => client.get('/api/v1/finance/holidays/').then(r => r.data),
     staleTime: 300_000,
   })
+  const holidaysList = Array.isArray(holidaysData) ? holidaysData : (holidaysData?.results || [])
   const holidaysByDate = {}
-  ;(holidaysData || []).forEach(h => { holidaysByDate[h.date] = h.name })
+  holidaysList.forEach(h => { holidaysByDate[h.date] = h.name })
 
   const sequence = buildDailySequence(sheets)
 
