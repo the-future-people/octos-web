@@ -624,6 +624,7 @@ function WeeklyTab() {
   const [notesText, setNotesText] = useState('')
   const [submitId, setSubmitId] = useState(null)
   const [submitNotes, setSubmitNotes] = useState('')
+  const [error, setError] = useState('')
   const filingOpen = isWeeklyFilingWindowOpen()
 
   const { data: reports = [], isLoading } = useQuery({
@@ -632,26 +633,43 @@ function WeeklyTab() {
     staleTime: 30_000,
   })
 
-  const prepareMut = useMutation({ 
-    mutationFn: () => prepareWeekly(), 
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['weekly-reports'] }),
-    onError: (err) => console.error('Failed to prepare weekly:', err)
+  const extractError = (err) => {
+    const d = err.response?.data
+    if (!d) return 'Something went wrong. Please try again.'
+    if (typeof d === 'string') return d
+    if (d.detail) return Array.isArray(d.detail) ? d.detail.join(' · ') : d.detail
+    if (d.errors) return Array.isArray(d.errors) ? d.errors.join(' · ') : d.errors
+    const first = Object.values(d).flat().find(v => typeof v === 'string')
+    return first || 'Something went wrong. Please try again.'
+  }
+
+  const prepareMut = useMutation({
+    mutationFn: () => prepareWeekly(),
+    onSuccess: () => {
+      setError('')
+      queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
+    },
+    onError: (err) => setError(extractError(err)),
   })
-  
-  const submitMut = useMutation({ 
-    mutationFn: ({ id, notes }) => submitWeekly(id, notes), 
-    onSuccess: () => { 
+
+  const submitMut = useMutation({
+    mutationFn: ({ id, notes }) => submitWeekly(id, notes),
+    onSuccess: () => {
+      setError('')
       queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
       setSubmitId(null)
       setSubmitNotes('')
     },
-    onError: (err) => console.error('Failed to submit weekly:', err)
+    onError: (err) => setError(extractError(err)),
   })
-  
-  const notesMut = useMutation({ 
-    mutationFn: ({ id, notes }) => client.patch(`/api/v1/finance/weekly/${id}/notes/`, { bm_notes: notes }), 
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['weekly-reports'] }),
-    onError: (err) => console.error('Failed to save notes:', err)
+
+  const notesMut = useMutation({
+    mutationFn: ({ id, notes }) => client.patch(`/api/v1/finance/weekly/${id}/notes/`, { bm_notes: notes }),
+    onSuccess: () => {
+      setError('')
+      queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
+    },
+    onError: (err) => setError(extractError(err)),
   })
 
   if (isLoading) return <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse"/>)}</div>
@@ -666,6 +684,11 @@ function WeeklyTab() {
           <button onClick={() => prepareMut.mutate()} disabled={prepareMut.isPending} className="px-4 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{prepareMut.isPending ? 'Preparing…' : 'Prepare This Week'}</button>
         )}
       />
+
+      {error && (
+        <div className="mb-4 px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
+          rounded-lg text-xs text-[var(--red-text)]">{error}</div>
+      )}
 
       {!filingOpen ? (
         <EmptyState
@@ -767,8 +790,12 @@ function WeeklyTab() {
               <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">Final Notes (optional)</label>
               <textarea rows={3} value={submitNotes} onChange={e => setSubmitNotes(e.target.value)} placeholder="Any final comments for this week…" className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-lg outline-none focus:border-[var(--border-dark)] transition-colors resize-none"/>
             </div>
+            {error && (
+              <div className="mb-4 px-3 py-2.5 bg-[var(--red-bg)] border border-[var(--red-border)]
+                rounded-lg text-xs text-[var(--red-text)]">{error}</div>
+            )}
             <div className="flex gap-3">
-              <button onClick={() => { setSubmitId(null); setSubmitNotes(''); }} className="flex-1 py-2.5 text-sm font-semibold text-[var(--text-2)] border border-[var(--border)] rounded-xl hover:border-[var(--border-dark)] transition-colors">Cancel</button>
+              <button onClick={() => { setSubmitId(null); setSubmitNotes(''); setError('') }} className="flex-1 py-2.5 text-sm font-semibold text-[var(--text-2)] border border-[var(--border)] rounded-xl hover:border-[var(--border-dark)] transition-colors">Cancel</button>
               <button onClick={() => submitMut.mutate({ id: submitId, notes: submitNotes })} disabled={submitMut.isPending} className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{submitMut.isPending ? 'Submitting…' : 'Submit & Lock'}</button>
             </div>
           </div>
