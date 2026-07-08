@@ -48,7 +48,6 @@ export default function BMPortal() {
   const { user, logout } = useAuth()
   useBranchSocket()
   const [activeSection, setActiveSection] = useState('overview')
-  const [activeSection, setActiveSection] = useState('overview')
   const [mobileOpen,    setMobileOpen]    = useState(false)
   const reminder = useReminders()
 
