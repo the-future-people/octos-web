@@ -98,18 +98,21 @@ export default function CashierPortal() {
   // Show float acknowledge modal — fires on PENDING_ACK (morning)
   const showFloatAck = floatStatus === 'PENDING_ACK' && !!floatId
 
-  // Show intake-held modal — only after float is acknowledged, per
-  // business rule: float comes first (near-certain, daily), intake-held
-  // resolution second (conditional, only when overnight jobs exist).
-  const [intakeHeldPending, setIntakeHeldPending] = useState(true)
-  const showIntakeHeld = !showFloatAck && intakeHeldPending
-
   const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
 
   // Portal-lock overlay takes precedence over everything else once true.
   // The sign-off wizard now owns its full success+countdown+logout
   // lifecycle internally, so no separate bridging state is needed here.
   const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff
+
+  // Show intake-held modal — only after float is acknowledged, per
+  // business rule: float comes first (near-certain, daily), intake-held
+  // resolution second (conditional, only when overnight jobs exist).
+  // Must also respect showPortalLocked — otherwise a job left unresolved
+  // in the morning keeps rendering this modal all the way into an
+  // active evening lock, since intakeHeldPending never resets on its own.
+  const [intakeHeldPending, setIntakeHeldPending] = useState(true)
+  const showIntakeHeld = !showFloatAck && !showPortalLocked && intakeHeldPending
 
   // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
   useEffect(() => {
