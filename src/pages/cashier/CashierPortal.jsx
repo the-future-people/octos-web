@@ -13,9 +13,10 @@ import TodaysLog from '../../components/cashier/TodaysLog'
 import CreditAccounts from '../../components/cashier/CreditAccounts'
 import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
-import ShiftEndingModal from '../../components/cashier/ShiftEndingModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
 import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
+import ReminderModal from '../../components/shared/ReminderModal'
+import useReminders from '../../hooks/useReminders'
 import { getLockStatus } from '../../api/bm'
 
 const TABS = [
@@ -68,11 +69,9 @@ export default function CashierPortal() {
   useBranchSocket()
   const [activeTab,          setActiveTab]          = useState('queue')
   const [mobileOpen,         setMobileOpen]         = useState(false)
-  const [shiftPromptShown,   setShiftPromptShown]   = useState(false)
-  const [showShiftEnding,    setShowShiftEnding]     = useState(false)
   const [showSignOff,        setShowSignOff]         = useState(false)
   const [pendingJobs,        setPendingJobs]         = useState(0)
-  const promptedMinutes      = useRef(null)
+  const reminder = useReminders()
 
   // Poll shift status every 60s
   const { data: shiftData } = useQuery({
@@ -92,9 +91,7 @@ export default function CashierPortal() {
 
   const floatStatus      = shiftData?.float_status
   const floatId          = shiftData?.float_id
-  const shouldPrompt     = shiftData?.should_prompt
   const shouldLock       = shiftData?.should_lock
-  const minutesRemaining = shiftData?.minutes_remaining
   const expectedCash     = shiftData?.expected_cash   || 0
   const openingFloat     = shiftData?.opening_float   || 0
 
@@ -106,15 +103,6 @@ export default function CashierPortal() {
   // resolution second (conditional, only when overnight jobs exist).
   const [intakeHeldPending, setIntakeHeldPending] = useState(true)
   const showIntakeHeld = !showFloatAck && intakeHeldPending
-
-  // Show shift ending warning — fires once when should_prompt first becomes true
-  useEffect(() => {
-    if (shouldPrompt && !shiftPromptShown && minutesRemaining !== promptedMinutes.current) {
-      setShowShiftEnding(true)
-      setShiftPromptShown(true)
-      promptedMinutes.current = minutesRemaining
-    }
-  }, [shouldPrompt, shiftPromptShown, minutesRemaining])
 
   const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
 
@@ -129,16 +117,6 @@ export default function CashierPortal() {
       setShowSignOff(true)
     }
   }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff])
-
-  // Listen for manual sign-off trigger from ShiftEndingModal
-  useEffect(() => {
-    const handler = () => {
-      setShowShiftEnding(false)
-      setShowSignOff(true)
-    }
-    window.addEventListener('cashier:start-signoff', handler)
-    return () => window.removeEventListener('cashier:start-signoff', handler)
-  }, [])
 
   // Fetch pending job count for sign-off step 1
   useEffect(() => {
@@ -284,12 +262,14 @@ export default function CashierPortal() {
         />
       )}
 
-      {/* Shift ending warning — dismissable, auto-dismiss after 15s */}
-      {showShiftEnding && !showSignOff && !showFloatAck && (
-        <ShiftEndingModal
-          shiftEnd={shiftData?.shift_end}
-          minutesRemaining={minutesRemaining}
-          onDismiss={() => setShowShiftEnding(false)}
+      {/* Harmonized reminder system — replaces the old ShiftEndingModal.
+          Backend Celery task generates these; this just displays whatever
+          useReminders() surfaces, identically across all three portals. */}
+      {!showPortalLocked && reminder.hasReminder && (
+        <ReminderModal
+          reminder={reminder.current}
+          onDismiss={reminder.dismiss}
+          isDismissing={reminder.isDismissing}
         />
       )}
 

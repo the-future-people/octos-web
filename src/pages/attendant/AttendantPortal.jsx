@@ -6,6 +6,8 @@ import client from '../../api/client'
 import useBranchSocket from '../../hooks/useBranchSocket'
 import { getLockStatus } from '../../api/bm'
 import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
+import ReminderModal from '../../components/shared/ReminderModal'
+import useReminders from '../../hooks/useReminders'
 import AttendantTopbar     from '../../components/attendant/AttendantTopbar'
 import AttendantOverview   from '../../components/attendant/AttendantOverview'
 import AttendantMyJobs     from '../../components/attendant/AttendantMyJobs'
@@ -95,6 +97,7 @@ export default function AttendantPortal() {
 
   const isTimeLocked = lockData ? !lockData.can_create_jobs : false
   const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isTimeLocked
+  const reminder = useReminders()
 
   const sections = [...new Set(NAV.map(n => n.section))]
 
@@ -264,6 +267,17 @@ export default function AttendantPortal() {
           priority over everything else on this portal. */}
       {showPortalLocked && (
         <PortalLockedOverlay lockData={lockData} isLocked={isTimeLocked} />
+      )}
+
+      {/* Harmonized reminder system — same hook/component as every
+          other portal. Attendants get shift-ending reminders (7pm)
+          and personal-notes checkpoints, nothing bespoke needed here. */}
+      {!showPortalLocked && reminder.hasReminder && (
+        <ReminderModal
+          reminder={reminder.current}
+          onDismiss={reminder.dismiss}
+          isDismissing={reminder.isDismissing}
+        />
       )}
 
       {/* Modals — lifted to portal level */}
