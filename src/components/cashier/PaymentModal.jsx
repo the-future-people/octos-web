@@ -12,7 +12,7 @@ function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
 
-const METHODS = [
+const BASE_METHODS = [
   { id: 'CASH', label: 'Cash' },
   { id: 'MOMO', label: 'MoMo' },
   { id: 'SPLIT', label: 'Split' },
@@ -33,9 +33,19 @@ export default function PaymentModal({ job, onClose }) {
   const [company,    setCompany]    = useState('')
   const [phone,      setPhone]      = useState('')
   const [notes,      setNotes]      = useState('')
+  const [changeAction, setChangeAction] = useState('CASH') // 'CASH' | 'WALLET'
+  const [walletConsented, setWalletConsented] = useState(false)
 
   const amountDue = job ? (parseFloat(job.estimated_cost || 0) * deposit / 100) : 0
   const change    = method === 'CASH' ? Math.max(0, parseFloat(cash || 0) - amountDue) : 0
+
+  const walletBalance = parseFloat(job?.customer_wallet_balance || 0)
+  const canRedeemWallet = !!job?.customer_id && walletBalance >= amountDue && amountDue > 0
+  const canAddToWallet  = !!job?.customer_id
+
+  const METHODS = canRedeemWallet
+    ? [...BASE_METHODS, { id: 'WALLET', label: 'Wallet' }]
+    : BASE_METHODS
   const split2Amount = method === 'SPLIT'
     ? Math.max(0, amountDue - parseFloat(splitAmount1 || 0)).toFixed(2)
     : '0.00'
@@ -52,6 +62,8 @@ export default function PaymentModal({ job, onClose }) {
     setCompany('')
     setPhone('')
     setNotes('')
+    setChangeAction('CASH')
+    setWalletConsented(false)
   }, [job?.id])
 
   const [receipt, setReceipt] = useState(null)
@@ -69,8 +81,13 @@ export default function PaymentModal({ job, onClose }) {
 
   const isReady = () => {
     if (!method) return false
-    if (method === 'CASH') return parseFloat(cash || 0) >= amountDue
+    if (method === 'CASH') {
+      if (parseFloat(cash || 0) < amountDue) return false
+      if (change > 0 && changeAction === 'WALLET' && !walletConsented) return false
+      return true
+    }
     if (method === 'MOMO') return /^\d{11}$/.test(momoRef)
+    if (method === 'WALLET') return canRedeemWallet
     if (method === 'SPLIT') {
       const a1 = parseFloat(splitAmount1 || 0)
       if (a1 <= 0 || a1 >= amountDue) return false
@@ -94,7 +111,15 @@ export default function PaymentModal({ job, onClose }) {
 
     if (method === 'CASH') {
       body.cash_tendered = parseFloat(cash).toFixed(2)
-      body.change_given  = change.toFixed(2)
+      if (change > 0 && changeAction === 'WALLET') {
+        body.wallet_credit_amount = change.toFixed(2)
+        body.wallet_consent = true
+        // change_given intentionally omitted — backend computes the real
+        // figure after applying the GHS 200 cap, folding any overflow
+        // back into cash change server-side.
+      } else {
+        body.change_given = change.toFixed(2)
+      }
     }
     if (method === 'MOMO') {
       body.momo_reference = momoRef
@@ -256,11 +281,72 @@ export default function PaymentModal({ job, onClose }) {
                 className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
                   rounded-lg text-sm font-mono outline-none focus:border-[var(--border-dark)]"
               />
-              {parseFloat(cash || 0) >= amountDue && (
+              {parseFloat(cash || 0) >= amountDue && change > 0 && canAddToWallet && (
+                <div className="mt-3 space-y-2">
+                  <div className="text-sm font-bold text-[var(--text)]">
+                    Change due: {fmt(change)}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setChangeAction('CASH'); setWalletConsented(false) }}
+                      className={`py-2 rounded-lg text-sm font-bold border transition-colors
+                        ${changeAction === 'CASH'
+                          ? 'bg-[var(--text)] text-white border-[var(--text)]'
+                          : 'bg-[var(--bg)] text-[var(--text-2)] border-[var(--border)]'
+                        }`}
+                    >
+                      Give as cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChangeAction('WALLET')}
+                      className={`py-2 rounded-lg text-sm font-bold border transition-colors
+                        ${changeAction === 'WALLET'
+                          ? 'bg-[var(--text)] text-white border-[var(--text)]'
+                          : 'bg-[var(--bg)] text-[var(--text-2)] border-[var(--border)]'
+                        }`}
+                    >
+                      Add to wallet
+                    </button>
+                  </div>
+                  {changeAction === 'WALLET' && (
+                    <label className="flex items-start gap-2 px-3 py-2.5 bg-[var(--bg)]
+                      border border-[var(--border)] rounded-lg text-xs text-[var(--text-2)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={walletConsented}
+                        onChange={e => setWalletConsented(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        I confirmed with {job.customer_name} that they want {fmt(change)} saved
+                        to their wallet instead of cash change.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+              {parseFloat(cash || 0) >= amountDue && change > 0 && !canAddToWallet && (
                 <div className="mt-2 text-sm font-bold text-emerald-600">
                   Change: {fmt(change)}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Wallet fields */}
+          {method === 'WALLET' && (
+            <div className="px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg">
+              <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+                {job.customer_name}'s wallet balance
+              </div>
+              <div className="font-mono font-black text-lg text-[var(--text)]">
+                {fmt(walletBalance)}
+              </div>
+              <div className="mt-1 text-xs text-[var(--text-3)]">
+                Full amount ({fmt(amountDue)}) will be redeemed from wallet.
+              </div>
             </div>
           )}
 
