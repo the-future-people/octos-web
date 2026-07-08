@@ -358,7 +358,12 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
       shift_notes:    shiftNotes,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shiftStatus'] })
+      // Don't invalidate shiftStatus here — the parent polls it and an
+      // immediate refetch flips isSignedOff -> showPortalLocked -> true
+      // mid-animation, unmounting this wizard before its own 5s message
+      // + 10s countdown finish and before onLogout ever fires. Invalidate
+      // only once the wizard's own lifecycle actually completes, right
+      // before logging out.
       setDone(true)
     },
     onError: (err) => {
@@ -377,12 +382,13 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
   useEffect(() => {
     if (!done || phase !== 'countdown') return
     if (secondsLeft <= 0) {
+      queryClient.invalidateQueries({ queryKey: ['shiftStatus'] })
       onLogout?.()
       return
     }
     const t = setTimeout(() => setSecondsLeft(s => s - 1), 1000)
     return () => clearTimeout(t)
-  }, [done, phase, secondsLeft, onLogout])
+  }, [done, phase, secondsLeft, onLogout, queryClient])
 
   const TOTAL_STEPS = 5
 
