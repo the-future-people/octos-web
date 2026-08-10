@@ -100,6 +100,12 @@ export default function CashierPortal() {
 
   const isSignedOff = floatStatus === 'SIGNED_OFF' || shiftData?.is_signed_off
 
+  // No float attached to today's sheet. Usually means a previous day was
+  // never closed, since the next day's float is only staged during close.
+  // Payments still record correctly against the sheet, so she keeps working —
+  // but the header will show blanks and she deserves to know why.
+  const noFloatToday = !!shiftData && !floatId && !isSignedOff
+
   // Portal-lock overlay takes precedence over everything else once true.
   // The sign-off wizard now owns its full success+countdown+logout
   // lifecycle internally, so no separate bridging state is needed here.
@@ -233,6 +239,25 @@ export default function CashierPortal() {
             <div className="shrink-0 bg-[var(--panel)] border-b border-[var(--border)]">
               <InfoStrip />
             </div>
+
+            {noFloatToday && (
+              <div className="shrink-0 px-4 sm:px-5 py-3 bg-amber-50 border-b border-amber-200">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-amber-500 text-sm mt-0.5">&#9432;</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-amber-900">
+                      No float set for today yet
+                    </div>
+                    <div className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                      Your Branch Manager still has a previous day to close. Carry on
+                      as normal — every payment you take is being recorded against
+                      today&rsquo;s sheet. The float and shift details will appear once
+                      that day is settled.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {activeTab === 'queue' && (
               <div className="shrink-0 border-b border-[var(--border)]">
                 <SummaryStrip />
