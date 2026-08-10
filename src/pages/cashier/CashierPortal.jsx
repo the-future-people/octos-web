@@ -111,7 +111,11 @@ export default function CashierPortal() {
   // Must also respect showPortalLocked — otherwise a job left unresolved
   // in the morning keeps rendering this modal all the way into an
   // active evening lock, since intakeHeldPending never resets on its own.
-  const [intakeHeldPending, setIntakeHeldPending] = useState(true)
+  // Starts false. Assuming a handover exists until proven otherwise blocks
+  // the sign-off wizard (which requires !showIntakeHeld) for as long as
+  // IntakeHeldModal's fetch takes, and flashes the modal on every mount.
+  // IntakeHeldModal reports what it actually finds via onPendingChange.
+  const [intakeHeldPending, setIntakeHeldPending] = useState(false)
   const showIntakeHeld = !showFloatAck && !showPortalLocked && intakeHeldPending
 
   // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
@@ -277,8 +281,8 @@ export default function CashierPortal() {
       )}
 
       {/* Intake-held handover — only after float ack clears */}
-      {showIntakeHeld && (
-        <IntakeHeldModal onAllResolved={() => setIntakeHeldPending(false)} />
+      {!showFloatAck && !showPortalLocked && (
+        <IntakeHeldModal onPendingChange={setIntakeHeldPending} />
       )}
 
       {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF.

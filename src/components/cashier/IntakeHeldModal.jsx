@@ -1,5 +1,5 @@
 // src/components/cashier/IntakeHeldModal.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getIntakeHeldJobs, resolveHandover, disputeHandover } from '../../api/cashier'
@@ -8,7 +8,7 @@ function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
 
-export default function IntakeHeldModal({ onAllResolved }) {
+export default function IntakeHeldModal({ onPendingChange }) {
   const queryClient = useQueryClient()
   const [confirmingDispute, setConfirmingDispute] = useState(null) // job id pending dispute confirmation
   const [actioningId, setActioningId] = useState(null)
@@ -44,11 +44,15 @@ export default function IntakeHeldModal({ onAllResolved }) {
     onError: () => { setActioningId(null); setConfirmingDispute(null) },
   })
 
-  // Auto-close once every held job is resolved/disputed
-  if (!isLoading && jobs.length === 0) {
-    onAllResolved?.()
-    return null
-  }
+  // Report upward whether an overnight handover is actually outstanding.
+  // In an effect, not during render — calling a parent's setter mid-render
+  // triggers an extra pass and React warns about it.
+  useEffect(() => {
+    if (isLoading) return
+    onPendingChange?.(jobs.length > 0)
+  }, [isLoading, jobs.length, onPendingChange])
+
+  if (isLoading || jobs.length === 0) return null
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
