@@ -5,6 +5,8 @@ import { getJobStats, getTodaySummary, getLockStatus, getWorkload } from '../../
 import NewJobModal from './NewJobModal'
 import LateJobModal from './LateJobModal'
 import NewCustomerModal from './NewCustomerModal'
+import StrandedSheetsCard from './StrandedSheetsCard'
+import RecoverSheetModal from './RecoverSheetModal'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -87,6 +89,7 @@ export default function Overview({ onNavigate }) {
   const [showNewJob,      setShowNewJob]      = useState(false)
   const [showLateJob,     setShowLateJob]     = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
+  const [recoveringSheet, setRecoveringSheet] = useState(null)
 
   const { data: summaryData } = useQuery({
     queryKey: ['todaySummary'],
@@ -145,6 +148,19 @@ export default function Overview({ onNavigate }) {
 
   return (
     <div className="p-5 sm:p-6 space-y-6">
+
+      {/* Days that never closed. Sits above everything else — an unclosed
+          sheet blocks the next day's float, so it cannot wait behind the
+          day's ordinary work. */}
+      <StrandedSheetsCard onRecover={setRecoveringSheet} />
+
+      {recoveringSheet && (
+        <RecoverSheetModal
+          sheet={recoveringSheet}
+          onClose={() => setRecoveringSheet(null)}
+          onSuccess={() => setRecoveringSheet(null)}
+        />
+      )}
 
       {/* ── Hero Buttons ── */}
       <div className="grid grid-cols-2 gap-3">

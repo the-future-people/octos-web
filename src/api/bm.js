@@ -35,6 +35,12 @@ export const downloadBranchStatement = (dateFrom, dateTo) =>
     responseType: 'blob',
   })
 
+export const getStrandedSheets = () =>
+  client.get('/api/v1/finance/sheets/stranded/')
+
+export const recoverSheet     = (sheetId, payload) =>
+  client.post(`/api/v1/finance/sheets/${sheetId}/recover/`, payload)
+
 export const markSheetDisrupted = (sheetId, payload) =>
   client.post(`/api/v1/finance/sheets/${sheetId}/mark-disrupted/`, payload)
 
