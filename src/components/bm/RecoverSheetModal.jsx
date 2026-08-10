@@ -38,10 +38,19 @@ export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
 
   // Recomputed live: the expectation moves if the manager corrects the
   // opening float, since that is part of what the till should hold.
-  const expected = parseFloat(openingFloat || 0) + parseFloat(sheet.cash_collected || 0)
-  const counted  = parseFloat(countedCash || 0)
-  const diff     = countedCash === '' ? 0 : counted - expected
-  const hasDiff  = countedCash !== '' && Math.abs(diff) >= 0.01
+  // Compared in whole pesewas. Subtracting two floats built from decimal
+  // strings leaves values marginally off a 0.01 threshold, so a genuine
+  // one-pesewa difference can read as an exact match — which on a till
+  // reconciliation screen means a real discrepancy passes unexplained.
+  const toPesewas = (v) => Math.round(parseFloat(v || 0) * 100)
+
+  const expectedP = toPesewas(openingFloat) + toPesewas(sheet.cash_collected)
+  const countedP  = toPesewas(countedCash)
+  const diffP     = countedCash === '' ? 0 : countedP - expectedP
+
+  const expected = expectedP / 100
+  const diff     = diffP / 100
+  const hasDiff  = countedCash !== '' && diffP !== 0
 
   const { mutate, isPending } = useMutation({
     mutationFn: () => recoverSheet(sheet.sheet_id, {
