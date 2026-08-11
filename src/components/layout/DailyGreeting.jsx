@@ -67,25 +67,32 @@ function getStorageKey(userId) {
   return `greeting_shown_${userId}_${today}`
 }
 
-export default function DailyGreeting() {
+export default function DailyGreeting({ enabled = true }) {
   const { user } = useAuth()
   const [visible,  setVisible]  = useState(false)
   const [fading,   setFading]   = useState(false)
   const [progress, setProgress] = useState(100)
 
   useEffect(() => {
+    // `enabled` lets a portal hold the greeting back until its own opening
+    // sequence is done — the cashier acknowledges her float first, and a
+    // greeting stacked over that modal would be dismissed unread.
+    if (!enabled) return
     if (!user?.id) return
 
     const key = getStorageKey(user.id)
     if (localStorage.getItem(key)) return
 
-    // Mark as shown for today
-    localStorage.setItem(key, '1')
-
-    // Small delay then show
-    const showT = setTimeout(() => setVisible(true), 600)
+    // Mark shown only once it is actually on screen. Setting the key up
+    // front means anything interrupting the delay — a modal above it, a
+    // navigation, a reload — consumes the day's greeting without it ever
+    // being seen.
+    const showT = setTimeout(() => {
+      localStorage.setItem(key, '1')
+      setVisible(true)
+    }, 600)
     return () => clearTimeout(showT)
-  }, [user?.id])
+  }, [user?.id, enabled])
 
   useEffect(() => {
     if (!visible) return

@@ -16,6 +16,7 @@ import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
 import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
 import ReminderModal from '../../components/shared/ReminderModal'
+import DailyGreeting from '../../components/layout/DailyGreeting'
 import useReminders from '../../hooks/useReminders'
 import { getLockStatus } from '../../api/bm'
 
@@ -275,6 +276,11 @@ export default function CashierPortal() {
       </div>
 
       {/* ── Modals ── */}
+
+      {/* Greeting waits until the float is acknowledged and nothing is
+          locking the portal — she has counted her cash before being
+          welcomed, not during. */}
+      <DailyGreeting enabled={!showFloatAck && !showPortalLocked && !!floatId} />
 
       {/* Portal lock — Sunday, holiday, or shift ended. Takes priority
           over everything else, including float acknowledgement, since
