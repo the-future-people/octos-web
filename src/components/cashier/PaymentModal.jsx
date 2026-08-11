@@ -39,9 +39,12 @@ export default function PaymentModal({ job, onClose }) {
   const amountDue = job ? (parseFloat(job.estimated_cost || 0) * deposit / 100) : 0
   const change    = method === 'CASH' ? Math.max(0, parseFloat(cash || 0) - amountDue) : 0
 
+  // JobListSerializer exposes the FK as `customer`, not `customer_id` —
+  // reading customer_id made both gates permanently false, so the wallet
+  // choice has never rendered and no balance could ever be created.
   const walletBalance = parseFloat(job?.customer_wallet_balance || 0)
-  const canRedeemWallet = !!job?.customer_id && walletBalance >= amountDue && amountDue > 0
-  const canAddToWallet  = !!job?.customer_id
+  const canRedeemWallet = !!job?.customer && walletBalance >= amountDue && amountDue > 0
+  const canAddToWallet  = !!job?.customer
 
   const METHODS = canRedeemWallet
     ? [...BASE_METHODS, { id: 'WALLET', label: 'Wallet' }]
