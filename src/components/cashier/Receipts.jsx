@@ -41,8 +41,9 @@ export default function Receipts() {
   const { data, isLoading } = useQuery({
     queryKey: ['cashierReceipts', period],
     queryFn:  () => getCashierReceipts({ period }).then(r => r.data),
-    refetchInterval: 30_000,
-    staleTime: 20_000,
+    // Receipts are a historical record, not a live queue. Refetching the
+    // whole period every 30s re-sent hundreds of rows so ten could be read.
+    staleTime: 60_000,
   })
 
   const receipts = Array.isArray(data) ? data : (data?.results || [])
