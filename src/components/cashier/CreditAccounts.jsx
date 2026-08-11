@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getCreditAccounts, settleCreditAccount } from '../../api/cashier'
+import { getCreditAccounts, settleCreditAccount, getWalletBalances } from '../../api/cashier'
 import { invalidateAfterCreditSettled } from '../../api/invalidations'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
@@ -162,6 +162,47 @@ function SettleModal({ account, onClose }) {
   )
 }
 
+function AccountRow({ account, onSettle, suspended = false }) {
+  return (
+    <div className={`border rounded-xl px-4 py-3 flex items-center gap-4
+      ${suspended
+        ? 'bg-[var(--amber-bg)] border-[var(--amber-border)]'
+        : 'bg-[var(--panel)] border-[var(--border)]'}`}>
+
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm text-[var(--text)] truncate">
+          {account.customer_name}
+        </div>
+        <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
+          {account.organisation_name || account.account_type}
+          {account.contact_phone ? ` · ${account.contact_phone}` : ''}
+        </div>
+      </div>
+
+      <div className="text-right shrink-0">
+        <div className={`font-mono font-bold text-sm
+          ${parseFloat(account.current_balance) > 0
+            ? 'text-[var(--amber-text)]'
+            : 'text-[var(--green-text)]'}`}>
+          {fmt(account.current_balance)}
+        </div>
+        <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+          of {fmt(account.credit_limit)} limit
+        </div>
+      </div>
+
+      {parseFloat(account.current_balance) > 0 && (
+        <button
+          onClick={() => onSettle(account)}
+          className="shrink-0 px-3 py-1.5 bg-[var(--text)] text-white text-xs
+            font-bold rounded-lg hover:opacity-90 transition-opacity">
+          Settle
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function CreditAccounts() {
   const [search,         setSearch]         = useState('')
   const [settlingAccount, setSettlingAccount] = useState(null)
@@ -172,28 +213,72 @@ export default function CreditAccounts() {
     refetchInterval: 60_000,
   })
 
-  const accounts = Array.isArray(data) ? data : (data?.results || [])
-  const active   = accounts.filter(a => a.status === 'ACTIVE')
+  const { data: walletData } = useQuery({
+    queryKey: ['walletBalances'],
+    queryFn: () => getWalletBalances().then(r => r.data),
+    refetchInterval: 60_000,
+  })
 
-  const filtered = active.filter(a =>
-    !search ||
-    a.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-    a.organisation_name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const accounts = Array.isArray(data) ? data : (data?.results || [])
+  const wallets  = Array.isArray(walletData) ? walletData : []
+
+  const matches = (text) =>
+    !search || text?.toLowerCase().includes(search.toLowerCase())
+
+  const matchesAccount = (a) =>
+    matches(a.customer_name) || matches(a.organisation_name)
+
+  // Suspended accounts still owe money. Suspension stops further credit
+  // being extended; it does not stop someone repaying, and hiding the debt
+  // from the person who takes payment would mean a customer who walks in to
+  // settle cannot be served.
+  const activeAccounts    = accounts.filter(a => a.status === 'ACTIVE'    && matchesAccount(a))
+  const suspendedAccounts = accounts.filter(a => a.status === 'SUSPENDED' && matchesAccount(a))
+
+  const filteredWallets = wallets.filter(w => matches(w.name) || matches(w.company_name))
+
+  const totalOwed = accounts
+    .filter(a => a.status === 'ACTIVE' || a.status === 'SUSPENDED')
+    .reduce((sum, a) => sum + parseFloat(a.current_balance || 0), 0)
+
+  const totalHeld = wallets
+    .reduce((sum, w) => sum + parseFloat(w.balance || 0), 0)
 
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-bold text-[var(--text)]">Credit Accounts</h2>
-          <p className="text-xs text-[var(--text-3)] mt-0.5">
-            Active accounts — settle outstanding balances
-          </p>
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-[var(--text)]">Collections</h2>
+        <p className="text-xs text-[var(--text-3)] mt-0.5">
+          What customers owe, and what is being held for them
+        </p>
+      </div>
+
+      {/* Two exposures, never netted against each other: credit is money
+          owed to the branch, wallet credit is money the branch holds for a
+          customer. The same person can appear in both. */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+            Owed to us
+          </div>
+          <div className="font-mono font-black text-lg text-[var(--amber-text)]">
+            {fmt(totalOwed)}
+          </div>
+          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+            {activeAccounts.length + suspendedAccounts.length} account{activeAccounts.length + suspendedAccounts.length !== 1 ? 's' : ''}
+          </div>
         </div>
-        <div className="px-3 py-1 bg-[var(--panel)] border border-[var(--border)]
-          rounded-full text-sm font-semibold text-[var(--text-2)]">
-          {active.length} active
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+            Held for customers
+          </div>
+          <div className="font-mono font-black text-lg text-[var(--text)]">
+            {fmt(totalHeld)}
+          </div>
+          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+            {filteredWallets.length} customer{filteredWallets.length !== 1 ? 's' : ''}
+          </div>
         </div>
       </div>
 
@@ -210,65 +295,97 @@ export default function CreditAccounts() {
         />
       </div>
 
-      {isLoading && !data ? (
+ {isLoading && !data ? (
         <div className="space-y-2">
           {[1,2,3].map(i => (
             <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)]
               rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm font-semibold text-[var(--text-2)]">No active accounts</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">
-            {search ? 'No accounts match your search' : 'No active credit accounts found'}
-          </p>
-        </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map(account => (
-            <div key={account.id}
-              className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-                px-4 py-3 flex items-center gap-4">
+        <div className="space-y-6">
 
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-[var(--text)] truncate">
-                  {account.customer_name}
-                </div>
-                <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
-                  {account.organisation_name || account.account_type}
-                  {account.contact_phone ? ` · ${account.contact_phone}` : ''}
-                </div>
-              </div>
-
-              {/* Balance */}
-              <div className="text-right shrink-0">
-                <div className={`font-mono font-bold text-sm
-                  ${parseFloat(account.current_balance) > 0
-                    ? 'text-[var(--amber-text)]'
-                    : 'text-[var(--green-text)]'}`}>
-                  {fmt(account.current_balance)}
-                </div>
-                <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                  of {fmt(account.credit_limit)} limit
-                </div>
-              </div>
-
-              {/* Settle button — only if balance > 0 */}
-              {parseFloat(account.current_balance) > 0 && (
-                <button
-                  onClick={() => setSettlingAccount(account)}
-                  className="shrink-0 px-3 py-1.5 bg-[var(--amber-bg)] border
-                    border-[var(--amber-border)] text-[var(--amber-text)] text-xs
-                    font-bold rounded-lg hover:opacity-80 transition-opacity">
-                  Settle
-                </button>
-              )}
-
+          {/* ── Owed to us ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-bold text-[var(--text)]">Owed to us</h3>
+              <div className="flex-1 h-px bg-[var(--border)]" />
             </div>
-          ))}
+
+            {activeAccounts.length === 0 && suspendedAccounts.length === 0 ? (
+              <p className="text-xs text-[var(--text-3)] py-4">
+                {search ? 'No accounts match your search' : 'Nothing outstanding'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeAccounts.map(account => (
+                  <AccountRow
+                    key={account.id}
+                    account={account}
+                    onSettle={setSettlingAccount}
+                  />
+                ))}
+
+                {suspendedAccounts.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 pt-3 pb-1">
+                      <span className="text-[10px] font-bold text-[var(--amber-text)]
+                        uppercase tracking-wider">
+                        Suspended — no further credit
+                      </span>
+                      <div className="flex-1 h-px bg-[var(--amber-border)]" />
+                    </div>
+                    {suspendedAccounts.map(account => (
+                      <AccountRow
+                        key={account.id}
+                        account={account}
+                        onSettle={setSettlingAccount}
+                        suspended
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Held for customers ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-bold text-[var(--text)]">Held for customers</h3>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+            <p className="text-xs text-[var(--text-3)] mb-2">
+              Redeemed against a job at payment — never paid out as cash.
+            </p>
+
+            {filteredWallets.length === 0 ? (
+              <p className="text-xs text-[var(--text-3)] py-4">
+                {search ? 'No customers match your search' : 'No wallet balances held'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {filteredWallets.map(w => (
+                  <div key={w.customer_id}
+                    className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
+                      px-4 py-3 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-[var(--text)] truncate">
+                        {w.name}
+                      </div>
+                      <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
+                        {w.company_name || w.phone}
+                      </div>
+                    </div>
+                    <div className="font-mono font-bold text-sm text-[var(--text)] shrink-0">
+                      {fmt(w.balance)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
