@@ -166,7 +166,7 @@ function AccountRow({ account, onSettle, suspended = false }) {
   return (
     <div className={`border rounded-xl px-4 py-3 flex items-center gap-4
       ${suspended
-        ? 'bg-[var(--amber-bg)] border-[var(--amber-border)]'
+        ? 'bg-[var(--red-bg)] border-[var(--red-border)]'
         : 'bg-[var(--panel)] border-[var(--border)]'}`}>
 
       <div className="flex-1 min-w-0">
@@ -303,71 +303,78 @@ export default function CreditAccounts() {
           ))}
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* ── Owed to us ── */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-sm font-bold text-[var(--text)]">Owed to us</h3>
-              <div className="flex-1 h-px bg-[var(--border)]" />
+          <section className="rounded-2xl border border-[var(--amber-border)]
+            bg-[var(--amber-bg)] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-[var(--amber-border)]">
+              <h3 className="text-sm font-bold text-[var(--amber-text)]">Owed to us</h3>
+              <p className="text-[11px] text-[var(--amber-text)] opacity-70 mt-0.5">
+                Outstanding customer balances
+              </p>
             </div>
 
-            {activeAccounts.length === 0 && suspendedAccounts.length === 0 ? (
-              <p className="text-xs text-[var(--text-3)] py-4">
-                {search ? 'No accounts match your search' : 'Nothing outstanding'}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {activeAccounts.map(account => (
-                  <AccountRow
-                    key={account.id}
-                    account={account}
-                    onSettle={setSettlingAccount}
-                  />
-                ))}
+            <div className="p-3 space-y-2 overflow-y-auto max-h-[420px]">
+              {activeAccounts.length === 0 && suspendedAccounts.length === 0 ? (
+                <p className="text-xs text-[var(--text-3)] py-6 text-center">
+                  {search ? 'No accounts match your search' : 'Nothing outstanding'}
+                </p>
+              ) : (
+                <>
+                  {activeAccounts.map(account => (
+                    <AccountRow
+                      key={account.id}
+                      account={account}
+                      onSettle={setSettlingAccount}
+                    />
+                  ))}
 
-                {suspendedAccounts.length > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 pt-3 pb-1">
-                      <span className="text-[10px] font-bold text-[var(--amber-text)]
-                        uppercase tracking-wider">
-                        Suspended — no further credit
-                      </span>
-                      <div className="flex-1 h-px bg-[var(--amber-border)]" />
-                    </div>
-                    {suspendedAccounts.map(account => (
-                      <AccountRow
-                        key={account.id}
-                        account={account}
-                        onSettle={setSettlingAccount}
-                        suspended
-                      />
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+                  {/* Suspended last — these are closed to further credit and
+                      should not be mistaken for accounts in good standing. */}
+                  {suspendedAccounts.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-2 pt-3 pb-1">
+                        <span className="text-[10px] font-bold text-[var(--red-text)]
+                          uppercase tracking-wider">
+                          Suspended — no further credit
+                        </span>
+                        <div className="flex-1 h-px bg-[var(--red-border)]" />
+                      </div>
+                      {suspendedAccounts.map(account => (
+                        <AccountRow
+                          key={account.id}
+                          account={account}
+                          onSettle={setSettlingAccount}
+                          suspended
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
 
           {/* ── Held for customers ── */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
+          <section className="rounded-2xl border border-[var(--border)]
+            bg-[var(--panel)] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-[var(--border)]">
               <h3 className="text-sm font-bold text-[var(--text)]">Held for customers</h3>
-              <div className="flex-1 h-px bg-[var(--border)]" />
-            </div>
-            <p className="text-xs text-[var(--text-3)] mb-2">
-              Redeemed against a job at payment — never paid out as cash.
-            </p>
-
-            {filteredWallets.length === 0 ? (
-              <p className="text-xs text-[var(--text-3)] py-4">
-                {search ? 'No customers match your search' : 'No wallet balances held'}
+              <p className="text-[11px] text-[var(--text-3)] mt-0.5">
+                Redeemed against a job — never paid out as cash
               </p>
-            ) : (
-              <div className="space-y-2">
-                {filteredWallets.map(w => (
+            </div>
+
+            <div className="p-3 space-y-2 overflow-y-auto max-h-[420px]">
+              {filteredWallets.length === 0 ? (
+                <p className="text-xs text-[var(--text-3)] py-6 text-center">
+                  {search ? 'No customers match your search' : 'No balances held'}
+                </p>
+              ) : (
+                filteredWallets.map(w => (
                   <div key={w.customer_id}
-                    className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
+                    className="bg-[var(--bg)] border border-[var(--border)] rounded-xl
                       px-4 py-3 flex items-center gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm text-[var(--text)] truncate">
@@ -381,10 +388,10 @@ export default function CreditAccounts() {
                       {fmt(w.balance)}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                ))
+              )}
+            </div>
+          </section>
 
         </div>
       )}
