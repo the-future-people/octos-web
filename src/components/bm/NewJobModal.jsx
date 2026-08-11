@@ -167,7 +167,11 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const addToCart = () => {
     if (!selected) return
-    console.log('ADDING TO CART — selQty:', selQty, 'selPages:', selPages)
+    // Conditional services (binding, passport) price over the network, and
+    // the query key depends on debounced inputs — so there is a window after
+    // selection where selPrice is undefined. Adding during it froze 0.00 into
+    // the cart and produced a real job worth nothing.
+    if (!selPrice || parseFloat(selPrice.total) <= 0) return
     setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
@@ -433,9 +437,10 @@ export default function NewJobModal({ onClose, onSuccess }) {
                     </span>
                   </div>
                   <button onClick={addToCart}
+                    disabled={!selPrice || parseFloat(selPrice.total) <= 0}
                     className={`px-4 py-2 text-white text-sm font-bold rounded-lg
                       hover:opacity-90 transition-opacity flex items-center gap-1.5
-                      whitespace-nowrap ${theme.accent}`}>
+                      whitespace-nowrap disabled:opacity-40 ${theme.accent}`}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                       stroke="currentColor" strokeWidth="2.5">
                       <line x1="12" y1="5" x2="12" y2="19"/>

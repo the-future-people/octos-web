@@ -164,6 +164,11 @@ export default function LateJobModal({ onClose, onSuccess }) {
 
   const addToCart = () => {
     if (!selected) return
+    // Conditional services (binding, passport) price over the network, and
+    // the query key depends on debounced inputs — so there is a window after
+    // selection where selPrice is undefined. Adding during it froze 0.00 into
+    // the cart and produced a real job worth nothing.
+    if (!selPrice || parseFloat(selPrice.total) <= 0) return
     setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
@@ -409,8 +414,10 @@ export default function LateJobModal({ onClose, onSuccess }) {
                     <span className="font-mono font-black text-sm text-green-700">{selPrice ? fmt(selPrice.total) : '...'}</span>
                   </div>
                   <button onClick={addToCart}
+                    disabled={!selPrice || parseFloat(selPrice.total) <= 0}
                     className={`px-4 py-2 text-white text-sm font-bold rounded-lg
-                      hover:opacity-90 transition-opacity flex items-center gap-1.5 whitespace-nowrap ${theme.accent}`}>
+                      hover:opacity-90 transition-opacity flex items-center gap-1.5
+                      whitespace-nowrap disabled:opacity-40 ${theme.accent}`}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
