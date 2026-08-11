@@ -4,16 +4,11 @@ import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
 import { useQuery } from '@tanstack/react-query'
 import { getLockStatus } from '../../api/bm'
-import { createPortal } from 'react-dom'
 
 export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const { theme, toggle } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [showWarningModal, setShowWarningModal] = useState(false)
-  const [warningDismissed, setWarningDismissed] = useState(false)
-  const warningFiredRef = useRef(false)
   const dropdownRef = useRef(null)
-  const modalRef = useRef(null)
   const toggleButtonRef = useRef(null)
 
   // ── Lock status query with error handling ──────────────────────────
@@ -63,54 +58,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
     return () => document.removeEventListener('keydown', handler)
   }, [dropdownOpen])
 
-  // ── Portal cleanup on unmount ──────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      // Clean up portal if component unmounts while modal is open
-      const portal = document.querySelector('[data-bm-warning-portal]')
-      if (portal) {
-        portal.remove()
-      }
-    }
-  }, [])
-
-  // ── Warning modal logic with debounce ──────────────────────────────
-  const minsToClose = lockData?.mins_to_close
-  const closeSchedule = lockData?.schedule
-
-  useEffect(() => {
-    // Reset warning state when lock data refreshes
-    if (!lockData) return
-
-    const shouldShowWarning = 
-      minsToClose != null &&
-      minsToClose > 0 &&
-      minsToClose <= 15 &&
-      !warningFiredRef.current &&
-      !warningDismissed
-
-    if (shouldShowWarning) {
-      // Debounce to prevent flickering
-      const timer = setTimeout(() => {
-        warningFiredRef.current = true
-        setShowWarningModal(true)
-      }, 2000) // Wait 2 seconds to ensure stable value
-
-      return () => clearTimeout(timer)
-    }
-
-    // Reset if mins go back above 30 (shouldn't happen but handle gracefully)
-    if (minsToClose > 30 && warningFiredRef.current) {
-      warningFiredRef.current = false
-    }
-  }, [minsToClose, warningDismissed, lockData])
-
   // ── Handlers ───────────────────────────────────────────────────────
-  const handleDismissWarning = useCallback(() => {
-    setShowWarningModal(false)
-    setWarningDismissed(true)
-  }, [])
-
   const handleLogout = useCallback(() => {
     setDropdownOpen(false)
     onLogout()
@@ -127,14 +75,6 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const initials = user?.first_name && user?.last_name
     ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
     : user?.email?.[0]?.toUpperCase() || '??'
-
-  const closeTimeFormatted = closeSchedule?.shift_end
-    ? new Date(closeSchedule.shift_end).toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        hour12: true 
-      })
-    : '7:30 PM'
 
   // ── Authentication check ───────────────────────────────────────────
   if (!user) {
@@ -230,7 +170,6 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
               ⚠ Sync failed
             </button>
           )}
-
 
           {/* Loading indicator for lock status */}
           {lockLoading && !lockData && (
@@ -332,140 +271,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
           </div>
         </div>
       </div>
-
-      {/* ── Warning Modal (Portal) ──────────────────────────────────── */}
-      {showWarningModal && (
-        <WarningModal
-          minsToClose={minsToClose}
-          closeTime={closeTimeFormatted}
-          onDismiss={handleDismissWarning}
-          modalRef={modalRef}
-        />
-      )}
+      
     </header>
-  )
-}
-
-
-// ── Warning Modal Component ──────────────────────────────────────────────
-
-function WarningModal({ minsToClose, closeTime, onDismiss, modalRef }) {
-  const closeButtonRef = useRef(null)
-
-  // Focus trap and keyboard handling
-  useEffect(() => {
-    closeButtonRef.current?.focus()
-
-    const handler = (e) => {
-      if (e.key === 'Escape') {
-        onDismiss()
-      }
-      // Trap focus within modal
-      if (e.key === 'Tab') {
-        const focusable = modalRef.current?.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable?.length) {
-          const first = focusable[0]
-          const last = focusable[focusable.length - 1]
-          
-          if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault()
-            last.focus()
-          } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault()
-            first.focus()
-          }
-        }
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onDismiss, modalRef])
-
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = originalOverflow
-    }
-  }, [])
-
-  return createPortal(
-    <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="warning-modal-title"
-      aria-describedby="warning-modal-description"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss()
-      }}
-    >
-      <div 
-        ref={modalRef}
-        className="bg-[var(--panel)] w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-slideUp"
-      >
-        <div className="px-6 pt-6 pb-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 
-            flex items-center justify-center mb-4"
-            aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" className="text-amber-600 dark:text-amber-400">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          </div>
-          
-          <h3 
-            id="warning-modal-title"
-            className="text-base font-black text-[var(--text)] mb-1"
-          >
-            Branch closing soon
-          </h3>
-          
-          <p 
-            id="warning-modal-description"
-            className="text-sm text-[var(--text-2)]"
-          >
-            The branch closes in{' '}
-            <span className="font-bold text-amber-600 dark:text-amber-400">
-              {minsToClose} {minsToClose === 1 ? 'minute' : 'minutes'}
-            </span>{' '}
-            at {closeTime}.
-          </p>
-          
-          <ul className="mt-3 space-y-1.5 text-xs text-[var(--text-3)]" role="list">
-            <li className="flex items-start gap-2" role="listitem">
-              <span className="text-amber-500 mt-0.5 shrink-0" aria-hidden="true">•</span>
-              Complete all pending jobs and payments before close
-            </li>
-            <li className="flex items-start gap-2" role="listitem">
-              <span className="text-amber-500 mt-0.5 shrink-0" aria-hidden="true">•</span>
-              Cashier should prepare for sign-off by 8:30 PM
-            </li>
-            <li className="flex items-start gap-2" role="listitem">
-              <span className="text-amber-500 mt-0.5 shrink-0" aria-hidden="true">•</span>
-              Day sheet must be closed by 10:00 PM
-            </li>
-          </ul>
-        </div>
-        
-        <div className="px-6 pb-6">
-          <button
-            ref={closeButtonRef}
-            onClick={onDismiss}
-            className="w-full py-2.5 bg-[var(--text)] text-white text-sm font-bold
-              rounded-xl hover:opacity-90 transition-opacity
-              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--text)]"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
   )
 }
