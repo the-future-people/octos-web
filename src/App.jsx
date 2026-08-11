@@ -15,7 +15,15 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: false,
+      // Refetch when the operator returns to the tab. The branch socket
+      // pushes updates live, but a socket that dies quietly — laptop asleep,
+      // wifi blip, an idle proxy timing it out — stops delivering with no
+      // error anywhere, and messages sent while disconnected are gone for
+      // good. Returning to the tab is the cheapest reliable moment to
+      // reconcile, and it is exactly when someone is about to act on what
+      // they see.
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
     },
   },
 })

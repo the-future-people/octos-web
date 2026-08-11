@@ -11,8 +11,13 @@ import {
 } from '../api/invalidations'
 
 const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
-const RECONNECT_DELAY_MS = 3000
-const MAX_RECONNECT_ATTEMPTS = 10
+
+// Backoff grows to a ceiling rather than stopping. A cashier whose
+// connection wobbles once at 9am should not be left with a dead socket
+// for the rest of the shift, silently missing every job the attendant
+// sends. Retrying every 30s indefinitely costs almost nothing.
+const RECONNECT_BASE_MS = 3000
+const RECONNECT_MAX_MS  = 30000
 
 export default function useBranchSocket() {
   const { user, getAccessToken } = useAuth()
@@ -28,7 +33,6 @@ export default function useBranchSocket() {
 
     const connect = () => {
       if (unmountedRef.current) return
-      if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) return
 
       // Get a fresh access token for the handshake
       const token = getAccessToken()
@@ -39,6 +43,13 @@ export default function useBranchSocket() {
 
       ws.onopen = () => {
         attemptsRef.current = 0
+
+        // Anything sent while we were disconnected is gone — the socket
+        // carries new events only, it does not replay. Without this the
+        // queue stays stale after every reconnect until something else
+        // happens to invalidate it, which is the usual reason a cashier
+        // has to refresh to see a job that arrived minutes ago.
+        queryClient.invalidateQueries()
       }
 
       ws.onmessage = (event) => {
@@ -56,7 +67,11 @@ export default function useBranchSocket() {
         // 4001 = unauthenticated, 4002 = no branch — don't retry
         if (event.code === 4001 || event.code === 4002) return
         attemptsRef.current += 1
-        setTimeout(connect, RECONNECT_DELAY_MS)
+        const delay = Math.min(
+          RECONNECT_BASE_MS * attemptsRef.current,
+          RECONNECT_MAX_MS,
+        )
+        setTimeout(connect, delay)
       }
 
       ws.onerror = () => {
