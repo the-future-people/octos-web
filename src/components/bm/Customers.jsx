@@ -1,7 +1,7 @@
 // src/components/bm/Customers.jsx
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getCustomers } from '../../api/bm'
+import { getCustomers, getCreditAccountsBM, getWalletBalancesBM } from '../../api/bm'
 import NewCustomerModal from './NewCustomerModal'
 import CustomerProfileModal from './CustomerProfileModal'
 
@@ -32,6 +32,178 @@ const TYPE_COLORS = {
   INSTITUTION: 'bg-violet-50 text-violet-700 border-violet-200',
 }
 
+function fmtGhs(amount) {
+  return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
+}
+
+// Credit and wallet are opposite exposures — money owed to the branch and
+// money the branch holds for a customer — and are never netted against each
+// other. This is a position to read, not a counter to work: settlement and
+// reactivation both happen through the cashier, and an account clears its
+// own suspension automatically once the balance reaches zero.
+function BalancesPanel() {
+  const { data: creditData, isLoading: creditLoading } = useQuery({
+    queryKey: ['bmCreditAccounts'],
+    queryFn:  () => getCreditAccountsBM().then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const { data: walletData, isLoading: walletLoading } = useQuery({
+    queryKey: ['bmWalletBalances'],
+    queryFn:  () => getWalletBalancesBM().then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  const accounts = Array.isArray(creditData) ? creditData : (creditData?.results || [])
+  const wallets  = Array.isArray(walletData) ? walletData : []
+
+  const owing     = accounts.filter(a => parseFloat(a.current_balance || 0) > 0)
+  const suspended = owing.filter(a => a.status === 'SUSPENDED')
+  const current   = owing.filter(a => a.status !== 'SUSPENDED')
+
+  const totalOwed = owing.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0)
+  const totalHeld = wallets.reduce((s, w) => s + parseFloat(w.balance || 0), 0)
+
+  if (creditLoading || walletLoading) {
+    return (
+      <div className="space-y-2">
+        {[1,2,3].map(i => (
+          <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)]
+            rounded-xl animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+            Owed to the branch
+          </div>
+          <div className="font-mono font-black text-xl text-[var(--amber-text)]">
+            {fmtGhs(totalOwed)}
+          </div>
+          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+            across {owing.length} account{owing.length !== 1 ? 's' : ''}
+            {suspended.length > 0 ? ` · ${suspended.length} suspended` : ''}
+          </div>
+        </div>
+
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-3">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+            Held for customers
+          </div>
+          <div className="font-mono font-black text-xl text-[var(--text)]">
+            {fmtGhs(totalHeld)}
+          </div>
+          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+            {wallets.length} wallet{wallets.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <section className="rounded-2xl border border-[var(--amber-border)]
+          bg-[var(--amber-bg)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--amber-border)]">
+            <h3 className="text-sm font-bold text-[var(--amber-text)]">Outstanding credit</h3>
+            <p className="text-[11px] text-[var(--amber-text)] opacity-70 mt-0.5">
+              Settled at the counter — an account clears its own suspension once paid
+            </p>
+          </div>
+          <div className="p-3 space-y-2 max-h-[420px] overflow-y-auto">
+            {owing.length === 0 ? (
+              <p className="text-xs text-[var(--text-3)] py-6 text-center">Nothing outstanding</p>
+            ) : (
+              <>
+                {current.map(a => <CreditRow key={a.id} account={a} />)}
+                {suspended.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 pt-3 pb-1">
+                      <span className="text-[10px] font-bold text-[var(--red-text)]
+                        uppercase tracking-wider">
+                        Suspended — past terms
+                      </span>
+                      <div className="flex-1 h-px bg-[var(--red-border)]" />
+                    </div>
+                    {suspended.map(a => <CreditRow key={a.id} account={a} suspended />)}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[var(--border)]
+          bg-[var(--panel)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border)]">
+            <h3 className="text-sm font-bold text-[var(--text)]">Wallet credit held</h3>
+            <p className="text-[11px] text-[var(--text-3)] mt-0.5">
+              Expires after six months without activity
+            </p>
+          </div>
+          <div className="p-3 space-y-2 max-h-[420px] overflow-y-auto">
+            {wallets.length === 0 ? (
+              <p className="text-xs text-[var(--text-3)] py-6 text-center">No balances held</p>
+            ) : (
+              wallets.map(w => (
+                <div key={w.customer_id}
+                  className="bg-[var(--bg)] border border-[var(--border)] rounded-xl
+                    px-4 py-3 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-[var(--text)] truncate">
+                      {w.name}
+                    </div>
+                    <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
+                      {w.company_name || w.phone}
+                    </div>
+                  </div>
+                  <div className="font-mono font-bold text-sm text-[var(--text)] shrink-0">
+                    {fmtGhs(w.balance)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+      </div>
+    </div>
+  )
+}
+
+function CreditRow({ account, suspended = false }) {
+  return (
+    <div className={`border rounded-xl px-4 py-3 flex items-center gap-4
+      ${suspended
+        ? 'bg-[var(--red-bg)] border-[var(--red-border)]'
+        : 'bg-[var(--panel)] border-[var(--border)]'}`}>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm text-[var(--text)] truncate">
+          {account.customer_name}
+        </div>
+        <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
+          {account.organisation_name || account.account_type}
+          {account.payment_terms ? ` · ${account.payment_terms}-day terms` : ''}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="font-mono font-bold text-sm text-[var(--amber-text)]">
+          {fmtGhs(account.current_balance)}
+        </div>
+        <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+          of {fmtGhs(account.credit_limit)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 export default function Customers() {
   const [tab,             setTab]             = useState('all')
   const [search,          setSearch]          = useState('')
@@ -40,6 +212,7 @@ export default function Customers() {
   const [showNewCustomer, setShowNewCustomer] = useState(false)
 
   const { data, isLoading } = useQuery({
+    enabled: tab !== 'balances',
     queryKey: ['customers', tab, search, page],
     queryFn:  () => getCustomers({
       search,
@@ -88,6 +261,7 @@ export default function Customers() {
           { key: 'individuals',  label: 'Individuals'  },
           { key: 'businesses',   label: 'Businesses'   },
           { key: 'institutions', label: 'Institutions' },
+          { key: 'balances',     label: 'Balances'     },
         ].map(t => (
           <button key={t.key}
             onClick={() => { setTab(t.key); setPage(1) }}
@@ -115,7 +289,9 @@ export default function Customers() {
       </div>
 
       {/* List */}
-      {isLoading && !data ? (
+      {tab === 'balances' ? (
+        <BalancesPanel />
+      ) : isLoading && !data ? (
         <div className="space-y-2">
           {[1,2,3,4,5].map(i => (
             <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)]

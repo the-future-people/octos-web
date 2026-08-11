@@ -77,6 +77,12 @@ export const createLateJob    = (payload) =>
   client.post('/api/v1/jobs/late/', payload)
 
 // ── Customers ─────────────────────────────────────────────────────
+export const getCreditAccountsBM = () =>
+  client.get('/api/v1/customers/credit/')
+
+export const getWalletBalancesBM = () =>
+  client.get('/api/v1/finance/wallets/')
+
 export const getCustomers     = (params) =>
   client.get('/api/v1/customers/', { params })
 
