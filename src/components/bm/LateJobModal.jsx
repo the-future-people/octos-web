@@ -392,20 +392,32 @@ export default function LateJobModal({ onClose, onSuccess }) {
                 )}
 
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">
-                      {isBinding(selected) ? 'Documents' : 'Sheets'}
-                    </label>
-                    <input type="number" min="1" value={selPages}
-                      onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Copies</label>
-                    <input type="number" min="1" value={selQty}
-                      onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
-                  </div>
+                  {isBinding(selected) ? (
+                    /* Binding is ring size x quantity. Pages have no meaning
+                       here, and a second count field was a way to double a
+                       price by accident. */
+                    <div className="col-span-2">
+                      <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Documents</label>
+                      <input type="number" min="1" value={selQty}
+                        onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Sheets</label>
+                        <input type="number" min="1" value={selPages}
+                          onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Copies</label>
+                        <input type="number" min="1" value={selQty}
+                          onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-2 py-1.5 text-sm bg-white/60 border border-rose-200 rounded-lg outline-none" />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
