@@ -53,12 +53,88 @@ const TYPE_CONFIG = {
   DESIGN:     { label: 'Design',     color: 'text-violet-700', bg: 'bg-violet-100' },
 }
 
-function StatusBadge({ status }) {
-  const c = STATUS_CONFIG[status] || { label: status, bg: 'bg-zinc-100', text: 'text-zinc-600' }
+const WORK_LABELS = {
+  RECEIVED:      'Received',
+  IN_PRODUCTION: 'In production',
+  FINISHING:     'Finishing',
+  QUALITY_CHECK: 'Quality check',
+  DONE:          'Done',
+}
+
+/**
+ * A job now holds three states at once. Rather than show three columns,
+ * the badge answers one question — what is this job waiting on — by
+ * precedence: halted beats unpaid beats unfinished beats uncollected.
+ * The full picture lives in the detail view.
+ */
+function lifecycleState(job) {
+  if (job.status === 'CANCELLED') return { label: 'Cancelled', bg: 'bg-red-100',  text: 'text-red-600'  }
+  if (job.status === 'DRAFT')     return { label: 'Draft',     bg: 'bg-zinc-100', text: 'text-zinc-600' }
+  if (job.status === 'INTAKE_HELD')
+    return { label: 'Intake held', bg: 'bg-amber-100', text: 'text-amber-700' }
+
+  const settled = job.payment_state === 'SETTLED'
+
+  if (job.is_halted) {
+    return { label: 'Halted', bg: 'bg-red-100', text: 'text-red-600', sub: 'Work stopped' }
+  }
+  if (job.work_state === 'DONE' && job.handover_state === 'AWAITING_COLLECTION') {
+    return {
+      label: 'Ready for pickup',
+      bg: 'bg-emerald-100', text: 'text-emerald-700',
+      sub: settled ? null : 'Balance outstanding',
+      subTone: settled ? null : 'text-red-600',
+    }
+  }
+  if (job.handover_state === 'OUT_FOR_DELIVERY') {
+    return { label: 'Out for delivery', bg: 'bg-blue-100', text: 'text-blue-700' }
+  }
+  if (job.handover_state === 'HANDED_OVER') {
+    return {
+      label: 'Handed over',
+      bg: 'bg-zinc-100', text: 'text-zinc-600',
+      sub: settled ? null : 'Balance outstanding',
+      subTone: settled ? null : 'text-red-600',
+    }
+  }
+  if (!settled) {
+    return {
+      label: 'Awaiting payment',
+      bg: 'bg-amber-100', text: 'text-amber-700',
+      sub: job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid' : null,
+    }
+  }
+  return {
+    label: 'In production',
+    bg: 'bg-violet-100', text: 'text-violet-700',
+    sub: WORK_LABELS[job.work_state] || null,
+  }
+}
+
+function StatusBadge({ job, status }) {
+  // Falls back to the legacy status map for callers that still pass a
+  // bare status string — receipts and invoices tabs have not migrated.
+  if (!job) {
+    const c = STATUS_CONFIG[status] || { label: status, bg: 'bg-zinc-100', text: 'text-zinc-600' }
+    return (
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
+        {c.label}
+      </span>
+    )
+  }
+
+  const s = lifecycleState(job)
   return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
-      {c.label}
-    </span>
+    <div className="min-w-0">
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+        {s.label}
+      </span>
+      {s.sub && (
+        <div className={`text-[10px] mt-0.5 truncate ${s.subTone || 'text-[var(--text-3)]'}`}>
+          {s.sub}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -944,7 +1020,7 @@ export default function Jobs() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-bold text-[var(--text)]">{job.job_number}</span>
-                          <StatusBadge status={job.status} />
+                          <StatusBadge job={job} />
                         </div>
                         <div className="text-xs text-[var(--text-3)] mt-0.5 truncate">
                           {job.title} · {toTitleCase(job.customer_name) || 'Walk-in'}
@@ -966,7 +1042,7 @@ export default function Jobs() {
                         </div>
                       </div>
                       <div className="col-span-2">
-                        <StatusBadge status={job.status} />
+                        <StatusBadge job={job} />
                       </div>
                       <div className="col-span-1">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded
