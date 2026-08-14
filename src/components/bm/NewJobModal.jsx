@@ -389,7 +389,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                     <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
                       tracking-wider block mb-1">Ring Size (mm)</label>
                     <div className="flex flex-wrap gap-1">
-                      {[6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36].map(size => (
+                      {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
                         <button key={size} onClick={() => setSelRingSize(size)}
                           className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors
                             ${selRingSize === size
@@ -403,28 +403,41 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
+                {isBinding(selected) ? (
+                  /* Binding is priced strictly as ring size x quantity. Pages
+                     have no meaning here, and offering a second count field
+                     was a way to double a price by accident. */
+                  <div className="mb-2">
                     <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
-                      tracking-wider block mb-1">
-                      {isBinding(selected) ? 'Documents' : 'Sheets'}
-                    </label>
-                    <input type="number" min="1" value={selPages}
-                      onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
-                        rounded-lg outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
-                      tracking-wider block mb-1">Copies</label>
+                      tracking-wider block mb-1">Documents</label>
                     <input type="number" min="1" value={selQty}
                       onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
                         rounded-lg outline-none"
                     />
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
+                        tracking-wider block mb-1">Sheets</label>
+                      <input type="number" min="1" value={selPages}
+                        onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
+                          rounded-lg outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
+                        tracking-wider block mb-1">Copies</label>
+                      <input type="number" min="1" value={selQty}
+                        onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
+                          rounded-lg outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200
