@@ -28,7 +28,7 @@ const SECTIONS = [
       { id: 'overview',    label: 'Overview',        icon: 'grid'     },
       { id: 'daysheet',    label: 'Day Sheet',        icon: 'calendar' },
       { id: 'jobs',        label: 'Jobs',             icon: 'briefcase'},
-      { id: 'proformas',   label: 'Proformas',        icon: 'file-text'},
+      { id: 'proformas',   label: 'Invoices',         icon: 'receipt'  },
       { id: 'inbox',       label: 'Inbox',            icon: 'inbox'    },
       { id: 'notes',       label: 'My Notes',         icon: 'lock'     },
     ]
