@@ -380,7 +380,7 @@ export default function LateJobModal({ onClose, onSuccess }) {
                   <div className="mb-2">
                     <label className="text-[9px] font-bold text-rose-600 uppercase tracking-wider block mb-1">Ring Size (mm)</label>
                     <div className="flex flex-wrap gap-1">
-                      {[6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36].map(size => (
+                      {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
                         <button key={size} onClick={() => setSelRingSize(size)}
                           className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors
                             ${selRingSize === size ? `${theme.accent} text-white border-transparent` : 'bg-white/60 border-rose-200 text-rose-700'}`}>
