@@ -8,6 +8,7 @@ import BMInfoStrip from '../../components/bm/BMInfoStrip'
 import Overview from '../../components/bm/Overview'
 import DaySheet from '../../components/bm/DaySheet'
 import Jobs from '../../components/bm/Jobs'
+import ProformasTab from '../../components/bm/ProformasTab'
 import Customers from '../../components/bm/Customers'
 import Reports    from '../../components/bm/Reports'
 import Inventory  from '../../components/bm/Inventory'
@@ -27,6 +28,7 @@ const SECTIONS = [
       { id: 'overview',    label: 'Overview',        icon: 'grid'     },
       { id: 'daysheet',    label: 'Day Sheet',        icon: 'calendar' },
       { id: 'jobs',        label: 'Jobs',             icon: 'briefcase'},
+      { id: 'proformas',   label: 'Proformas',        icon: 'file-text'},
       { id: 'inbox',       label: 'Inbox',            icon: 'inbox'    },
       { id: 'notes',       label: 'My Notes',         icon: 'lock'     },
     ]
@@ -61,6 +63,7 @@ export default function BMPortal() {
       case 'overview': return <Overview onNavigate={handleNav} />
       case 'daysheet': return <DaySheet />
       case 'jobs':       return <Jobs />
+      case 'proformas':  return <ProformasTab />
       case 'customers':  return <Customers />
       case 'reports':    return <Reports />
       case 'inventory':  return <Inventory />

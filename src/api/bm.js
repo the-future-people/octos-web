@@ -23,6 +23,25 @@ export const getJobs          = (params) =>
 export const getJobStats      = (params) =>
   client.get('/api/v1/jobs/stats/', { params })
 
+// ── Proformas ────────────────────────────────────────────────
+export const getProformas      = (params) =>
+  client.get('/api/v1/jobs/proformas/', { params })
+
+export const getProformaDetail = (id) =>
+  client.get(`/api/v1/jobs/proformas/${id}/`)
+
+export const createProforma    = (payload) =>
+  client.post('/api/v1/jobs/proformas/create/', payload)
+
+export const issueProforma     = (id) =>
+  client.post(`/api/v1/jobs/proformas/${id}/issue/`)
+
+export const reviseProforma    = (id, payload) =>
+  client.post(`/api/v1/jobs/proformas/${id}/revise/`, payload)
+
+export const convertProforma   = (id, payload) =>
+  client.post(`/api/v1/jobs/proformas/${id}/convert/`, payload)
+
 export const getWorkload      = () =>
   client.get('/api/v1/jobs/workload/')
 
