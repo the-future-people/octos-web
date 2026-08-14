@@ -759,13 +759,13 @@ function ReceiptsTab() {
   )
 }
 
-const STATUS_FILTERS = [
-  { value: 'ALL',             label: 'All'             },
-  { value: 'PENDING_PAYMENT', label: 'Pending Payment' },
-  { value: 'IN_PROGRESS',     label: 'In Progress'     },
-  { value: 'READY',           label: 'Ready'           },
-  { value: 'COMPLETE',        label: 'Complete'        },
-  { value: 'CANCELLED',       label: 'Cancelled'       },
+const QUEUE_FILTERS = [
+  { value: 'ALL',              label: 'All'              },
+  { value: 'awaiting_payment', label: 'Awaiting Payment' },
+  { value: 'in_production',    label: 'In Production'    },
+  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+  { value: 'halted',           label: 'Halted'           },
+  { value: 'handed_over',      label: 'Handed Over'      },
 ]
 
 const TYPE_FILTERS = [
@@ -777,7 +777,7 @@ const TYPE_FILTERS = [
 
 export default function Jobs() {
   const [tab, setTab] = useState('jobs')
-  const [status, setStatus] = useState('ALL')
+  const [queue, setQueue] = useState('ALL')
   const [jobType, setJobType] = useState('ALL')
   const [period, setPeriod] = useState('day')
   const [page, setPage] = useState(1)
@@ -794,9 +794,9 @@ export default function Jobs() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['jobs', status, jobType, period, page],
+    queryKey: ['jobs', queue, jobType, period, page],
     queryFn:  () => getJobs({
-      status:   status   !== 'ALL' ? status   : undefined,
+      queue:    queue    !== 'ALL' ? queue    : undefined,
       job_type: jobType  !== 'ALL' ? jobType  : undefined,
       period:   period   || undefined,
       page,
@@ -811,7 +811,7 @@ export default function Jobs() {
   const totalPages = Math.ceil(count / 20)
   const stats = statsData || {}
 
-  const handleStatus = (v) => { setStatus(v); setPage(1) }
+  const handleQueue = (v) => { setQueue(v); setPage(1) }
   const handleType   = (v) => { setJobType(v); setPage(1) }
   const handlePeriod = (v) => { setPeriod(v); setPage(1) }
 
@@ -849,18 +849,20 @@ export default function Jobs() {
 
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {[
-              { label: 'Total',      value: stats.total,      color: 'text-[var(--text)]',    border: 'border-t-zinc-400'    },
-              { label: 'Complete',   value: stats.complete,   color: 'text-emerald-600',       border: 'border-t-emerald-500' },
-              { label: 'In Progress',value: stats.in_progress,color: 'text-violet-600',        border: 'border-t-violet-500'  },
-              { label: 'Pending',    value: stats.pending,    color: 'text-amber-600',         border: 'border-t-amber-400'   },
-              { label: 'Cancelled',  value: stats.cancelled,  color: 'text-red-500',           border: 'border-t-red-400'     },
-              { label: 'Walk-in',    value: stats.walkin,     color: 'text-blue-600',          border: 'border-t-blue-400'    },
+              { label: 'Total',            value: stats.total,            color: 'text-[var(--text)]', border: 'border-t-zinc-400',    q: 'ALL'              },
+              { label: 'Awaiting Payment', value: stats.awaiting_payment, color: 'text-amber-600',     border: 'border-t-amber-400',   q: 'awaiting_payment' },
+              { label: 'In Production',    value: stats.in_production,    color: 'text-violet-600',    border: 'border-t-violet-500',  q: 'in_production'    },
+              { label: 'Ready for Pickup', value: stats.ready_for_pickup, color: 'text-emerald-600',   border: 'border-t-emerald-500', q: 'ready_for_pickup' },
+              { label: 'Halted',           value: stats.halted,           color: 'text-red-500',       border: 'border-t-red-400',     q: 'halted'           },
+              { label: 'Handed Over',      value: stats.handed_over,      color: 'text-[var(--text-2)]', border: 'border-t-zinc-300',  q: 'handed_over'      },
             ].map(c => (
-              <div key={c.label}
-                className={`bg-[var(--panel)] border border-[var(--border)] border-t-2 ${c.border} rounded-xl px-3 py-3 text-center`}>
+              <button key={c.label} onClick={() => handleQueue(c.q)}
+                className={`bg-[var(--panel)] border border-t-2 ${c.border} rounded-xl px-3 py-3 text-center
+                  transition-colors cursor-pointer
+                  ${queue === c.q ? 'border-[var(--border-dark)]' : 'border-[var(--border)] hover:border-[var(--border-dark)]'}`}>
                 <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? 'â€”'}</div>
-              </div>
+                <div className={`font-mono font-black text-xl ${c.color}`}>{c.value ?? '—'}</div>
+              </button>
             ))}
           </div>
 
@@ -884,10 +886,10 @@ export default function Jobs() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex gap-1 flex-wrap">
-                {STATUS_FILTERS.map(f => (
-                  <button key={f.value} onClick={() => handleStatus(f.value)}
+                {QUEUE_FILTERS.map(f => (
+                  <button key={f.value} onClick={() => handleQueue(f.value)}
                     className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-colors whitespace-nowrap
-                      ${status === f.value
+                      ${queue === f.value
                         ? 'bg-zinc-800 text-white border-transparent'
                         : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-dark)]'
                       }`}>
