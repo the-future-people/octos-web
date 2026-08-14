@@ -25,6 +25,28 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
+/**
+ * Job titles are joined and truncated at creation, so a long job can
+ * lose services twice over — once to the "+N more" baked into the
+ * title, again to CSS truncation. Line items are the real record, so
+ * read those and collapse repeats: two of the same service is "×2",
+ * not the same words printed twice.
+ */
+function serviceSummary(job) {
+  const items = job.line_items || []
+  if (!items.length) return job.title || '—'
+
+  const counts = new Map()
+  for (const it of items) {
+    const name = it.service_name || it.label || 'Service'
+    counts.set(name, (counts.get(name) || 0) + 1)
+  }
+
+  return [...counts.entries()]
+    .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+    .join(', ')
+}
+
 const STATUS_CONFIG = {
   DRAFT:               { label: 'Draft',             bg: 'bg-zinc-100',    text: 'text-zinc-600'    },
   PENDING_PAYMENT:     { label: 'Pending Payment',   bg: 'bg-amber-100',   text: 'text-amber-700'   },
@@ -1034,7 +1056,9 @@ export default function Jobs() {
                     <div className="hidden sm:grid grid-cols-12 items-center gap-1">
                       <div className="col-span-5 min-w-0">
                         <div className="font-mono text-[10px] font-bold text-[var(--text-3)]">{job.job_number}</div>
-                        <div className="text-xs font-semibold text-[var(--text)] truncate mt-0.5">{job.title}</div>
+                        <div className="text-xs font-semibold text-[var(--text)] mt-0.5 line-clamp-2 leading-snug">
+                          {serviceSummary(job)}
+                        </div>
                       </div>
                       <div className="col-span-2 min-w-0">
                         <div className="text-xs text-[var(--text-2)] truncate">
