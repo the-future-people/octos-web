@@ -133,6 +133,147 @@ function lifecycleState(job) {
   }
 }
 
+const AXIS_LADDERS = {
+  PAYMENT:  ['UNPAID', 'DEPOSIT_PAID', 'SETTLED'],
+  HANDOVER: ['AWAITING_COLLECTION', 'HANDED_OVER'],
+}
+const WORK_LADDER_INSTANT    = ['RECEIVED', 'DONE']
+const WORK_LADDER_PRODUCTION = ['RECEIVED', 'IN_PRODUCTION', 'FINISHING', 'QUALITY_CHECK', 'DONE']
+
+const STATE_LABELS = {
+  UNPAID: 'Unpaid', DEPOSIT_PAID: 'Deposit paid', SETTLED: 'Settled',
+  RECEIVED: 'Received', IN_PRODUCTION: 'In production', FINISHING: 'Finishing',
+  QUALITY_CHECK: 'Quality check', DONE: 'Done',
+  AWAITING_COLLECTION: 'Awaiting collection', OUT_FOR_DELIVERY: 'Out for delivery',
+  HANDED_OVER: 'Handed over',
+}
+
+/**
+ * One horizontal track per axis. The axes are independent — a job can be
+ * part-paid, in finishing and awaiting collection at once — so a single
+ * combined track would misrepresent them.
+ *
+ * Empty circles matter as much as filled ones: the old flat history only
+ * listed what had happened, so there was no way to see how far a job still
+ * had to go.
+ */
+function AxisTrack({ steps, current, logs, halted, haltReason }) {
+  const idx = steps.indexOf(current)
+  return (
+    <div className="flex items-start">
+      {steps.map((s, i) => {
+        const done    = i < idx
+        const isNow   = i === idx
+        const log     = logs?.find(l => l.to_status === s)
+        const isHalt  = isNow && halted
+        return (
+          <div key={s} className="flex-1 text-center relative min-w-0">
+            {i < steps.length - 1 && (
+              <div className={`h-0.5 absolute top-[9px] left-1/2 -right-1/2
+                ${done ? 'bg-emerald-500' : 'bg-[var(--border-dark)]'}`} />
+            )}
+            <div className={`w-[18px] h-[18px] rounded-full mx-auto relative z-10 flex items-center justify-center
+              ${done   ? 'bg-emerald-500 text-white' : ''}
+              ${isNow && !isHalt ? 'bg-violet-600 ring-4 ring-violet-100' : ''}
+              ${isHalt ? 'bg-red-500 ring-4 ring-red-100' : ''}
+              ${!done && !isNow ? 'border-2 border-[var(--border-dark)]' : ''}`}>
+              {done && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="4">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <div className={`text-[10px] mt-1.5 leading-tight px-0.5
+              ${isHalt ? 'text-red-600 font-semibold'
+                : isNow ? 'text-violet-700 font-semibold'
+                : done  ? 'text-[var(--text-2)]' : 'text-[var(--text-3)]'}`}>
+              {STATE_LABELS[s] || s}
+            </div>
+            {isHalt && haltReason && (
+              <div className="text-[10px] text-red-600 mt-0.5 leading-tight">{haltReason}</div>
+            )}
+            {log && !isHalt && (
+              <div className="text-[10px] text-[var(--text-3)] mt-0.5 leading-tight truncate">
+                {log.actor_name ? toTitleCase(log.actor_name.split(' ')[0]) : ''}
+                {log.actor_name ? ' · ' : ''}{timeAgo(log.transitioned_at).replace(' ago', '')}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function LifecycleProgress({ job }) {
+  const logs      = job.status_logs || []
+  const byAxis    = a => logs.filter(l => l.axis === a)
+  const isInstant = job.job_type === 'INSTANT'
+  const halt      = job.active_halt
+  const workSteps = isInstant ? WORK_LADDER_INSTANT : WORK_LADDER_PRODUCTION
+
+  // An instant job is paid, finished and collected in one motion, so three
+  // separate tracks of two steps each would be all chrome and no signal.
+  if (isInstant) {
+    const steps = [
+      { label: 'Payment',  state: job.payment_state,  log: byAxis('PAYMENT')[0]  },
+      { label: 'Work',     state: job.work_state,     log: byAxis('WORK')[0]     },
+      { label: 'Handover', state: job.handover_state, log: byAxis('HANDOVER')[0] },
+    ]
+    return (
+      <div className="flex items-start">
+        {steps.map((s, i) => {
+          const done = !!s.log
+          return (
+            <div key={s.label} className="flex-1 text-center relative min-w-0">
+              {i < 2 && (
+                <div className={`h-0.5 absolute top-[11px] left-1/2 -right-1/2
+                  ${done ? 'bg-emerald-500' : 'bg-[var(--border-dark)]'}`} />
+              )}
+              <div className={`w-[22px] h-[22px] rounded-full mx-auto relative z-10 flex items-center justify-center
+                ${done ? 'bg-emerald-500 text-white' : 'border-2 border-[var(--border-dark)]'}`}>
+                {done && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="4">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <div className="text-[10px] text-[var(--text-3)] mt-1.5">{s.label}</div>
+              <div className="text-xs text-[var(--text)] mt-0.5">{STATE_LABELS[s.state] || s.state}</div>
+              {s.log && (
+                <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                  {s.log.actor_name ? toTitleCase(s.log.actor_name.split(' ')[0]) : ''}
+                  {s.log.actor_name ? ' · ' : ''}{timeAgo(s.log.transitioned_at).replace(' ago', '')}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-[10px] text-[var(--text-3)] mb-2">Payment</div>
+        <AxisTrack steps={AXIS_LADDERS.PAYMENT} current={job.payment_state} logs={byAxis('PAYMENT')} />
+      </div>
+      <div>
+        <div className="text-[10px] text-[var(--text-3)] mb-2">Work</div>
+        <AxisTrack steps={workSteps} current={job.work_state} logs={byAxis('WORK')}
+          halted={!!halt} haltReason={halt?.reason_display} />
+      </div>
+      <div>
+        <div className="text-[10px] text-[var(--text-3)] mb-2">Handover</div>
+        <AxisTrack steps={AXIS_LADDERS.HANDOVER} current={job.handover_state} logs={byAxis('HANDOVER')} />
+      </div>
+    </div>
+  )
+}
+
 function StatusBadge({ job, status }) {
   // Falls back to the legacy status map for callers that still pass a
   // bare status string — receipts and invoices tabs have not migrated.
@@ -532,28 +673,11 @@ function JobDetailPanel({ jobId, onClose }) {
                 )}
               </div>
             )}
-            {job.status_logs?.length > 0 && (
+            {job.payment_state && (
               <div>
-                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">History</div>
-                <div className="space-y-1">
-                  {job.status_logs.slice(0, 8).map(log => (
-                    <div key={log.id} className="flex items-center gap-3 px-3 py-2
-                      bg-[var(--bg)] border border-[var(--border)] rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-[var(--text-2)]">
-                          <span className="text-[var(--text-3)]">{log.from_status?.replace(/_/g,' ')}</span>
-                          {' → '}
-                          <span className="font-semibold text-[var(--text)]">{log.to_status?.replace(/_/g,' ')}</span>
-                        </div>
-                        {log.actor_name && (
-                          <div className="text-[10px] text-[var(--text-3)] mt-0.5">{toTitleCase(log.actor_name)}</div>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-[var(--text-3)] shrink-0">
-                        {timeAgo(log.transitioned_at)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-3">Progress</div>
+                <div className="px-3 py-4 bg-[var(--bg)] border border-[var(--border)] rounded-xl">
+                  <LifecycleProgress job={job} />
                 </div>
               </div>
             )}
