@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  getProformas, issueProforma, convertProforma,
+  getProformas, issueProforma, convertProforma, getProformaPdf,
 } from '../../api/bm'
 import NewProformaModal from './NewProformaModal'
 import ReviseProformaModal from './ReviseProformaModal'
@@ -53,6 +53,23 @@ export default function ProformasTab({ onOpenDetail }) {
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [revising, setRevising]     = useState(null)
+  const [sharing, setSharing]       = useState(null)
+
+  const download = async (p) => {
+    try {
+      const res = await getProformaPdf(p.id)
+      const url = URL.createObjectURL(res.data)
+      const a   = document.createElement('a')
+      a.href     = url
+      a.download = `${p.proforma_number}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      setSharing(null)
+    } catch {
+      setError('Could not build the document.')
+      setSharing(null)
+    }
+  }
   const [filter, setFilter] = useState('open')
   const [page, setPage]     = useState(1)
   const [error, setError]   = useState('')
@@ -167,10 +184,10 @@ export default function ProformasTab({ onOpenDetail }) {
           <div className="hidden sm:grid grid-cols-12 px-4 py-2 border-b border-[var(--border)]
             text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
             <span className="col-span-4">Proforma</span>
-            <span className="col-span-3">Customer</span>
-            <span className="col-span-2 text-right">Amount</span>
+            <span className="col-span-2">Customer</span>
+            <span className="col-span-2 text-right pr-3">Amount</span>
             <span className="col-span-1">Status</span>
-            <span className="col-span-2 text-right">Actions</span>
+            <span className="col-span-3 text-right">Actions</span>
           </div>
 
           {visible.map(p => {
@@ -190,10 +207,10 @@ export default function ProformasTab({ onOpenDetail }) {
                     {subLine(p)}
                   </div>
                 </div>
-                <div className="col-span-3 min-w-0 text-xs text-[var(--text-2)] truncate">
+                <div className="col-span-2 min-w-0 text-xs text-[var(--text-2)] truncate">
                   {p.customer_name}
                 </div>
-                <div className="col-span-2 text-right font-mono text-xs font-bold text-[var(--text)]">
+                <div className="col-span-2 text-right pr-3 font-mono text-xs font-bold text-[var(--text)]">
                   {fmt(p.total)}
                 </div>
                 <div className="col-span-1">
@@ -201,13 +218,20 @@ export default function ProformasTab({ onOpenDetail }) {
                     {s.label}
                   </span>
                 </div>
-                <div className="col-span-2 flex justify-end gap-1.5">
+                <div className="col-span-3 flex justify-end gap-1.5">
                   {p.status === 'DRAFT' && (
                     <button onClick={() => issue(p.id)} disabled={issuing}
                       className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
                         rounded-lg hover:border-[var(--border-dark)] disabled:opacity-40
                         transition-colors whitespace-nowrap">
                       Issue
+                    </button>
+                  )}
+                  {(p.status === 'ISSUED' || p.status === 'DRAFT') && (
+                    <button onClick={() => setSharing(p)}
+                      className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
+                        rounded-lg hover:border-[var(--border-dark)] transition-colors">
+                      Share
                     </button>
                   )}
                   {p.status === 'ISSUED' && !p.is_expired && (
@@ -251,6 +275,42 @@ export default function ProformasTab({ onOpenDetail }) {
 
       {revising && (
         <ReviseProformaModal proformaId={revising} onClose={() => setRevising(null)} />
+      )}
+
+      {sharing && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSharing(null)}>
+          <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-xs
+            overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b border-[var(--border)]">
+              <div className="text-sm font-bold text-[var(--text)]">Share proforma</div>
+              <div className="text-[11px] text-[var(--text-3)] font-mono mt-0.5">
+                {sharing.proforma_number}
+              </div>
+            </div>
+            <div className="p-2">
+              <button onClick={() => download(sharing)}
+                className="w-full text-left px-3 py-2.5 text-sm rounded-lg
+                  hover:bg-[var(--bg)] transition-colors">
+                Download PDF
+              </button>
+              {/* Neither channel is wired: _deliver_invoice only stamps a
+                  status, and WhatsApp needs the Cloud API and its own SIM.
+                  Shown rather than hidden so the shape is known. */}
+              <button disabled
+                className="w-full text-left px-3 py-2.5 text-sm rounded-lg
+                  text-[var(--text-3)] cursor-not-allowed">
+                WhatsApp <span className="text-[10px]">— not connected yet</span>
+              </button>
+              <button disabled
+                className="w-full text-left px-3 py-2.5 text-sm rounded-lg
+                  text-[var(--text-3)] cursor-not-allowed">
+                Email <span className="text-[10px]">— not connected yet</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {accepting_ && createPortal(

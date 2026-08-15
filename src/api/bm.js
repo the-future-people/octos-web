@@ -42,6 +42,9 @@ export const reviseProforma    = (id, payload) =>
 export const convertProforma   = (id, payload) =>
   client.post(`/api/v1/jobs/proformas/${id}/convert/`, payload)
 
+export const getProformaPdf    = (id) =>
+  client.get(`/api/v1/jobs/proformas/${id}/pdf/`, { responseType: 'blob' })
+
 export const getWorkload      = () =>
   client.get('/api/v1/jobs/workload/')
 
