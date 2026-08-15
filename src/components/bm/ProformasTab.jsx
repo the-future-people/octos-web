@@ -6,6 +6,7 @@ import {
   getProformas, issueProforma, convertProforma,
 } from '../../api/bm'
 import NewProformaModal from './NewProformaModal'
+import ReviseProformaModal from './ReviseProformaModal'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -51,6 +52,7 @@ const FILTERS = [
 export default function ProformasTab({ onOpenDetail }) {
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
+  const [revising, setRevising]     = useState(null)
   const [filter, setFilter] = useState('open')
   const [page, setPage]     = useState(1)
   const [error, setError]   = useState('')
@@ -210,7 +212,7 @@ export default function ProformasTab({ onOpenDetail }) {
                   )}
                   {p.status === 'ISSUED' && !p.is_expired && (
                     <>
-                      <button onClick={() => onOpenDetail?.(p.id, 'revise')}
+                      <button onClick={() => setRevising(p.id)}
                         className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
                           rounded-lg hover:border-[var(--border-dark)] transition-colors">
                         Revise
@@ -245,6 +247,10 @@ export default function ProformasTab({ onOpenDetail }) {
 
       {showCreate && (
         <NewProformaModal onClose={() => setShowCreate(false)} />
+      )}
+
+      {revising && (
+        <ReviseProformaModal proformaId={revising} onClose={() => setRevising(null)} />
       )}
 
       {accepting_ && createPortal(
