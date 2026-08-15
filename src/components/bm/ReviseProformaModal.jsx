@@ -236,7 +236,15 @@ export default function ReviseProformaModal({ proformaId, onClose, onSuccess }) 
                       rounded-lg px-1 py-0.5">
                       <button onClick={() => changeQty(l._id, -1)}
                         className="w-5 text-[var(--text-3)] hover:text-[var(--text)]">−</button>
-                      <span className="min-w-[28px] text-center font-mono">{l.quantity}</span>
+                      <input type="number" min="1" value={l.quantity}
+                        onChange={e => {
+                          const v = Math.max(1, parseInt(e.target.value) || 1)
+                          setLines(ls => ls.map(x =>
+                            x._id === l._id ? { ...x, quantity: v, repricing: true } : x))
+                        }}
+                        className="w-14 text-center font-mono bg-transparent outline-none
+                          [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
+                          [&::-webkit-inner-spin-button]:appearance-none" />
                       <button onClick={() => changeQty(l._id, 1)}
                         className="w-5 text-[var(--text-3)] hover:text-[var(--text)]">+</button>
                     </span>
@@ -260,6 +268,35 @@ export default function ReviseProformaModal({ proformaId, onClose, onSuccess }) 
             ))}
           </tbody>
         </table>
+
+        <div className="px-6 py-2 border-b border-[var(--border)]">
+          <select
+            value=""
+            onChange={e => {
+              const svc = servicesRaw.find(s => String(s.id) === e.target.value)
+              if (!svc) return
+              setLines(ls => [...ls, {
+                _id: Math.max(0, ...ls.map(x => x._id)) + 1,
+                service_id:   svc.id,
+                service_name: svc.name,
+                quantity:     1,
+                pages:        svc.smart_defaults?.pages || 1,
+                is_color:     svc.smart_defaults?.is_color ?? false,
+                ring_size:    svc.name.toLowerCase().includes('binding') ? 10 : null,
+                output_mode:  svc.name.toLowerCase().includes('passport') ? 'PRINT' : null,
+                unit_price:   0,
+                total:        0,
+                removed:      false,
+                repricing:    true,
+              }])
+            }}
+            className="text-xs text-[#C6202A] bg-transparent outline-none cursor-pointer py-1">
+            <option value="">+ Add a service</option>
+            {servicesRaw.filter(s => s.is_active).map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
 
         <div className="px-6 py-4 flex justify-end">
           <div className="w-56 text-xs">
