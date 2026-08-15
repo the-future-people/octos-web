@@ -7,6 +7,7 @@ import {
 } from '../../api/bm'
 import NewProformaModal from './NewProformaModal'
 import ReviseProformaModal from './ReviseProformaModal'
+import InvoicesTab from './InvoicesTab'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -49,8 +50,15 @@ const FILTERS = [
   { value: '',           label: 'All'       },
 ]
 
+/**
+ * Two documents, one section. A proforma quotes work before it starts; an
+ * invoice bills for work already done. They are different enough to need
+ * separate lists and different enough that folding them into one table
+ * would compromise both.
+ */
 export default function ProformasTab({ onOpenDetail }) {
   const queryClient = useQueryClient()
+  const [docTab, setDocTab] = useState('proformas')
   const [showCreate, setShowCreate] = useState(false)
   const [revising, setRevising]     = useState(null)
   const [sharing, setSharing]       = useState(null)
@@ -124,8 +132,48 @@ export default function ProformasTab({ onOpenDetail }) {
     },
   })
 
+  if (docTab === 'invoices') {
+    return (
+      <div className="flex flex-col">
+        <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1
+          rounded-2xl mx-5 sm:mx-6 mt-5 sm:mt-6">
+          {[
+            { value: 'proformas', label: 'Proformas' },
+            { value: 'invoices',  label: 'Invoices'  },
+          ].map(t => (
+            <button key={t.value} onClick={() => setDocTab(t.value)}
+              className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors
+                ${docTab === t.value
+                  ? 'bg-[var(--text)] text-white shadow-sm'
+                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+                }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <InvoicesTab />
+      </div>
+    )
+  }
+
   return (
     <div className="p-5 sm:p-6 space-y-4">
+      <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-2xl">
+        {[
+          { value: 'proformas', label: 'Proformas' },
+          { value: 'invoices',  label: 'Invoices'  },
+        ].map(t => (
+          <button key={t.value} onClick={() => setDocTab(t.value)}
+            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-colors
+              ${docTab === t.value
+                ? 'bg-[var(--text)] text-white shadow-sm'
+                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
+              }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Proformas</h2>
