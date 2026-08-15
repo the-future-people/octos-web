@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProformas, issueProforma, convertProforma,
 } from '../../api/bm'
+import NewProformaModal from './NewProformaModal'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -46,8 +47,9 @@ const FILTERS = [
   { value: '',           label: 'All'       },
 ]
 
-export default function ProformasTab({ onOpenDetail, onNew }) {
+export default function ProformasTab({ onOpenDetail }) {
   const queryClient = useQueryClient()
+  const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter] = useState('open')
   const [page, setPage]     = useState(1)
   const [error, setError]   = useState('')
@@ -116,7 +118,7 @@ export default function ProformasTab({ onOpenDetail, onNew }) {
               </button>
             ))}
           </div>
-          <button onClick={onNew}
+          <button onClick={() => setShowCreate(true)}
             className="px-4 py-2 text-xs font-bold bg-[var(--text)] text-white
               rounded-xl hover:opacity-90 transition-opacity whitespace-nowrap">
             + New Proforma
@@ -217,7 +219,7 @@ export default function ProformasTab({ onOpenDetail, onNew }) {
                     </button>
                   )}
                   {p.status === 'EXPIRED' && (
-                    <button onClick={() => onNew?.(p.id)}
+                    <button onClick={() => setShowCreate(true)}
                       className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
                         rounded-lg hover:border-[var(--border-dark)] transition-colors whitespace-nowrap">
                       Re-quote
@@ -228,6 +230,10 @@ export default function ProformasTab({ onOpenDetail, onNew }) {
             )
           })}
         </div>
+      )}
+
+      {showCreate && (
+        <NewProformaModal onClose={() => setShowCreate(false)} />
       )}
     </div>
   )
