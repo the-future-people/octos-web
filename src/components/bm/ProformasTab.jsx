@@ -1,5 +1,6 @@
 // src/components/bm/ProformasTab.jsx
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProformas, issueProforma, convertProforma,
@@ -84,14 +85,24 @@ export default function ProformasTab({ onOpenDetail }) {
     onError:    (e) => setError(e.response?.data?.detail || 'Could not issue this proforma.'),
   })
 
+  // Accepting is a commitment on both sides, so it asks first — and asks
+  // what was agreed while it has the manager's attention, rather than
+  // recording an empty term and losing the arrangement.
+  const [accepting_, setAccepting] = useState(null)
+  const [terms, setTerms]          = useState('70')
+
   const { mutate: accept, isPending: accepting } = useMutation({
-    mutationFn: (id) => convertProforma(id, { agreed_terms: '' }),
+    mutationFn: ({ id, agreed_terms }) => convertProforma(id, { agreed_terms }),
     onSuccess:  () => {
       queryClient.invalidateQueries({ queryKey: ['proformas'] })
       queryClient.invalidateQueries({ queryKey: ['paymentQueue'] })
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      setAccepting(null)
     },
-    onError:    (e) => setError(e.response?.data?.detail || 'Could not accept this proforma.'),
+    onError:    (e) => {
+      setError(e.response?.data?.detail || 'Could not accept this proforma.')
+      setAccepting(null)
+    },
   })
 
   return (
@@ -204,7 +215,7 @@ export default function ProformasTab({ onOpenDetail }) {
                           rounded-lg hover:border-[var(--border-dark)] transition-colors">
                         Revise
                       </button>
-                      <button onClick={() => accept(p.id)} disabled={accepting}
+                      <button onClick={() => { setTerms('70'); setAccepting(p) }} disabled={accepting}
                         className="px-2.5 py-1 text-[10px] font-bold bg-[var(--text)] text-white
                           rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
                         Accept
@@ -234,6 +245,68 @@ export default function ProformasTab({ onOpenDetail }) {
 
       {showCreate && (
         <NewProformaModal onClose={() => setShowCreate(false)} />
+      )}
+
+      {accepting_ && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md
+            overflow-hidden animate-slideUp">
+            <div className="px-6 py-4 border-b border-[var(--border)]">
+              <div className="font-bold text-[var(--text)]">Accept this proforma</div>
+              <div className="text-xs text-[var(--text-3)] mt-0.5">
+                {accepting_.proforma_number} · {accepting_.customer_name}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-[var(--text-2)] leading-relaxed">
+                The customer has accepted the pricing and terms on this proforma.
+                A job for <span className="font-bold text-[var(--text)]">{fmt(accepting_.total)}</span> will
+                be created and sent to the cashier for payment.
+              </p>
+
+              <div>
+                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                  tracking-wider mb-2">What was agreed</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { value: '70',     label: '70% deposit' },
+                    { value: '100',    label: 'Paid in full' },
+                    { value: 'CREDIT', label: 'On credit'   },
+                  ].map(opt => (
+                    <button key={opt.value} onClick={() => setTerms(opt.value)}
+                      className={`py-2 text-xs font-bold rounded-lg border transition-colors
+                        ${terms === opt.value
+                          ? 'bg-[var(--text)] text-white border-transparent'
+                          : 'border-[var(--border)] text-[var(--text-3)] hover:border-[var(--border-dark)]'
+                        }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-[var(--text-3)] mt-2 leading-relaxed">
+                  Recorded on the proforma for reference. The cashier still takes
+                  the payment and applies credit, as always.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-[var(--border)] flex justify-end gap-3">
+              <button onClick={() => setAccepting(null)}
+                className="px-4 py-2 text-sm font-semibold text-[var(--text-2)]
+                  hover:text-[var(--text)] transition-colors">
+                Not yet
+              </button>
+              <button onClick={() => accept({ id: accepting_.id, agreed_terms: terms })}
+                disabled={accepting}
+                className="px-4 py-2 bg-[var(--text)] text-white text-sm font-bold
+                  rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
+                {accepting ? 'Sending...' : 'Send to cashier'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

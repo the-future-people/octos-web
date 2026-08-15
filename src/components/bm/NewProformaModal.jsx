@@ -93,12 +93,13 @@ export default function NewProformaModal({ onClose, onSuccess }) {
 
   const selPrice = needsNetworkPrice ? networkPrice : localPrice
 
-  // Proformas quote work that gets made. Instant counter services are not
-  // quoted — a customer standing at the till is told the price.
+  // Every category. A single institutional order routinely mixes them —
+  // 500 flyers, 200 colour prints and five banners on one proforma — and
+  // excluding instant made that unquotable.
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
-      .filter(s => s.is_active && s.category !== 'INSTANT')
+      .filter(s => s.is_active)
       .filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()))
       .forEach(s => {
         const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
