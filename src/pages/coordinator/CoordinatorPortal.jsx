@@ -40,8 +40,9 @@ export default function CoordinatorPortal() {
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       {/* Topbar */}
-      <div className="bg-[var(--panel)] border-b border-[var(--border)]
-        px-5 sm:px-6 py-3 flex items-center justify-between gap-4">
+            <div className="bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-6 py-3
+          flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <span className="font-black text-lg text-[var(--text)] tracking-tight">
             Octos
@@ -62,21 +63,22 @@ export default function CoordinatorPortal() {
           <span className="text-xs font-semibold text-[var(--text)] hidden sm:inline">
             {user?.full_name}
           </span>
-          <button onClick={logout}
+                    <button onClick={logout}
             className="px-3 py-1.5 text-xs font-bold border border-[var(--border)]
               rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
               transition-colors">
             Sign out
           </button>
         </div>
+        </div>
       </div>
 
       {/* Info strip — what a coordinator needs at a glance, which is not
           money. Machine status belongs here once machines can be marked
           down from the portal. */}
-      <div className="bg-[var(--panel)] border-b border-[var(--border)]
-        px-5 sm:px-6 py-2.5 flex items-center gap-5 flex-wrap
-        text-[11px] text-[var(--text-3)]">
+            <div className="bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-6 py-2.5
+          flex items-center gap-5 flex-wrap text-[11px] text-[var(--text-3)]">
         <span>
           BRANCH <span className="font-semibold text-[var(--text)] ml-1">
             {user?.branch_detail?.name || '—'}
@@ -88,9 +90,10 @@ export default function CoordinatorPortal() {
         <span>
           ON THE FLOOR <span className="font-semibold text-[var(--text)] ml-1">—</span>
         </span>
-        <span>
+                <span>
           MACHINES <span className="font-semibold text-[var(--text)] ml-1">—</span>
         </span>
+        </div>
       </div>
 
             <div className="flex w-full max-w-6xl mx-auto">
