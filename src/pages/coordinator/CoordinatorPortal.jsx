@@ -93,7 +93,7 @@ export default function CoordinatorPortal() {
         </span>
       </div>
 
-      <div className="flex">
+            <div className="flex w-full max-w-6xl mx-auto">
         {/* Sidebar */}
         <aside className="w-56 shrink-0 min-h-[calc(100vh-108px)]
           bg-[var(--panel)] border-r border-[var(--border)] px-3 py-5 hidden sm:block">
@@ -125,8 +125,8 @@ export default function CoordinatorPortal() {
           ))}
         </aside>
 
-        {/* Mobile section switcher, since the sidebar is hidden there */}
-        <div className="flex-1 min-w-0">
+                {/* Mobile section switcher, since the sidebar is hidden there */}
+                <div className="flex-1 min-w-0">
           <div className="sm:hidden px-5 pt-4">
             <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)]
               p-1 rounded-2xl">
