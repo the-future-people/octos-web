@@ -21,9 +21,10 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   if (allowedRoles && !allowedRoles.includes(user.role_name)) {
     // Redirect to correct portal
     const role = user.role_name
-    if (role === 'CASHIER')         return <Navigate to="/cashier" replace />
-    if (role === 'BRANCH_MANAGER')  return <Navigate to="/bm" replace />
-    if (role === 'ATTENDANT')       return <Navigate to="/attendant" replace />
+    if (role === 'CASHIER')           return <Navigate to="/cashier" replace />
+    if (role === 'BRANCH_MANAGER')    return <Navigate to="/bm" replace />
+    if (role === 'ATTENDANT')         return <Navigate to="/attendant" replace />
+    if (role === 'FLOW_COORDINATOR')  return <Navigate to="/coordinator" replace />
     return <Navigate to="/login" replace />
   }
 
