@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { getVerificationQueue } from '../../api/coordinator'
+import CoordinatorTopbar from '../../components/coordinator/CoordinatorTopbar'
 import ProductionBoard from '../../components/coordinator/ProductionBoard'
 import VerificationQueue from '../../components/coordinator/VerificationQueue'
 
@@ -39,39 +40,7 @@ export default function CoordinatorPortal() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
-      {/* Topbar */}
-            <div className="bg-[var(--panel)] border-b border-[var(--border)]">
-        <div className="w-full max-w-6xl mx-auto px-5 sm:px-6 py-3
-          flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="font-black text-lg text-[var(--text)] tracking-tight">
-            Octos
-          </span>
-          <span className="w-px h-7 bg-[var(--border)]" />
-          <div className="min-w-0">
-            <div className="text-[10px] font-bold text-[var(--text-3)]
-              uppercase tracking-wider">
-              Flow Coordinator
-            </div>
-            <div className="text-xs font-semibold text-[var(--text)] truncate">
-              {user?.branch_detail?.name || '—'}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs font-semibold text-[var(--text)] hidden sm:inline">
-            {user?.full_name}
-          </span>
-                    <button onClick={logout}
-            className="px-3 py-1.5 text-xs font-bold border border-[var(--border)]
-              rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
-              transition-colors">
-            Sign out
-          </button>
-        </div>
-        </div>
-      </div>
+            <CoordinatorTopbar user={user} onLogout={logout} />
 
       {/* Info strip — what a coordinator needs at a glance, which is not
           money. Machine status belongs here once machines can be marked
