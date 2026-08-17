@@ -37,9 +37,10 @@ export default function LoginPage() {
 
       // Step 5 — redirect based on role
       const role = user.role_name
-      if (role === 'CASHIER')             navigate('/cashier')
-      else if (role === 'BRANCH_MANAGER') navigate('/bm')
-      else if (role === 'ATTENDANT')      navigate('/attendant')
+      if (role === 'CASHIER')               navigate('/cashier')
+      else if (role === 'BRANCH_MANAGER')   navigate('/bm')
+      else if (role === 'ATTENDANT')        navigate('/attendant')
+      else if (role === 'FLOW_COORDINATOR') navigate('/coordinator')
       else navigate('/')
 
     } catch (err) {

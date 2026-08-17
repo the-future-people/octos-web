@@ -10,6 +10,7 @@ import LoginPage from './pages/auth/LoginPage'
 import CashierPortal from './pages/cashier/CashierPortal'
 import BMPortal        from './pages/bm/BMPortal'
 import AttendantPortal from './pages/attendant/AttendantPortal'
+import CoordinatorPortal from './pages/coordinator/CoordinatorPortal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['ATTENDANT']}>
                   <AttendantPortal />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coordinator/*"
+              element={
+                <ProtectedRoute allowedRoles={['FLOW_COORDINATOR']}>
+                  <CoordinatorPortal />
                 </ProtectedRoute>
               }
             />
