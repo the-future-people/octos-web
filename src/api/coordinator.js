@@ -24,3 +24,12 @@ export const resumeJob = (id) =>
 
 export const getJobDetail = (id) =>
   client.get(`/api/v1/jobs/${id}/`)
+
+export const getMachines = () =>
+  client.get('/api/v1/production/machines/')
+
+export const machineDown = (id, payload) =>
+  client.post(`/api/v1/production/machines/${id}/down/`, payload)
+
+export const machineUp = (id, payload) =>
+  client.post(`/api/v1/production/machines/${id}/up/`, payload)

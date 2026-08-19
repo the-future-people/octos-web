@@ -7,12 +7,29 @@ import CoordinatorTopbar from '../../components/coordinator/CoordinatorTopbar'
 import ProductionBoard from '../../components/coordinator/ProductionBoard'
 import VerificationQueue from '../../components/coordinator/VerificationQueue'
 
+const ICONS = {
+  grid: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  ),
+  briefcase: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+}
+
 const SECTIONS = [
   {
     group: 'WORKSPACE',
     items: [
-      { id: 'board',  label: 'Production' },
-      { id: 'verify', label: 'To verify'  },
+      { id: 'overview', label: 'Overview',   icon: 'grid'      },
+      { id: 'board',    label: 'Production', icon: 'briefcase' },
     ],
   },
 ]
@@ -77,14 +94,17 @@ export default function CoordinatorPortal() {
               </div>
               <div className="space-y-0.5">
                 {group.items.map(item => (
-                  <button key={item.id} onClick={() => setSection(item.id)}
+                                    <button key={item.id} onClick={() => setSection(item.id)}
                     className={`w-full flex items-center justify-between px-3 py-2
                       rounded-xl text-sm font-semibold transition-colors
                       ${section === item.id
                         ? 'bg-[var(--bg)] text-[var(--text)]'
                         : 'text-[var(--text-2)] hover:text-[var(--text)]'}`}>
-                    <span>{item.label}</span>
-                    {item.id === 'verify' && queue.length > 0 && (
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-[var(--text-3)]">{ICONS[item.icon]}</span>
+                      {item.label}
+                    </span>
+                      {item.id === 'board' && queue.length > 0 && (
                       <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full
                         bg-amber-100 text-amber-700">
                         {queue.length}
@@ -115,10 +135,10 @@ export default function CoordinatorPortal() {
             </div>
           </div>
 
-          {section === 'board' && (
-            <ProductionBoard onOpenVerification={() => setSection('verify')} />
+                    {section === 'overview' && (
+            <CoordinatorOverview onGoToProduction={() => setSection('board')} />
           )}
-          {section === 'verify' && <VerificationQueue />}
+          {section === 'board' && <ProductionBoard />}
         </div>
       </div>
     </div>
