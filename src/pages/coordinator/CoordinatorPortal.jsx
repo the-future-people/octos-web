@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext'
 import { getVerificationQueue } from '../../api/coordinator'
 import CoordinatorTopbar from '../../components/coordinator/CoordinatorTopbar'
 import ProductionBoard from '../../components/coordinator/ProductionBoard'
-import VerificationQueue from '../../components/coordinator/VerificationQueue'
 
 const ICONS = {
   grid: (
