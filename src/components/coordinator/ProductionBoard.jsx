@@ -83,11 +83,20 @@ export default function ProductionBoard() {
     placeholderData: prev => prev,
   })
 
-  // The tip of the stack is what to deal with next, so it opens itself
-  // rather than waiting to be clicked.
+    // The tip of the stack is what to deal with next, so it opens itself
+  // rather than waiting to be clicked. Re-reads the selected job from the
+  // fresh data each time: holding the object from when it was clicked
+  // means acting on a job the server has since moved on.
   useEffect(() => {
-    if (!selected && arrivals.length > 0) setSelected(arrivals[0])
-  }, [arrivals, selected])
+    if (!arrivals.length) {
+      if (selected && !selected._fromFloor) setSelected(null)
+      return
+    }
+    if (!selected) { setSelected(arrivals[0]); return }
+    const fresh = arrivals.find(j => j.id === selected.id)
+    if (fresh) setSelected(fresh)
+    else if (!selected._fromFloor) setSelected(arrivals[0])
+  }, [arrivals])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['productionBoard'] })
@@ -254,7 +263,7 @@ export default function ProductionBoard() {
                       flex items-center gap-3
                       ${stuck ? 'border-l-[3px] border-l-red-500 border-[var(--border)]'
                               : 'border-[var(--border)]'}`}>
-                    <button onClick={() => setSelected(job)}
+                                        <button onClick={() => setSelected({ ...job, _fromFloor: true })}
                       className="flex-1 min-w-0 text-left">
                       <div className="font-mono text-[10px] text-[var(--text-3)]">
                         {job.job_number}
