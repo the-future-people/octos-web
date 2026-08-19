@@ -341,7 +341,11 @@ function Workspace({ job, onClear, onClose, busy, setError, invalidate }) {
   const ready      = clockTime(job.predicted?.ready_at)
 
   return (
-    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-4">
+        <div className="rounded-2xl p-5 mb-4 border-2 border-dashed border-[var(--border-dark)]"
+      style={{
+        backgroundImage: 'radial-gradient(circle, var(--border-dark) 1px, transparent 1px)',
+        backgroundSize: '14px 14px',
+      }}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="font-mono text-sm font-bold text-[var(--text)]">
@@ -365,7 +369,7 @@ function Workspace({ job, onClear, onClose, busy, setError, invalidate }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
+                <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-3 py-2.5">
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
             tracking-wider mb-1.5">What was ordered</div>
           <div className="space-y-1">
