@@ -66,16 +66,21 @@ export default function ProductionBoard() {
   const [error, setError]       = useState('')
   const [halting, setHalting]   = useState(null)
 
+    // placeholderData keeps the previous result on screen while the next is
+  // in flight. Without it every state change blanks the board to skeletons
+  // and back, which reads as the page flickering under your hands.
   const { data: board, isLoading } = useQuery({
     queryKey: ['productionBoard'],
     queryFn:  () => getProductionBoard().then(r => r.data),
     refetchInterval: 30_000,
+    placeholderData: prev => prev,
   })
 
   const { data: arrivals = [] } = useQuery({
     queryKey: ['verificationQueue'],
     queryFn:  () => getVerificationQueue().then(r => r.data),
     refetchInterval: 30_000,
+    placeholderData: prev => prev,
   })
 
   // The tip of the stack is what to deal with next, so it opens itself

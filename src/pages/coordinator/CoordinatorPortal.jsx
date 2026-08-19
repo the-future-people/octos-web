@@ -81,10 +81,10 @@ export default function CoordinatorPortal() {
         </div>
       </div>
 
-            <div className="flex w-full max-w-6xl mx-auto">
+        <div className="flex w-full max-w-6xl mx-auto h-[calc(100vh-108px)] overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-56 shrink-0 min-h-[calc(100vh-108px)]
-          bg-[var(--panel)] border-r border-[var(--border)] px-3 py-5 hidden sm:block">
+        <aside className="w-44 shrink-0 h-full overflow-y-auto
+          bg-[var(--panel)] border-r border-[var(--border)] px-2.5 py-5 hidden sm:block">
           {SECTIONS.map(group => (
             <div key={group.group} className="mb-6">
               <div className="text-[10px] font-bold text-[var(--text-3)]
@@ -117,7 +117,7 @@ export default function CoordinatorPortal() {
         </aside>
 
                 {/* Mobile section switcher, since the sidebar is hidden there */}
-                <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 h-full overflow-y-auto">
           <div className="sm:hidden px-5 pt-4">
             <div className="flex gap-1 bg-[var(--panel)] border border-[var(--border)]
               p-1 rounded-2xl">
