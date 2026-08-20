@@ -92,6 +92,26 @@ const FINDING_LABEL = Object.fromEntries(
   SUSPEND_REASONS.map(r => [r.value, r.label])
 )
 
+const InboxIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" className="shrink-0">
+    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2
+      2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  </svg>
+)
+
+const PauseIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" className="shrink-0">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="10" y1="15" x2="10" y2="9" />
+    <line x1="14" y1="15" x2="14" y2="9" />
+  </svg>
+)
+
 const FileIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -229,7 +249,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
 
           <div className="flex flex-col min-h-0 flex-1">
             <div className="flex items-center gap-2 mb-2 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-3)]" />
+                            <span className="text-[var(--text-3)]"><InboxIcon /></span>
               <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
                 tracking-wider">Arrived · {queue.length}</span>
             </div>
@@ -308,7 +328,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
             <div className="shrink-0 pt-3 border-t-2 border-[var(--border-dark)]
               flex flex-col min-h-0" style={{ maxHeight: '45%' }}>
               <div className="flex items-center gap-2 mb-2 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span className="text-amber-600"><PauseIcon /></span>
                 <span className="text-[10px] font-bold text-amber-700 uppercase
                   tracking-wider">Held · {suspended.length}</span>
               </div>
@@ -557,7 +577,7 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
                 : 'Unpaid'}
               {' · '}{fmt(job.estimated_cost)}
             </div>
-            {ready && (
+                        {ready && (
               <div className="text-xs text-[var(--text-2)] mt-1">
                 Ready {job.predicted.is_next_day ? 'tomorrow ' : ''}{ready}
                 {job.predicted.confidence === 'estimated' && (
@@ -566,13 +586,16 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
               </div>
             )}
           </div>
+
+          {/* The note sits at the foot of what was ordered, because that
+              is what it comments on — the coordinator writes it having
+              read the spec, not before. */}
+          <input type="text" value={note} onChange={e => setNote(e.target.value)}
+            placeholder="Note (optional)"
+            className="w-full mt-2.5 px-2.5 py-1.5 text-xs bg-[var(--panel)]
+              border border-[var(--border)] rounded-lg outline-none" />
         </div>
       </div>
-
-      <input type="text" value={note} onChange={e => setNote(e.target.value)}
-        placeholder="Note (optional)"
-        className="w-full px-3 py-2 text-xs bg-[var(--bg)] border border-[var(--border)]
-          rounded-lg outline-none mb-2" />
 
       <div className="flex gap-2 items-center">
         <button onClick={() => onClear(note)} disabled={busy}
@@ -661,8 +684,10 @@ function FileCard({ file, onOpen }) {
     file.page_count ? `${file.page_count} ${file.page_count === 1 ? 'page' : 'pages'}` : null,
   ].filter(Boolean)
 
-    const ext = (file.filename || '').split('.').pop().toUpperCase()
+      const ext = (file.filename || '').split('.').pop().toUpperCase()
   const [failed, setFailed] = useState(false)
+  // Wrong with the file itself, as against a format nobody can read here.
+  const broken = file.metadata_state === 'FAILED' || file.size_kb === null
 
   return (
     <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
@@ -687,28 +712,46 @@ function FileCard({ file, onOpen }) {
           </div>
         )}
       </button>
-      <div className="px-2.5 py-2">
+            <div className="px-2.5 pt-2 pb-1.5">
         <button onClick={onOpen}
           className="text-xs font-semibold text-[var(--text)] hover:underline
             break-all text-left">
           {file.filename}
         </button>
-        {facts.length > 0 && (
-          <div className="text-[10px] text-[var(--text-2)] mt-0.5 leading-relaxed">
+      </div>
+
+      {/* The measurements are what the check is made on, so they read as
+          a band rather than as small print under a filename.
+
+          Dark by default and red only when something is actually wrong.
+          Red means stopped everywhere else in this portal — halted rows,
+          machines down — and a correct 300 dpi file painted red would
+          say the opposite of what is true. These are measurements, not
+          verdicts: the standard that would justify a verdict has not
+          been written. */}
+      {broken ? (
+        <div className="bg-red-600 px-2.5 py-1.5">
+          <div className="text-[10px] font-semibold text-white leading-relaxed">
+            {file.metadata_state === 'FAILED'
+              ? 'Could not be read. It may be damaged.'
+              : 'The file is missing from storage.'}
+          </div>
+        </div>
+      ) : facts.length > 0 ? (
+        <div className="bg-[var(--text)] px-2.5 py-1.5">
+          <div className="text-[10px] font-semibold text-white leading-relaxed">
             {facts.join(' · ')}
           </div>
-        )}
-        {file.metadata_state === 'UNSUPPORTED' && (
-          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-            This format cannot be read here — open it to check
+        </div>
+      ) : (
+        <div className="bg-[var(--bg)] px-2.5 py-1.5 border-t border-[var(--border)]">
+          <div className="text-[10px] text-[var(--text-3)]">
+            {file.metadata_state === 'UNSUPPORTED'
+              ? 'Cannot be read here — open it to check'
+              : 'Not measured'}
           </div>
-        )}
-        {file.metadata_state === 'FAILED' && (
-          <div className="text-[10px] text-amber-700 mt-0.5">
-            Could not be read. It may be damaged.
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
