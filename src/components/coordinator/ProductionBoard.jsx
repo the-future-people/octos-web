@@ -83,6 +83,15 @@ const FINDING_LABEL = Object.fromEntries(
   SUSPEND_REASONS.map(r => [r.value, r.label])
 )
 
+const FileIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" className="text-[var(--text-3)] shrink-0">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+  </svg>
+)
+
 const PhoneIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -487,9 +496,10 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
           <div className="font-mono text-sm font-bold text-[var(--text)]">
             {job.job_number}
           </div>
+                    {/* The number lives behind the call button. A coordinator
+              rings the customer; they do not copy the digits down. */}
           <div className="text-xs text-[var(--text-3)] mt-0.5">
             {job.customer_name || 'Walk-in'}
-            {job.customer_phone ? ` · ${job.customer_phone}` : ''}
             {job.intake_channel ? ` · ${job.intake_channel.replace('_', ' ').toLowerCase()}` : ''}
           </div>
         </div>
@@ -500,20 +510,19 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
 
         <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-wider mb-2">
-            {files.length > 1 ? `Files · ${files.length}` : 'The file'}
+                    <div className="flex items-center gap-1.5 mb-2">
+            <FileIcon />
+            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
+              tracking-wider">
+              {files.length > 1 ? `Files · ${files.length}` : 'The file'}
+            </span>
           </div>
                     {files.length === 0 ? (
             <p className="text-xs text-[var(--text-3)]">
               Nothing attached. The customer sent this without a file.
             </p>
-          ) : files.length <= 2 ? (
-            <div className="space-y-2.5">
-              {files.map(f => (
-                <FileCard key={f.id} file={f} onOpen={() => onPreview(f)} />
-              ))}
-            </div>
+                    ) : files.length === 1 ? (
+            <FileCard file={files[0]} onOpen={() => onPreview(files[0])} />
           ) : (
             <FileStack files={files} onPreview={onPreview} />
           )}
