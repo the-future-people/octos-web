@@ -184,8 +184,12 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const queue = arrivals.filter(j => j.id !== openJobId)
   const tip   = queue[0]
 
-  return (
+    return (
     <div className="p-5 sm:p-6">
+      <style>{`
+        .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+        .no-bar::-webkit-scrollbar { display: none; }
+      `}</style>
       {error && (
         <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)]
           rounded-lg text-xs text-[var(--red-text)] flex items-center justify-between">
@@ -196,14 +200,22 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
 
       <div className="flex gap-4 items-start">
 
-        {/* ── Left rail: arrived, then suspended ──────────────── */}
-        <div className="w-52 shrink-0">
+                {/* ── Left rail: arrived above, held below ────────────
+            Both sections stay in view. A long queue scrolls inside
+            its own section rather than pushing held work off the
+            bottom of the page — a job waiting on a customer is the
+            easiest thing in the building to forget, and it cannot be
+            allowed to scroll out of sight. */}
+        <div className="w-52 shrink-0 flex flex-col gap-3"
+          style={{ maxHeight: 'calc(100vh - 190px)' }}>
 
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-3)]" />
-            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
-              tracking-wider">Arrived · {queue.length}</span>
-          </div>
+          <div className="flex flex-col min-h-0 flex-1">
+            <div className="flex items-center gap-2 mb-2 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-3)]" />
+              <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                tracking-wider">Arrived · {queue.length}</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto no-bar pr-0.5">
 
           {queue.length === 0 ? (
             <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
@@ -266,18 +278,24 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
             </div>
           )}
 
-          {/* ── Suspended ──────────────────────────────────────
-              Kept apart from the queue by a rule and a colour. These
-              are not waiting to be looked at — they have been, and are
-              waiting on somebody else. */}
+                      </div>
+          </div>
+
+          {/* ── Held ───────────────────────────────────────────
+              Pinned beneath the queue, never scrolled away. Kept
+              apart by a rule and a colour: these are not waiting to
+              be looked at — they have been, and are waiting on
+              somebody else. */}
           {suspended.length > 0 && (
-            <div className="mt-6 pt-5 border-t-2 border-[var(--border-dark)]">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="shrink-0 pt-3 border-t-2 border-[var(--border-dark)]
+              flex flex-col min-h-0" style={{ maxHeight: '45%' }}>
+              <div className="flex items-center gap-2 mb-2 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                 <span className="text-[10px] font-bold text-amber-700 uppercase
                   tracking-wider">Held · {suspended.length}</span>
               </div>
-              <div className="bg-amber-50/60 rounded-xl p-1.5 space-y-1.5">
+              <div className="bg-amber-50/60 rounded-xl p-1.5 space-y-1.5
+                overflow-y-auto no-bar min-h-0">
                 {suspended.map(job => (
                   <div key={job.id}
                     className="bg-[var(--panel)] border border-amber-200
@@ -486,16 +504,18 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
             tracking-wider mb-2">
             {files.length > 1 ? `Files · ${files.length}` : 'The file'}
           </div>
-          {files.length === 0 ? (
+                    {files.length === 0 ? (
             <p className="text-xs text-[var(--text-3)]">
               Nothing attached. The customer sent this without a file.
             </p>
-          ) : (
+          ) : files.length <= 2 ? (
             <div className="space-y-2.5">
               {files.map(f => (
                 <FileCard key={f.id} file={f} onOpen={() => onPreview(f)} />
               ))}
             </div>
+          ) : (
+            <FileStack files={files} onPreview={onPreview} />
           )}
         </div>
 
@@ -572,6 +592,40 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
  * verdicts — nothing here says whether it will print well, because the
  * standard to judge it against has not been written yet.
  */
+/**
+ * More than two files, shown one at a time. Stacking them makes the
+ * panel taller than everything beside it and turns the check into
+ * scrolling. Arrows rather than a scrollbar: the count is small and
+ * known, so stepping is clearer than dragging.
+ */
+function FileStack({ files, onPreview }) {
+  const [i, setI] = useState(0)
+  const file = files[i]
+
+  return (
+    <div className="flex items-stretch gap-1.5">
+      <div className="flex-1 min-w-0">
+        <FileCard file={file} onOpen={() => onPreview(file)} />
+      </div>
+      <div className="flex flex-col justify-center gap-1 shrink-0">
+        <button onClick={() => setI(n => Math.max(0, n - 1))} disabled={i === 0}
+          aria-label="Previous file"
+          className="w-5 h-5 flex items-center justify-center text-[10px]
+            text-[var(--text-3)] hover:text-[var(--text)] disabled:opacity-25
+            transition-colors">▲</button>
+        <span className="text-[9px] text-[var(--text-3)] text-center font-mono">
+          {i + 1}/{files.length}
+        </span>
+        <button onClick={() => setI(n => Math.min(files.length - 1, n + 1))}
+          disabled={i === files.length - 1} aria-label="Next file"
+          className="w-5 h-5 flex items-center justify-center text-[10px]
+            text-[var(--text-3)] hover:text-[var(--text)] disabled:opacity-25
+            transition-colors">▼</button>
+      </div>
+    </div>
+  )
+}
+
 function FileCard({ file, onOpen }) {
   const dims = file.width_mm && file.height_mm
     ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
@@ -589,7 +643,8 @@ function FileCard({ file, onOpen }) {
     file.page_count ? `${file.page_count} ${file.page_count === 1 ? 'page' : 'pages'}` : null,
   ].filter(Boolean)
 
-  const ext = (file.filename || '').split('.').pop().toUpperCase()
+    const ext = (file.filename || '').split('.').pop().toUpperCase()
+  const [failed, setFailed] = useState(false)
 
   return (
     <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
@@ -598,8 +653,12 @@ function FileCard({ file, onOpen }) {
         className="w-full h-28 bg-[var(--bg)] flex items-center justify-center
           border-b border-[var(--border)] hover:opacity-90 transition-opacity
           cursor-zoom-in overflow-hidden">
-        {isImage(file) ? (
+                {isImage(file) && !failed ? (
+          // A CMYK JPEG is press-ready and ordinary here, and no browser
+          // will render one. Falling back to the type card is honest;
+          // a broken image icon reads as a broken file.
           <img src={file.url} alt={file.filename}
+            onError={() => setFailed(true)}
             className="max-h-28 w-full object-contain" />
         ) : (
           <div className="text-center">
