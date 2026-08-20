@@ -1,5 +1,6 @@
 // src/components/coordinator/ProductionBoard.jsx
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProductionBoard, getVerificationQueue, getSuspendedJobs, getJobDetail,
@@ -38,8 +39,18 @@ function services(job) {
     .join(', ')
 }
 
-// One button per row. The label is the move that makes sense from where
-// the job is, so a coordinator never has to work out what comes next.
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+function isImage(file) {
+  if (file.content_type && IMAGE_TYPES.includes(file.content_type)) return true
+  return /\.(jpe?g|png|gif|webp)$/i.test(file.filename || '')
+}
+
+function isPdf(file) {
+  return file.content_type === 'application/pdf'
+    || /\.pdf$/i.test(file.filename || '')
+}
+
 const NEXT = {
   RECEIVED:      { to: 'IN_PRODUCTION', label: 'Start',  tone: 'bg-zinc-100 text-zinc-600'      },
   IN_PRODUCTION: { to: 'FINISHING',     label: 'Finish', tone: 'bg-violet-100 text-violet-700'  },
@@ -60,8 +71,6 @@ const HALT_REASONS = [
   { value: 'OTHER',             label: 'Other'               },
 ]
 
-// Mirrors JobVerification.Outcome, minus PASSED — which is a clearance,
-// not a reason to hold something.
 const SUSPEND_REASONS = [
   { value: 'ARTWORK_PROBLEM', label: 'Artwork not usable'      },
   { value: 'WRONG_FILE',      label: 'Wrong or missing file'   },
@@ -74,11 +83,22 @@ const FINDING_LABEL = Object.fromEntries(
   SUSPEND_REASONS.map(r => [r.value, r.label])
 )
 
+const PhoneIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07
+      19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0
+      0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0
+      6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+)
+
 export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const queryClient = useQueryClient()
   const [error, setError]     = useState('')
   const [halting, setHalting] = useState(null)
   const [suspending, setSuspending] = useState(false)
+  const [preview, setPreview] = useState(null)
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['productionBoard'],
@@ -101,10 +121,6 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     placeholderData: prev => prev,
   })
 
-  // The open job is fetched in full rather than carried over from the
-  // rail. The list serializer has no files, and a coordinator cannot
-  // inspect what they cannot see — so one request per job taken, instead
-  // of file metadata on every row of every poll.
   const { data: openJob, isLoading: loadingJob } = useQuery({
     queryKey: ['job-detail', openJobId],
     queryFn:  () => getJobDetail(openJobId).then(r => r.data),
@@ -135,9 +151,6 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     onError:    (e) => setError(e.response?.data?.detail || 'Could not halt that job.'),
   })
 
-  // Clearing and suspending both empty the workspace. Nothing takes its
-  // place: the next job is taken deliberately, so a coordinator is never
-  // handed work they did not ask for while their hand is still moving.
   const { mutate: clear, isPending: clearing } = useMutation({
     mutationFn: ({ id, note }) => verifyJob(id, { note }),
     onSuccess:  () => { invalidate(); setOpenJobId(null) },
@@ -150,9 +163,6 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     onError:    (e) => setError(e.response?.data?.detail || 'Could not suspend that job.'),
   })
 
-  // Bringing a suspended job back is a resume followed by a fresh look —
-  // it returns to the workspace unverified, for the same decision as
-  // before, not straight to the floor.
   const { mutate: reopen } = useMutation({
     mutationFn: (id) => resumeJob(id),
     onSuccess:  (_r, id) => { invalidate(); setOpenJobId(id) },
@@ -167,7 +177,12 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     ...(board?.halted                 || []),
   ]
 
-  const tip = arrivals[0]
+  // A job in the workspace has left the queue. The server drops it from
+  // the queue only once it is cleared or suspended, so it is removed here
+  // too — otherwise it sits at the tip while being worked on, and the
+  // queue behind it never advances.
+  const queue = arrivals.filter(j => j.id !== openJobId)
+  const tip   = queue[0]
 
   return (
     <div className="p-5 sm:p-6">
@@ -181,28 +196,26 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
 
       <div className="flex gap-4 items-start">
 
-        {/* ── Arrivals rail ───────────────────────────────────────
-            Only the tip can be taken. The rest are visible so the
-            coordinator knows what is behind it, and inert so nobody
-            picks the easy job and leaves the oldest waiting. */}
+        {/* ── Left rail: arrived, then suspended ──────────────── */}
         <div className="w-52 shrink-0">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-wider mb-2">
-            Arrived · {arrivals.length}
+
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-3)]" />
+            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
+              tracking-wider">Arrived · {queue.length}</span>
           </div>
 
-          {arrivals.length === 0 ? (
+          {queue.length === 0 ? (
             <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
               px-3 py-8 text-center">
               <p className="text-[11px] text-[var(--text-3)]">Nothing waiting</p>
             </div>
           ) : (
             <div className="space-y-1">
-              {arrivals.map((job, i) => {
-                const isTip  = i === 0
-                const isOpen = openJobId === job.id
+              {queue.map((job, i) => {
+                const isTip = i === 0
                 return (
-                  <div key={job.id}>
+                  <div key={job.id} className="transition-all duration-500 ease-out">
                     {/* Arrows point up, toward the workspace: the queue
                         feeds it rather than descending away from it. */}
                     {i > 0 && (
@@ -217,7 +230,6 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
                       }}
                       className={`w-full text-left bg-[var(--panel)] border rounded-xl px-3
                         transition-all duration-500 ease-out
-                        ${isOpen ? 'opacity-0 scale-95 pointer-events-none' : ''}
                         ${isTip && !openJobId
                           ? 'border-[var(--border-dark)] hover:border-[var(--text-3)] cursor-pointer'
                           : 'border-[var(--border)] cursor-default'}
@@ -230,22 +242,22 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
                         {services(job)}
                       </div>
                       {isTip && (
-                        <div className="text-[10px] text-[var(--text-3)] mt-1">
-                          {job.customer_name || 'Walk-in'}
-                        </div>
-                      )}
-                      {isTip && (
-                        <div className="flex items-center justify-between mt-1.5">
-                          {job.payment_state === 'SETTLED' && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full
-                              bg-emerald-100 text-emerald-700">Paid</span>
-                          )}
-                          <span className={`text-[10px] ml-auto
-                            ${waited(job.created_at).match(/[hd]/)
-                              ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
-                            {waited(job.created_at)}
-                          </span>
-                        </div>
+                        <>
+                          <div className="text-[10px] text-[var(--text-3)] mt-1">
+                            {job.customer_name || 'Walk-in'}
+                          </div>
+                          <div className="flex items-center justify-between mt-1.5">
+                            {job.payment_state === 'SETTLED' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full
+                                bg-emerald-100 text-emerald-700">Paid</span>
+                            )}
+                            <span className={`text-[10px] ml-auto
+                              ${waited(job.created_at).match(/[hd]/)
+                                ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
+                              {waited(job.created_at)}
+                            </span>
+                          </div>
+                        </>
                       )}
                     </button>
                   </div>
@@ -254,17 +266,21 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
             </div>
           )}
 
-          {/* ── Suspended ──────────────────────────────────────── */}
+          {/* ── Suspended ──────────────────────────────────────
+              Kept apart from the queue by a rule and a colour. These
+              are not waiting to be looked at — they have been, and are
+              waiting on somebody else. */}
           {suspended.length > 0 && (
-            <div className="mt-5">
-              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-                tracking-wider mb-2">
-                Suspended · {suspended.length}
+            <div className="mt-6 pt-5 border-t-2 border-[var(--border-dark)]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span className="text-[10px] font-bold text-amber-700 uppercase
+                  tracking-wider">Held · {suspended.length}</span>
               </div>
-              <div className="space-y-1">
+              <div className="bg-amber-50/60 rounded-xl p-1.5 space-y-1.5">
                 {suspended.map(job => (
                   <div key={job.id}
-                    className="bg-[var(--panel)] border border-[var(--border)]
+                    className="bg-[var(--panel)] border border-amber-200
                       border-l-[3px] border-l-amber-500 rounded-none px-3 py-2">
                     <div className="font-mono text-[10px] text-[var(--text-3)]">
                       {job.job_number}
@@ -278,8 +294,8 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
                     </div>
                     <button onClick={() => { setError(''); reopen(job.id) }}
                       disabled={!!openJobId}
-                      className="mt-1.5 text-[10px] font-bold text-[var(--text-2)]
-                        hover:text-[var(--text)] disabled:opacity-40 transition-colors">
+                      className="mt-1.5 text-[10px] font-bold text-amber-800
+                        hover:text-amber-900 disabled:opacity-40 transition-colors">
                       Bring back →
                     </button>
                   </div>
@@ -301,6 +317,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
                 job={openJob}
                 onClear={(note) => clear({ id: openJob.id, note })}
                 onSuspend={() => setSuspending(true)}
+                onPreview={setPreview}
                 busy={clearing}
               />
             ) : null
@@ -417,10 +434,13 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
         <SuspendDialog
           job={openJob}
           onClose={() => setSuspending(false)}
-          onSuspend={(outcome, note) =>
-            suspend({ id: openJob.id, outcome, note })}
+          onSuspend={(outcome, note) => suspend({ id: openJob.id, outcome, note })}
           busy={suspendingNow}
         />
+      )}
+
+      {preview && (
+        <FilePreviewModal file={preview} onClose={() => setPreview(null)} />
       )}
     </div>
   )
@@ -433,20 +453,17 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
  * decision they have already made is friction they will route around.
  *
  * The file and the specification sit side by side deliberately — the
- * dimensions of one against the dimensions of the other is the check, and
- * it should be visible rather than held in someone's head.
+ * dimensions of one against the dimensions of the other is the check.
  *
- * There is no close. A job here goes to production or to suspended; the
- * workspace holds it in the meantime, across tab changes and reloads.
+ * There is no close. A job here goes to production or to held.
  */
-function Workspace({ job, onClear, onSuspend, busy }) {
+function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
   const [note, setNote] = useState('')
   const ready = clockTime(job.predicted?.ready_at)
   const files = job.files || []
 
   return (
-    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-4
-      transition-all duration-500 ease-out">
+    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-4">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="font-mono text-sm font-bold text-[var(--text)]">
@@ -475,7 +492,9 @@ function Workspace({ job, onClear, onSuspend, busy }) {
             </p>
           ) : (
             <div className="space-y-2.5">
-              {files.map(f => <FileRow key={f.id} file={f} />)}
+              {files.map(f => (
+                <FileCard key={f.id} file={f} onOpen={() => onPreview(f)} />
+              ))}
             </div>
           )}
         </div>
@@ -529,12 +548,18 @@ function Workspace({ job, onClear, onSuspend, busy }) {
             disabled:opacity-40 transition-colors">
           Suspend
         </button>
+        {/* Beside Suspend rather than pushed away from it: the moment a
+            coordinator decides to hold a job is the moment they need to
+            ask the customer something. */}
         {job.customer_phone && (
           <a href={`tel:${job.customer_phone}`}
-            className="ml-auto px-4 py-2 text-xs font-bold border border-[var(--border)]
-              rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
+            title={`Call ${job.customer_name || 'customer'}`}
+            aria-label="Call customer"
+            className="w-9 h-9 flex items-center justify-center border
+              border-[var(--border-dark)] rounded-lg text-[var(--text-2)]
+              hover:text-[var(--text)] hover:border-[var(--text-3)]
               transition-colors">
-            Call customer
+            <PhoneIcon />
           </a>
         )}
       </div>
@@ -543,11 +568,11 @@ function Workspace({ job, onClear, onSuspend, busy }) {
 }
 
 /**
- * What the file is, measured on upload. Facts, not verdicts — nothing here
- * says whether it will print well, because the standard to judge it
- * against has not been written yet.
+ * A file as a card: a preview surface, then what it measures. Facts, not
+ * verdicts — nothing here says whether it will print well, because the
+ * standard to judge it against has not been written yet.
  */
-function FileRow({ file }) {
+function FileCard({ file, onOpen }) {
   const dims = file.width_mm && file.height_mm
     ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
     : file.width_px && file.height_px
@@ -555,35 +580,129 @@ function FileRow({ file }) {
       : null
 
   const facts = [
-    file.size_kb ? `${(file.size_kb / 1024).toFixed(1)} MB` : null,
+    file.size_kb ? (file.size_kb > 1024
+      ? `${(file.size_kb / 1024).toFixed(1)} MB`
+      : `${Math.round(file.size_kb)} KB`) : null,
     file.dpi ? `${file.dpi} dpi` : null,
     dims,
     file.colour_mode || null,
     file.page_count ? `${file.page_count} ${file.page_count === 1 ? 'page' : 'pages'}` : null,
   ].filter(Boolean)
 
+  const ext = (file.filename || '').split('.').pop().toUpperCase()
+
   return (
-    <div>
-      <a href={file.url} target="_blank" rel="noreferrer"
-        className="text-xs font-semibold text-[var(--text)] hover:underline break-all">
-        {file.filename}
-      </a>
-      {facts.length > 0 && (
-        <div className="text-[10px] text-[var(--text-2)] mt-0.5 leading-relaxed">
-          {facts.join(' · ')}
-        </div>
-      )}
-      {file.metadata_state === 'UNSUPPORTED' && (
-        <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-          Open it to check — this format cannot be read here
-        </div>
-      )}
-      {file.metadata_state === 'FAILED' && (
-        <div className="text-[10px] text-amber-700 mt-0.5">
-          Could not be read. It may be damaged.
-        </div>
-      )}
+    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
+      overflow-hidden">
+      <button onClick={onOpen}
+        className="w-full h-28 bg-[var(--bg)] flex items-center justify-center
+          border-b border-[var(--border)] hover:opacity-90 transition-opacity
+          cursor-zoom-in overflow-hidden">
+        {isImage(file) ? (
+          <img src={file.url} alt={file.filename}
+            className="max-h-28 w-full object-contain" />
+        ) : (
+          <div className="text-center">
+            <div className="font-mono text-sm font-bold text-[var(--text-2)]">{ext}</div>
+            <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+              {isPdf(file) ? 'Click to read' : 'Click to open'}
+            </div>
+          </div>
+        )}
+      </button>
+      <div className="px-2.5 py-2">
+        <button onClick={onOpen}
+          className="text-xs font-semibold text-[var(--text)] hover:underline
+            break-all text-left">
+          {file.filename}
+        </button>
+        {facts.length > 0 && (
+          <div className="text-[10px] text-[var(--text-2)] mt-0.5 leading-relaxed">
+            {facts.join(' · ')}
+          </div>
+        )}
+        {file.metadata_state === 'UNSUPPORTED' && (
+          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+            This format cannot be read here — open it to check
+          </div>
+        )}
+        {file.metadata_state === 'FAILED' && (
+          <div className="text-[10px] text-amber-700 mt-0.5">
+            Could not be read. It may be damaged.
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+function FilePreviewModal({ file, onClose }) {
+  const dims = file.width_mm && file.height_mm
+    ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
+    : file.width_px && file.height_px
+      ? `${file.width_px} × ${file.height_px} px`
+      : null
+
+  const facts = [
+    file.dpi ? `${file.dpi} dpi` : null,
+    dims,
+    file.colour_mode || null,
+    file.page_count ? `${file.page_count} pages` : null,
+  ].filter(Boolean)
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}>
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-4xl
+        max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+
+        <div className="px-5 py-3 border-b border-[var(--border)]
+          flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-[var(--text)] truncate">
+              {file.filename}
+            </div>
+            {facts.length > 0 && (
+              <div className="text-[11px] text-[var(--text-3)] mt-0.5">
+                {facts.join(' · ')}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a href={file.url} target="_blank" rel="noreferrer"
+              className="px-3 py-1.5 text-xs font-bold border border-[var(--border)]
+                rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
+                transition-colors">
+              Open in new tab
+            </a>
+            <button onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full
+                hover:bg-[var(--bg)] text-[var(--text-3)]">✕</button>
+          </div>
+        </div>
+
+        <div className="flex-1 bg-[var(--bg)] overflow-auto flex items-center
+          justify-center p-4 min-h-[300px]">
+          {isImage(file) ? (
+            <img src={file.url} alt={file.filename}
+              className="max-w-full max-h-[70vh] object-contain" />
+          ) : isPdf(file) ? (
+            <iframe src={file.url} title={file.filename}
+              className="w-full h-[70vh] bg-white rounded-lg border border-[var(--border)]" />
+          ) : (
+            <div className="text-center px-6">
+              <p className="text-sm font-semibold text-[var(--text-2)]">
+                This format cannot be shown here
+              </p>
+              <p className="text-xs text-[var(--text-3)] mt-1">
+                Open it in the application it was made in to check it properly.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -591,7 +710,7 @@ function SuspendDialog({ job, onClose, onSuspend, busy }) {
   const [outcome, setOutcome] = useState('ARTWORK_PROBLEM')
   const [note, setNote]       = useState('')
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}>
       <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-sm
@@ -633,7 +752,8 @@ function SuspendDialog({ job, onClose, onSuspend, busy }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -641,7 +761,7 @@ function HaltDialog({ job, onClose, onHalt, busy }) {
   const [reason, setReason] = useState('MACHINE_BREAKDOWN')
   const [note, setNote]     = useState('')
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}>
       <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-sm
@@ -685,6 +805,7 @@ function HaltDialog({ job, onClose, onHalt, busy }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
