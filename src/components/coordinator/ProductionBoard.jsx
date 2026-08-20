@@ -39,6 +39,15 @@ function services(job) {
     .join(', ')
 }
 
+// file.url is a path, not an origin. In an API call Axios prefixes the
+// base for us; in an <img src> or an <iframe> the browser resolves it
+// against wherever the app is served from, which is not the API.
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+function fileSrc(file) {
+  return file.url?.startsWith('http') ? file.url : `${API_BASE}${file.url}`
+}
+
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 function isImage(file) {
@@ -666,7 +675,7 @@ function FileCard({ file, onOpen }) {
           // A CMYK JPEG is press-ready and ordinary here, and no browser
           // will render one. Falling back to the type card is honest;
           // a broken image icon reads as a broken file.
-          <img src={file.url} alt={file.filename}
+                    <img src={fileSrc(file)} alt={file.filename}
             onError={() => setFailed(true)}
             className="max-h-28 w-full object-contain" />
         ) : (
@@ -737,7 +746,7 @@ function FilePreviewModal({ file, onClose }) {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <a href={file.url} target="_blank" rel="noreferrer"
+                        <a href={fileSrc(file)} target="_blank" rel="noreferrer"
               className="px-3 py-1.5 text-xs font-bold border border-[var(--border)]
                 rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
                 transition-colors">
@@ -752,7 +761,7 @@ function FilePreviewModal({ file, onClose }) {
         <div className="flex-1 bg-[var(--bg)] overflow-auto flex items-center
           justify-center p-4 min-h-[300px]">
           {isImage(file) ? (
-            <img src={file.url} alt={file.filename}
+                      <img src={fileSrc(file)} alt={file.filename}
               className="max-w-full max-h-[70vh] object-contain" />
           ) : isPdf(file) ? (
             <iframe src={file.url} title={file.filename}
