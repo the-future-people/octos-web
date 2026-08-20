@@ -1,9 +1,9 @@
 // src/components/coordinator/ProductionBoard.jsx
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  getProductionBoard, getVerificationQueue, moveJobAxis,
-  resumeJob, haltJob, verifyJob, rejectVerification,
+  getProductionBoard, getVerificationQueue, getSuspendedJobs, getJobDetail,
+  moveJobAxis, resumeJob, haltJob, verifyJob, suspendJob,
 } from '../../api/coordinator'
 
 function fmt(n) {
@@ -60,15 +60,26 @@ const HALT_REASONS = [
   { value: 'OTHER',             label: 'Other'               },
 ]
 
-export default function ProductionBoard() {
-  const queryClient = useQueryClient()
-  const [selected, setSelected] = useState(null)
-  const [error, setError]       = useState('')
-  const [halting, setHalting]   = useState(null)
+// Mirrors JobVerification.Outcome, minus PASSED — which is a clearance,
+// not a reason to hold something.
+const SUSPEND_REASONS = [
+  { value: 'ARTWORK_PROBLEM', label: 'Artwork not usable'      },
+  { value: 'WRONG_FILE',      label: 'Wrong or missing file'   },
+  { value: 'SPEC_UNCLEAR',    label: 'Specification unclear'   },
+  { value: 'SPEC_IMPOSSIBLE', label: 'Cannot be made as asked' },
+  { value: 'OTHER',           label: 'Other'                   },
+]
 
-    // placeholderData keeps the previous result on screen while the next is
-  // in flight. Without it every state change blanks the board to skeletons
-  // and back, which reads as the page flickering under your hands.
+const FINDING_LABEL = Object.fromEntries(
+  SUSPEND_REASONS.map(r => [r.value, r.label])
+)
+
+export default function ProductionBoard({ openJobId, setOpenJobId }) {
+  const queryClient = useQueryClient()
+  const [error, setError]     = useState('')
+  const [halting, setHalting] = useState(null)
+  const [suspending, setSuspending] = useState(false)
+
   const { data: board, isLoading } = useQuery({
     queryKey: ['productionBoard'],
     queryFn:  () => getProductionBoard().then(r => r.data),
@@ -83,24 +94,27 @@ export default function ProductionBoard() {
     placeholderData: prev => prev,
   })
 
-    // The tip of the stack is what to deal with next, so it opens itself
-  // rather than waiting to be clicked. Re-reads the selected job from the
-  // fresh data each time: holding the object from when it was clicked
-  // means acting on a job the server has since moved on.
-  useEffect(() => {
-    if (!arrivals.length) {
-      if (selected && !selected._fromFloor) setSelected(null)
-      return
-    }
-    if (!selected) { setSelected(arrivals[0]); return }
-    const fresh = arrivals.find(j => j.id === selected.id)
-    if (fresh) setSelected(fresh)
-    else if (!selected._fromFloor) setSelected(arrivals[0])
-  }, [arrivals])
+  const { data: suspended = [] } = useQuery({
+    queryKey: ['suspendedJobs'],
+    queryFn:  () => getSuspendedJobs().then(r => r.data),
+    refetchInterval: 60_000,
+    placeholderData: prev => prev,
+  })
+
+  // The open job is fetched in full rather than carried over from the
+  // rail. The list serializer has no files, and a coordinator cannot
+  // inspect what they cannot see — so one request per job taken, instead
+  // of file metadata on every row of every poll.
+  const { data: openJob, isLoading: loadingJob } = useQuery({
+    queryKey: ['job-detail', openJobId],
+    queryFn:  () => getJobDetail(openJobId).then(r => r.data),
+    enabled:  !!openJobId,
+  })
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['productionBoard'] })
     queryClient.invalidateQueries({ queryKey: ['verificationQueue'] })
+    queryClient.invalidateQueries({ queryKey: ['suspendedJobs'] })
   }
 
   const { mutate: advance, isPending: advancing } = useMutation({
@@ -121,15 +135,30 @@ export default function ProductionBoard() {
     onError:    (e) => setError(e.response?.data?.detail || 'Could not halt that job.'),
   })
 
+  // Clearing and suspending both empty the workspace. Nothing takes its
+  // place: the next job is taken deliberately, so a coordinator is never
+  // handed work they did not ask for while their hand is still moving.
   const { mutate: clear, isPending: clearing } = useMutation({
     mutationFn: ({ id, note }) => verifyJob(id, { note }),
-    onSuccess:  () => { invalidate(); setSelected(null) },
+    onSuccess:  () => { invalidate(); setOpenJobId(null) },
     onError:    (e) => setError(e.response?.data?.detail || 'Could not clear that job.'),
   })
 
-  // Everything on the floor as one list. A halted job stays where it is
-  // rather than moving to a separate section: it is still on the floor,
-  // and hiding it away is how it gets forgotten.
+  const { mutate: suspend, isPending: suspendingNow } = useMutation({
+    mutationFn: ({ id, outcome, note }) => suspendJob(id, { outcome, note }),
+    onSuccess:  () => { invalidate(); setSuspending(false); setOpenJobId(null) },
+    onError:    (e) => setError(e.response?.data?.detail || 'Could not suspend that job.'),
+  })
+
+  // Bringing a suspended job back is a resume followed by a fresh look —
+  // it returns to the workspace unverified, for the same decision as
+  // before, not straight to the floor.
+  const { mutate: reopen } = useMutation({
+    mutationFn: (id) => resumeJob(id),
+    onSuccess:  (_r, id) => { invalidate(); setOpenJobId(id) },
+    onError:    (e) => setError(e.response?.data?.detail || 'Could not reopen that job.'),
+  })
+
   const rows = [
     ...(board?.columns?.RECEIVED      || []),
     ...(board?.columns?.IN_PRODUCTION || []),
@@ -137,6 +166,8 @@ export default function ProductionBoard() {
     ...(board?.columns?.QUALITY_CHECK || []),
     ...(board?.halted                 || []),
   ]
+
+  const tip = arrivals[0]
 
   return (
     <div className="p-5 sm:p-6">
@@ -150,7 +181,10 @@ export default function ProductionBoard() {
 
       <div className="flex gap-4 items-start">
 
-        {/* ── Arrivals rail ───────────────────────────────────── */}
+        {/* ── Arrivals rail ───────────────────────────────────────
+            Only the tip can be taken. The rest are visible so the
+            coordinator knows what is behind it, and inert so nobody
+            picks the easy job and leaves the oldest waiting. */}
         <div className="w-52 shrink-0">
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
             tracking-wider mb-2">
@@ -165,17 +199,28 @@ export default function ProductionBoard() {
           ) : (
             <div className="space-y-1">
               {arrivals.map((job, i) => {
-                const isTip = i === 0
-                const isOpen = selected?.id === job.id
+                const isTip  = i === 0
+                const isOpen = openJobId === job.id
                 return (
                   <div key={job.id}>
-                    <button onClick={() => setSelected(job)}
-                      style={{ opacity: isTip ? 1 : Math.max(0.5, 1 - i * 0.15) }}
-                      className={`w-full text-left bg-[var(--panel)] border rounded-xl
-                        px-3 transition-all duration-300 ease-out
-                        ${isOpen
-                          ? 'border-l-[3px] border-l-[var(--text)] border-[var(--border)]'
-                          : 'border-[var(--border)] hover:border-[var(--border-dark)]'}
+                    {/* Arrows point up, toward the workspace: the queue
+                        feeds it rather than descending away from it. */}
+                    {i > 0 && (
+                      <div className="text-center text-[10px] text-[var(--text-3)] py-0.5">↑</div>
+                    )}
+                    <button
+                      onClick={() => isTip && !openJobId && setOpenJobId(job.id)}
+                      disabled={!isTip || !!openJobId}
+                      style={{
+                        opacity: isTip ? 1 : Math.max(0.28, 0.6 - (i - 1) * 0.16),
+                        filter:  isTip ? 'none' : `blur(${Math.min(1.6, 0.6 + (i - 1) * 0.4)}px)`,
+                      }}
+                      className={`w-full text-left bg-[var(--panel)] border rounded-xl px-3
+                        transition-all duration-500 ease-out
+                        ${isOpen ? 'opacity-0 scale-95 pointer-events-none' : ''}
+                        ${isTip && !openJobId
+                          ? 'border-[var(--border-dark)] hover:border-[var(--text-3)] cursor-pointer'
+                          : 'border-[var(--border)] cursor-default'}
                         ${isTip ? 'py-3' : 'py-2'}`}>
                       <div className="font-mono text-[10px] text-[var(--text-3)]">
                         {job.job_number}
@@ -189,24 +234,57 @@ export default function ProductionBoard() {
                           {job.customer_name || 'Walk-in'}
                         </div>
                       )}
-                      <div className="flex items-center justify-between mt-1.5">
-                        {isTip && job.payment_state === 'SETTLED' && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full
-                            bg-emerald-100 text-emerald-700">Paid</span>
-                        )}
-                        <span className={`text-[10px] ml-auto
-                          ${waited(job.created_at).includes('h') || waited(job.created_at).includes('d')
-                            ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
-                          {waited(job.created_at)}
-                        </span>
-                      </div>
+                      {isTip && (
+                        <div className="flex items-center justify-between mt-1.5">
+                          {job.payment_state === 'SETTLED' && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full
+                              bg-emerald-100 text-emerald-700">Paid</span>
+                          )}
+                          <span className={`text-[10px] ml-auto
+                            ${waited(job.created_at).match(/[hd]/)
+                              ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
+                            {waited(job.created_at)}
+                          </span>
+                        </div>
+                      )}
                     </button>
-                    {i < arrivals.length - 1 && (
-                      <div className="text-center text-[10px] text-[var(--text-3)] py-0.5">↓</div>
-                    )}
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {/* ── Suspended ──────────────────────────────────────── */}
+          {suspended.length > 0 && (
+            <div className="mt-5">
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+                tracking-wider mb-2">
+                Suspended · {suspended.length}
+              </div>
+              <div className="space-y-1">
+                {suspended.map(job => (
+                  <div key={job.id}
+                    className="bg-[var(--panel)] border border-[var(--border)]
+                      border-l-[3px] border-l-amber-500 rounded-none px-3 py-2">
+                    <div className="font-mono text-[10px] text-[var(--text-3)]">
+                      {job.job_number}
+                    </div>
+                    <div className="text-[11px] font-semibold text-[var(--text)] leading-snug">
+                      {services(job)}
+                    </div>
+                    <div className="text-[10px] text-amber-700 mt-0.5">
+                      {FINDING_LABEL[job.finding] || job.finding || 'Held'}
+                      {' · '}{waited(job.halt?.halted_at)}
+                    </div>
+                    <button onClick={() => { setError(''); reopen(job.id) }}
+                      disabled={!!openJobId}
+                      className="mt-1.5 text-[10px] font-bold text-[var(--text-2)]
+                        hover:text-[var(--text)] disabled:opacity-40 transition-colors">
+                      Bring back →
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -214,23 +292,36 @@ export default function ProductionBoard() {
         {/* ── Workspace + production rows ─────────────────────── */}
         <div className="flex-1 min-w-0">
 
-          {selected ? (
-            <Workspace
-              job={selected}
-              onClear={(note) => clear({ id: selected.id, note })}
-              onSendBack={() => setSelected(null)}
-              busy={clearing}
-              onClose={() => setSelected(null)}
-              setError={setError}
-              invalidate={invalidate}
-            />
+          {openJobId ? (
+            loadingJob && !openJob ? (
+              <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
+                h-64 mb-4 animate-pulse" />
+            ) : openJob ? (
+              <Workspace
+                job={openJob}
+                onClear={(note) => clear({ id: openJob.id, note })}
+                onSuspend={() => setSuspending(true)}
+                busy={clearing}
+              />
+            ) : null
           ) : (
             <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-              px-6 py-10 text-center mb-4">
-              <p className="text-sm font-semibold text-[var(--text-2)]">Nothing open</p>
-              <p className="text-xs text-[var(--text-3)] mt-1">
-                Pick an arrival from the left, or a job from the floor below
+              px-6 py-12 text-center mb-4">
+              <p className="text-sm font-semibold text-[var(--text-2)]">
+                {tip ? 'Ready for the next job' : 'Nothing to check'}
               </p>
+              <p className="text-xs text-[var(--text-3)] mt-1">
+                {tip
+                  ? 'Take the job at the top of the queue when you are ready for it'
+                  : 'Everything that has arrived has been looked at'}
+              </p>
+              {tip && (
+                <button onClick={() => setOpenJobId(tip.id)}
+                  className="mt-4 px-4 py-2 text-xs font-bold bg-[var(--text)] text-white
+                    rounded-lg hover:opacity-90 transition-opacity">
+                  Take {tip.job_number}
+                </button>
+              )}
             </div>
           )}
 
@@ -259,24 +350,18 @@ export default function ProductionBoard() {
                 const ready = clockTime(job.predicted?.ready_at)
                 return (
                   <div key={job.id}
-                    className={`bg-[var(--panel)] border rounded-xl px-3 py-2.5
-                      flex items-center gap-3
-                      ${stuck ? 'border-l-[3px] border-l-red-500 border-[var(--border)]'
-                              : 'border-[var(--border)]'}`}>
-                                        <button onClick={() => setSelected({ ...job, _fromFloor: true })}
-                      className="flex-1 min-w-0 text-left">
+                    className={`bg-[var(--panel)] border px-3 py-2.5 flex items-center gap-3
+                      ${stuck
+                        ? 'border-l-[3px] border-l-red-500 border-[var(--border)] rounded-none'
+                        : 'border-[var(--border)] rounded-xl'}`}>
+                    <div className="flex-1 min-w-0">
                       <div className="font-mono text-[10px] text-[var(--text-3)]">
                         {job.job_number}
                       </div>
                       <div className="text-xs font-semibold text-[var(--text)] leading-snug">
                         {services(job)}
                       </div>
-                      {stuck && (
-                        <div className="text-[10px] text-red-600 mt-0.5">
-                          Halted
-                        </div>
-                      )}
-                    </button>
+                    </div>
 
                     {ready && !stuck && (
                       <span className="text-[10px] text-[var(--text-3)] shrink-0 hidden sm:block">
@@ -327,25 +412,41 @@ export default function ProductionBoard() {
           busy={haltingNow}
         />
       )}
+
+      {suspending && openJob && (
+        <SuspendDialog
+          job={openJob}
+          onClose={() => setSuspending(false)}
+          onSuspend={(outcome, note) =>
+            suspend({ id: openJob.id, outcome, note })}
+          busy={suspendingNow}
+        />
+      )}
     </div>
   )
 }
 
 /**
- * The panel a coordinator works in. Shows everything needed to decide,
- * so they are not opening a second screen to read line items.
+ * Where a job is inspected. Three steps, laid out rather than stepped
+ * through: read the file, read what was asked for, decide. A coordinator
+ * with a queue judges in seconds, and clicking through stages to reach a
+ * decision they have already made is friction they will route around.
+ *
+ * The file and the specification sit side by side deliberately — the
+ * dimensions of one against the dimensions of the other is the check, and
+ * it should be visible rather than held in someone's head.
+ *
+ * There is no close. A job here goes to production or to suspended; the
+ * workspace holds it in the meantime, across tab changes and reloads.
  */
-function Workspace({ job, onClear, onClose, busy, setError, invalidate }) {
+function Workspace({ job, onClear, onSuspend, busy }) {
   const [note, setNote] = useState('')
-  const needsCheck = job.verification?.required && !job.verification?.passed
-  const ready      = clockTime(job.predicted?.ready_at)
+  const ready = clockTime(job.predicted?.ready_at)
+  const files = job.files || []
 
   return (
-        <div className="rounded-2xl p-5 mb-4 border-2 border-dashed border-[var(--border-dark)]"
-      style={{
-        backgroundImage: 'radial-gradient(circle, var(--border-dark) 1px, transparent 1px)',
-        backgroundSize: '14px 14px',
-      }}>
+    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-4
+      transition-all duration-500 ease-out">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="font-mono text-sm font-bold text-[var(--text)]">
@@ -357,21 +458,31 @@ function Workspace({ job, onClear, onClose, busy, setError, invalidate }) {
             {job.intake_channel ? ` · ${job.intake_channel.replace('_', ' ').toLowerCase()}` : ''}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {needsCheck && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
-              bg-amber-100 text-amber-700">Needs checking</span>
-          )}
-          <button onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded-full
-              hover:bg-[var(--bg)] text-[var(--text-3)] text-sm">✕</button>
-        </div>
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0
+          bg-amber-100 text-amber-700">Being checked</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl px-3 py-2.5">
+
+        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
           <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-wider mb-1.5">What was ordered</div>
+            tracking-wider mb-2">
+            {files.length > 1 ? `Files · ${files.length}` : 'The file'}
+          </div>
+          {files.length === 0 ? (
+            <p className="text-xs text-[var(--text-3)]">
+              Nothing attached. The customer sent this without a file.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {files.map(f => <FileRow key={f.id} file={f} />)}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
+          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+            tracking-wider mb-2">What was ordered</div>
           <div className="space-y-1">
             {(job.line_items || []).map(li => (
               <div key={li.id} className="text-xs text-[var(--text)]">
@@ -382,60 +493,146 @@ function Workspace({ job, onClear, onClose, busy, setError, invalidate }) {
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-wider mb-1.5">Payment &amp; collection</div>
-          <div className="text-xs text-[var(--text)]">
-            {job.payment_state === 'SETTLED' ? 'Paid in full'
-              : job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid'
-              : 'Unpaid'}
-            {' · '}{fmt(job.estimated_cost)}
-          </div>
-          {/* Promised time goes here once a job carries one. Until then the
-              prediction stands alone; when both exist and disagree, that
-              gap is the thing worth seeing. */}
-          {ready && (
-            <div className="text-xs text-[var(--text-2)] mt-1">
-              Ready {job.predicted.is_next_day ? 'tomorrow ' : ''}{ready}
-              {job.predicted.confidence === 'estimated' && (
-                <span className="text-[10px] text-[var(--text-3)]"> · estimated</span>
-              )}
+          <div className="border-t border-[var(--border)] mt-2.5 pt-2">
+            <div className="text-xs text-[var(--text)]">
+              {job.payment_state === 'SETTLED' ? 'Paid in full'
+                : job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid'
+                : 'Unpaid'}
+              {' · '}{fmt(job.estimated_cost)}
             </div>
-          )}
+            {ready && (
+              <div className="text-xs text-[var(--text-2)] mt-1">
+                Ready {job.predicted.is_next_day ? 'tomorrow ' : ''}{ready}
+                {job.predicted.confidence === 'estimated' && (
+                  <span className="text-[10px] text-[var(--text-3)]"> · estimated</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {needsCheck && (
-        <>
-          <input type="text" value={note} onChange={e => setNote(e.target.value)}
-            placeholder="Note (optional)"
-            className="w-full px-3 py-2 text-xs bg-[var(--bg)] border border-[var(--border)]
-              rounded-lg outline-none mb-2" />
-          <div className="flex gap-2">
-            <button onClick={() => onClear(note)} disabled={busy}
-              className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white
-                rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
-              {busy ? 'Clearing…' : 'Clear for production'}
-            </button>
-            <button
-              className="px-4 py-2 text-xs font-bold border border-[var(--border)]
-                rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
-                transition-colors">
-              Send back
-            </button>
-            {job.customer_phone && (
-              <a href={`tel:${job.customer_phone}`}
-                className="px-4 py-2 text-xs font-bold border border-[var(--border)]
-                  rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
-                  transition-colors">
-                Call customer
-              </a>
-            )}
-          </div>
-        </>
+      <input type="text" value={note} onChange={e => setNote(e.target.value)}
+        placeholder="Note (optional)"
+        className="w-full px-3 py-2 text-xs bg-[var(--bg)] border border-[var(--border)]
+          rounded-lg outline-none mb-2" />
+
+      <div className="flex gap-2 items-center">
+        <button onClick={() => onClear(note)} disabled={busy}
+          className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white
+            rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity">
+          {busy ? 'Clearing…' : 'Clear for production'}
+        </button>
+        <button onClick={onSuspend} disabled={busy}
+          className="px-4 py-2 text-xs font-bold border border-[var(--border-dark)]
+            rounded-lg text-[var(--text-2)] hover:border-[var(--text-3)]
+            disabled:opacity-40 transition-colors">
+          Suspend
+        </button>
+        {job.customer_phone && (
+          <a href={`tel:${job.customer_phone}`}
+            className="ml-auto px-4 py-2 text-xs font-bold border border-[var(--border)]
+              rounded-lg text-[var(--text-2)] hover:border-[var(--border-dark)]
+              transition-colors">
+            Call customer
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the file is, measured on upload. Facts, not verdicts — nothing here
+ * says whether it will print well, because the standard to judge it
+ * against has not been written yet.
+ */
+function FileRow({ file }) {
+  const dims = file.width_mm && file.height_mm
+    ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
+    : file.width_px && file.height_px
+      ? `${file.width_px} × ${file.height_px} px`
+      : null
+
+  const facts = [
+    file.size_kb ? `${(file.size_kb / 1024).toFixed(1)} MB` : null,
+    file.dpi ? `${file.dpi} dpi` : null,
+    dims,
+    file.colour_mode || null,
+    file.page_count ? `${file.page_count} ${file.page_count === 1 ? 'page' : 'pages'}` : null,
+  ].filter(Boolean)
+
+  return (
+    <div>
+      <a href={file.url} target="_blank" rel="noreferrer"
+        className="text-xs font-semibold text-[var(--text)] hover:underline break-all">
+        {file.filename}
+      </a>
+      {facts.length > 0 && (
+        <div className="text-[10px] text-[var(--text-2)] mt-0.5 leading-relaxed">
+          {facts.join(' · ')}
+        </div>
       )}
+      {file.metadata_state === 'UNSUPPORTED' && (
+        <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+          Open it to check — this format cannot be read here
+        </div>
+      )}
+      {file.metadata_state === 'FAILED' && (
+        <div className="text-[10px] text-amber-700 mt-0.5">
+          Could not be read. It may be damaged.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SuspendDialog({ job, onClose, onSuspend, busy }) {
+  const [outcome, setOutcome] = useState('ARTWORK_PROBLEM')
+  const [note, setNote]       = useState('')
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}>
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-sm
+        overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--border)]">
+          <div className="text-sm font-bold text-[var(--text)]">Hold this job</div>
+          <div className="text-[11px] text-[var(--text-3)] mt-0.5">
+            It waits until someone answers. {job.job_number}
+          </div>
+        </div>
+
+        <div className="p-4 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {SUSPEND_REASONS.map(r => (
+              <button key={r.value} onClick={() => setOutcome(r.value)}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border
+                  transition-colors
+                  ${outcome === r.value
+                    ? 'bg-[var(--text)] text-white border-transparent'
+                    : 'border-[var(--border)] text-[var(--text-2)]'}`}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
+            placeholder="What needs answering"
+            className="w-full px-3 py-2 text-xs bg-[var(--bg)] border
+              border-[var(--border)] rounded-lg outline-none resize-none" />
+        </div>
+
+        <div className="px-5 py-3 border-t border-[var(--border)] flex justify-end gap-2">
+          <button onClick={onClose}
+            className="px-3 py-1.5 text-xs font-semibold text-[var(--text-2)]">Cancel</button>
+          <button onClick={() => onSuspend(outcome, note)}
+            disabled={busy || (outcome === 'OTHER' && !note.trim())}
+            className="px-4 py-1.5 text-xs font-bold bg-amber-600 text-white rounded-lg
+              disabled:opacity-40 hover:opacity-90 transition-opacity">
+            {busy ? 'Holding…' : 'Hold job'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -469,8 +666,6 @@ function HaltDialog({ job, onClose, onHalt, busy }) {
               </button>
             ))}
           </div>
-          {/* Free text only where the chips do not fit. What gets typed here
-              is what the chip list should learn from. */}
           {reason === 'OTHER' && (
             <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
               placeholder="What happened"

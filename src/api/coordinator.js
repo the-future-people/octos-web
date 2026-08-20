@@ -33,3 +33,9 @@ export const machineDown = (id, payload) =>
 
 export const machineUp = (id, payload) =>
   client.post(`/api/v1/production/machines/${id}/up/`, payload)
+
+export const getSuspendedJobs = () =>
+  client.get('/api/v1/jobs/coordinator/suspended/')
+
+export const suspendJob = (id, payload) =>
+  client.post(`/api/v1/jobs/${id}/verify/suspend/`, payload)

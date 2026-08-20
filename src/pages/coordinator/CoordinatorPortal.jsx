@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { getVerificationQueue } from '../../api/coordinator'
 import CoordinatorTopbar from '../../components/coordinator/CoordinatorTopbar'
+import CoordinatorOverview from '../../components/coordinator/CoordinatorOverview'
 import ProductionBoard from '../../components/coordinator/ProductionBoard'
 
 const ICONS = {
@@ -41,6 +42,16 @@ const SECTIONS = [
 export default function CoordinatorPortal() {
   const { user, logout } = useAuth()
   const [section, setSection] = useState('board')
+
+  // The open job lives here rather than in the board, so that stepping
+  // over to Overview and back leaves the workspace exactly as it was. A
+  // coordinator half way through inspecting a file should not lose it to
+  // a glance at the floor.
+  //
+  // An id, not the job itself: the board re-reads it from fresh data every
+  // poll, so a held object cannot go stale against a job the server has
+  // since moved on.
+  const [openJobId, setOpenJobId] = useState(null)
 
   // The count rides in the sidebar so it is visible from either section,
   // not only from the board.
@@ -127,8 +138,8 @@ export default function CoordinatorPortal() {
                     ${section === item.id
                       ? 'bg-[var(--text)] text-white shadow-sm'
                       : 'text-[var(--text-3)]'}`}>
-                  {item.label}
-                  {item.id === 'verify' && queue.length > 0 && ` · ${queue.length}`}
+                                    {item.label}
+                  {item.id === 'board' && queue.length > 0 && ` · ${queue.length}`}
                 </button>
               ))}
             </div>
@@ -137,7 +148,9 @@ export default function CoordinatorPortal() {
                     {section === 'overview' && (
             <CoordinatorOverview onGoToProduction={() => setSection('board')} />
           )}
-          {section === 'board' && <ProductionBoard />}
+                    {section === 'board' && (
+            <ProductionBoard openJobId={openJobId} setOpenJobId={setOpenJobId} />
+          )}
         </div>
       </div>
     </div>
