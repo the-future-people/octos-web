@@ -172,7 +172,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
 
   const { data: openJob, isLoading: loadingJob } = useQuery({
     queryKey: ['job-detail', openJobId],
-    queryFn:  () => getJobDetail(openJobId).then(r => r.data),
+    queryFn:  () => getJobDetail(openJobId, { predict: true }).then(r => r.data),
     enabled:  !!openJobId,
   })
 

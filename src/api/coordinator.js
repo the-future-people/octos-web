@@ -22,8 +22,11 @@ export const haltJob = (id, payload) =>
 export const resumeJob = (id) =>
   client.post(`/api/v1/jobs/${id}/resume/`)
 
-export const getJobDetail = (id) =>
-  client.get(`/api/v1/jobs/${id}/`)
+// predict=1 asks the server to work out when the floor will be clear of
+// this job. Only the coordinator's workspace wants it — it is real work
+// on the server, and nobody else reads the answer.
+export const getJobDetail = (id, { predict = false } = {}) =>
+  client.get(`/api/v1/jobs/${id}/${predict ? '?predict=1' : ''}`)
 
 export const getMachines = () =>
   client.get('/api/v1/production/machines/')
