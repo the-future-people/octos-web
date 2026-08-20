@@ -112,6 +112,17 @@ const PauseIcon = () => (
   </svg>
 )
 
+const ClipboardIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" className="text-[var(--text-3)] shrink-0">
+    <rect x="8" y="2" width="8" height="4" rx="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <line x1="9" y1="12" x2="15" y2="12" />
+    <line x1="9" y1="16" x2="13" y2="16" />
+  </svg>
+)
+
 const FileIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -515,8 +526,31 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
  */
 function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
   const [note, setNote] = useState('')
-  const ready = clockTime(job.predicted?.ready_at)
+  const [fileIndex, setFileIndex] = useState(0)
   const files = job.files || []
+  const shown = files[Math.min(fileIndex, Math.max(0, files.length - 1))]
+
+  const ready = job.predicted?.ready_at ? new Date(job.predicted.ready_at) : null
+  const promised = job.deadline ? new Date(job.deadline) : null
+  // The gap between what was promised and what the floor can actually do
+  // is the only thing on this screen that says a job needs to jump the
+  // queue. Nothing else surfaces it.
+  const lateBy = ready && promised && ready > promised
+    ? Math.round((ready - promised) / 60000)
+    : null
+
+  const specs = Object.entries(job.specifications || {})
+    .filter(([, v]) => v !== null && v !== '' && v !== undefined)
+
+  // Description repeats the title on jobs taken at the counter, where the
+  // form has nowhere to type anything else. Showing it then is noise.
+  const words = job.description && job.description.trim() !== (job.title || '').trim()
+    ? job.description.trim()
+    : null
+
+  const when = (d) => d.toLocaleString('en-GH', {
+    weekday: 'short', hour: 'numeric', minute: '2-digit',
+  })
 
   return (
     <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-4">
@@ -525,8 +559,6 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
           <div className="font-mono text-sm font-bold text-[var(--text)]">
             {job.job_number}
           </div>
-                    {/* The number lives behind the call button. A coordinator
-              rings the customer; they do not copy the digits down. */}
           <div className="text-xs text-[var(--text-3)] mt-0.5">
             {job.customer_name || 'Walk-in'}
             {job.intake_channel ? ` · ${job.intake_channel.replace('_', ' ').toLowerCase()}` : ''}
@@ -536,30 +568,41 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
           bg-amber-100 text-amber-700">Being checked</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
 
-        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
-                    <div className="flex items-center gap-1.5 mb-2">
+        {/* The file is an indicator; the order is what gets read. */}
+        <div className="w-full sm:w-[190px] shrink-0 bg-[var(--bg)] rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
             <FileIcon />
             <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
               tracking-wider">
               {files.length > 1 ? `Files · ${files.length}` : 'The file'}
             </span>
           </div>
-                    {files.length === 0 ? (
+          {files.length === 0 ? (
             <p className="text-xs text-[var(--text-3)]">
               Nothing attached. The customer sent this without a file.
             </p>
-                    ) : files.length === 1 ? (
-            <FileCard file={files[0]} onOpen={() => onPreview(files[0])} />
+          ) : files.length === 1 ? (
+            <FileCard file={shown} onOpen={() => onPreview(shown)} />
           ) : (
-            <FileStack files={files} onPreview={onPreview} />
+            <FileStack files={files} index={fileIndex} setIndex={setFileIndex}
+              onPreview={onPreview} />
           )}
         </div>
 
-        <div className="bg-[var(--bg)] rounded-xl px-3 py-2.5">
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
-            tracking-wider mb-2">What was ordered</div>
+        <div className="flex-1 min-w-0 bg-[var(--bg)] rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <ClipboardIcon />
+            <span className="text-[10px] font-bold text-[var(--text-3)] uppercase
+              tracking-wider">The order</span>
+          </div>
+
+          {/* The file's measurements sit directly above the ordered
+              dimensions. That adjacency is the size check — it should be
+              seen rather than worked out. */}
+          {shown && <MeasurementBand file={shown} />}
+
           <div className="space-y-1">
             {(job.line_items || []).map(li => (
               <div key={li.id} className="text-xs text-[var(--text)]">
@@ -570,26 +613,76 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
               </div>
             ))}
           </div>
+
+          {specs.length > 0 && (
+            <div className="border-t border-[var(--border)] mt-2.5 pt-2
+              grid grid-cols-2 gap-x-3 gap-y-1">
+              {specs.map(([k, v]) => (
+                <div key={k} className="text-[10px]">
+                  <span className="text-[var(--text-3)]">
+                    {k.replace(/_/g, ' ')}
+                  </span>
+                  <span className="text-[var(--text)] ml-1 font-semibold">
+                    {String(v)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {words && (
+            <div className="border-t border-[var(--border)] mt-2.5 pt-2">
+              <div className="text-[10px] text-[var(--text-3)] mb-0.5">In their words</div>
+              <p className="text-xs text-[var(--text-2)] italic leading-relaxed">
+                {words}
+              </p>
+            </div>
+          )}
+
+          {(promised || ready) && (
+            <div className="border-t border-[var(--border)] mt-2.5 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                {promised && (
+                  <div>
+                    <div className="text-[10px] text-[var(--text-3)]">Promised</div>
+                    <div className="text-xs text-[var(--text)] mt-0.5">{when(promised)}</div>
+                  </div>
+                )}
+                {ready && (
+                  <div>
+                    <div className="text-[10px] text-[var(--text-3)]">Floor says</div>
+                    <div className={`text-xs mt-0.5 ${lateBy ? 'text-amber-700' : 'text-[var(--text)]'}`}>
+                      {when(ready)}
+                      {job.predicted?.confidence === 'estimated' && (
+                        <span className="text-[10px] text-[var(--text-3)]"> · estimated</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {lateBy && (
+                <div className="mt-1.5 px-2 py-1 rounded-lg bg-amber-50
+                  text-[10px] text-amber-800">
+                  {lateBy >= 60
+                    ? `${Math.floor(lateBy / 60)}h ${lateBy % 60}m later than promised`
+                    : `${lateBy}m later than promised`}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="border-t border-[var(--border)] mt-2.5 pt-2">
-            <div className="text-xs text-[var(--text)]">
+            <div className="text-xs text-[var(--text-2)]">
               {job.payment_state === 'SETTLED' ? 'Paid in full'
                 : job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid'
                 : 'Unpaid'}
-              {' · '}{fmt(job.estimated_cost)}
             </div>
-                        {ready && (
-              <div className="text-xs text-[var(--text-2)] mt-1">
-                Ready {job.predicted.is_next_day ? 'tomorrow ' : ''}{ready}
-                {job.predicted.confidence === 'estimated' && (
-                  <span className="text-[10px] text-[var(--text-3)]"> · estimated</span>
-                )}
-              </div>
-            )}
+            <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+              {job.intake_by_name ? `Taken by ${job.intake_by_name}` : 'Taken at the counter'}
+              {job.created_at ? ` · ${waited(job.created_at)} ago` : ''}
+            </div>
           </div>
 
-          {/* The note sits at the foot of what was ordered, because that
-              is what it comments on — the coordinator writes it having
-              read the spec, not before. */}
           <input type="text" value={note} onChange={e => setNote(e.target.value)}
             placeholder="Note (optional)"
             className="w-full mt-2.5 px-2.5 py-1.5 text-xs bg-[var(--panel)]
@@ -609,9 +702,6 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
             disabled:opacity-40 transition-colors">
           Suspend
         </button>
-        {/* Beside Suspend rather than pushed away from it: the moment a
-            coordinator decides to hold a job is the moment they need to
-            ask the customer something. */}
         {job.customer_phone && (
           <a href={`tel:${job.customer_phone}`}
             title={`Call ${job.customer_name || 'customer'}`}
@@ -629,6 +719,65 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
 }
 
 /**
+ * What the shown file measures. Dark by default; red only when something
+ * is wrong with the file itself. Red means stopped everywhere else in
+ * this portal, and a correct 300 dpi file painted red would say the
+ * opposite of what is true.
+ */
+function MeasurementBand({ file }) {
+  const dims = file.width_mm && file.height_mm
+    ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
+    : file.width_px && file.height_px
+      ? `${file.width_px} × ${file.height_px} px`
+      : null
+
+  const facts = [
+    file.size_kb ? (file.size_kb > 1024
+      ? `${(file.size_kb / 1024).toFixed(1)} MB`
+      : `${Math.round(file.size_kb)} KB`) : null,
+    file.dpi ? `${file.dpi} dpi` : null,
+    dims,
+    file.colour_mode || null,
+    file.page_count ? `${file.page_count} ${file.page_count === 1 ? 'page' : 'pages'}` : null,
+  ].filter(Boolean)
+
+  const broken = file.metadata_state === 'FAILED' || file.size_kb === null
+
+  if (broken) {
+    return (
+      <div className="bg-red-600 rounded-lg px-2.5 py-1.5 mb-2.5">
+        <div className="text-[10px] font-semibold text-white">
+          {file.metadata_state === 'FAILED'
+            ? 'Could not be read. It may be damaged.'
+            : 'The file is missing from storage.'}
+        </div>
+      </div>
+    )
+  }
+
+  if (!facts.length) {
+    return (
+      <div className="bg-[var(--panel)] border border-[var(--border)]
+        rounded-lg px-2.5 py-1.5 mb-2.5">
+        <div className="text-[10px] text-[var(--text-3)]">
+          {file.metadata_state === 'UNSUPPORTED'
+            ? 'Cannot be read here — open it to check'
+            : 'Not measured'}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-[var(--text)] rounded-lg px-2.5 py-1.5 mb-2.5">
+      <div className="text-[10px] font-semibold text-white leading-relaxed">
+        {facts.join(' · ')}
+      </div>
+    </div>
+  )
+}
+
+/**
  * A file as a card: a preview surface, then what it measures. Facts, not
  * verdicts — nothing here says whether it will print well, because the
  * standard to judge it against has not been written yet.
@@ -639,27 +788,32 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
  * scrolling. Arrows rather than a scrollbar: the count is small and
  * known, so stepping is clearer than dragging.
  */
-function FileStack({ files, onPreview }) {
-  const [i, setI] = useState(0)
+/**
+ * More than one file, shown one at a time. The index lives in the
+ * workspace rather than here, because the measurement band across the
+ * panel reports whichever file is showing — two views of one selection.
+ */
+function FileStack({ files, index, setIndex, onPreview }) {
+  const i = Math.min(index, files.length - 1)
   const file = files[i]
 
   return (
-    <div className="flex items-stretch gap-1.5">
+    <div className="flex items-start gap-1.5">
       <div className="flex-1 min-w-0">
         <FileCard file={file} onOpen={() => onPreview(file)} />
       </div>
-      <div className="flex flex-col justify-center gap-1 shrink-0">
-        <button onClick={() => setI(n => Math.max(0, n - 1))} disabled={i === 0}
+      <div className="flex flex-col items-center gap-1 shrink-0 pt-11">
+        <button onClick={() => setIndex(Math.max(0, i - 1))} disabled={i === 0}
           aria-label="Previous file"
-          className="w-5 h-5 flex items-center justify-center text-[10px]
+          className="w-5 h-4 flex items-center justify-center text-[10px]
             text-[var(--text-3)] hover:text-[var(--text)] disabled:opacity-25
             transition-colors">▲</button>
-        <span className="text-[9px] text-[var(--text-3)] text-center font-mono">
+        <span className="text-[9px] text-[var(--text-3)] font-mono">
           {i + 1}/{files.length}
         </span>
-        <button onClick={() => setI(n => Math.min(files.length - 1, n + 1))}
+        <button onClick={() => setIndex(Math.min(files.length - 1, i + 1))}
           disabled={i === files.length - 1} aria-label="Next file"
-          className="w-5 h-5 flex items-center justify-center text-[10px]
+          className="w-5 h-4 flex items-center justify-center text-[10px]
             text-[var(--text-3)] hover:text-[var(--text)] disabled:opacity-25
             transition-colors">▼</button>
       </div>
@@ -692,17 +846,17 @@ function FileCard({ file, onOpen }) {
   return (
     <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
       overflow-hidden">
-      <button onClick={onOpen}
-        className="w-full h-28 bg-[var(--bg)] flex items-center justify-center
+            <button onClick={onOpen}
+        className="w-full h-32 bg-[var(--bg)] flex items-center justify-center
           border-b border-[var(--border)] hover:opacity-90 transition-opacity
           cursor-zoom-in overflow-hidden">
                 {isImage(file) && !failed ? (
           // A CMYK JPEG is press-ready and ordinary here, and no browser
           // will render one. Falling back to the type card is honest;
           // a broken image icon reads as a broken file.
-                    <img src={fileSrc(file)} alt={file.filename}
+                              <img src={fileSrc(file)} alt={file.filename}
             onError={() => setFailed(true)}
-            className="max-h-28 w-full object-contain" />
+            className="max-h-32 w-full object-contain" />
         ) : (
           <div className="text-center">
             <div className="font-mono text-sm font-bold text-[var(--text-2)]">{ext}</div>
@@ -712,46 +866,15 @@ function FileCard({ file, onOpen }) {
           </div>
         )}
       </button>
-            <div className="px-2.5 pt-2 pb-1.5">
+                  {/* Filename only. The measurements moved across to the order
+          panel, beside the dimensions they are checked against. */}
+      <div className="px-2 py-1.5">
         <button onClick={onOpen}
-          className="text-xs font-semibold text-[var(--text)] hover:underline
-            break-all text-left">
+          className="text-[11px] font-semibold text-[var(--text)] hover:underline
+            break-all text-left leading-snug">
           {file.filename}
         </button>
       </div>
-
-      {/* The measurements are what the check is made on, so they read as
-          a band rather than as small print under a filename.
-
-          Dark by default and red only when something is actually wrong.
-          Red means stopped everywhere else in this portal — halted rows,
-          machines down — and a correct 300 dpi file painted red would
-          say the opposite of what is true. These are measurements, not
-          verdicts: the standard that would justify a verdict has not
-          been written. */}
-      {broken ? (
-        <div className="bg-red-600 px-2.5 py-1.5">
-          <div className="text-[10px] font-semibold text-white leading-relaxed">
-            {file.metadata_state === 'FAILED'
-              ? 'Could not be read. It may be damaged.'
-              : 'The file is missing from storage.'}
-          </div>
-        </div>
-      ) : facts.length > 0 ? (
-        <div className="bg-[var(--text)] px-2.5 py-1.5">
-          <div className="text-[10px] font-semibold text-white leading-relaxed">
-            {facts.join(' · ')}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-[var(--bg)] px-2.5 py-1.5 border-t border-[var(--border)]">
-          <div className="text-[10px] text-[var(--text-3)]">
-            {file.metadata_state === 'UNSUPPORTED'
-              ? 'Cannot be read here — open it to check'
-              : 'Not measured'}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
