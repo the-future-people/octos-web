@@ -29,8 +29,16 @@ function fmtDate(iso) {
 export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
   const queryClient = useQueryClient()
 
+  // A day can strand with the cashier's sign-off already done: she
+  // counted, signed and went home, and only the close never happened.
+  // Then there is nothing to count — her figure stands, and this form
+  // confirms it rather than asking for a number nobody counted.
+  const alreadySigned = !!sheet.is_signed_off
+
   const [openingFloat,  setOpeningFloat]  = useState(String(sheet.suggested_opening ?? '100.00'))
-  const [countedCash,   setCountedCash]   = useState('')
+  const [countedCash,   setCountedCash]   = useState(
+    alreadySigned ? String(sheet.signed_closing ?? '') : ''
+  )
   const [reason,        setReason]        = useState('')
   const [notes,         setNotes]         = useState('')
   const [varianceNotes, setVarianceNotes] = useState('')
@@ -72,13 +80,18 @@ export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
     },
   })
 
-  const ready = (
-    countedCash !== '' &&
-    parseFloat(openingFloat || 0) >= 0 &&
-    reason !== '' &&
-    notes.trim().length > 0 &&
-    (!hasDiff || varianceNotes.trim().length >= 10)
-  )
+    // Nothing to reconcile on an already-signed day: the count and its
+  // variance were recorded and explained at the time. Only the reason it
+  // never closed is still missing.
+  const ready = alreadySigned
+    ? (reason !== '' && notes.trim().length > 0)
+    : (
+        countedCash !== '' &&
+        parseFloat(openingFloat || 0) >= 0 &&
+        reason !== '' &&
+        notes.trim().length > 0 &&
+        (!hasDiff || varianceNotes.trim().length >= 10)
+      )
 
   const handleSubmit = () => {
     setError('')
@@ -103,9 +116,10 @@ export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
             ✕
           </button>
           <div className="font-black text-lg text-[var(--text)]">Settle {fmtDate(sheet.date)}</div>
-          <div className="text-xs text-[var(--text-3)] mt-1 leading-relaxed">
-            This day was never closed. Record what was actually counted, agreed
-            with {sheet.cashier_name || 'the cashier'}.
+                    <div className="text-xs text-[var(--text-3)] mt-1 leading-relaxed">
+            {alreadySigned
+              ? `${sheet.cashier_name || 'The cashier'} counted and signed off. This day only needs closing.`
+              : `This day was never closed. Record what was actually counted, agreed with ${sheet.cashier_name || 'the cashier'}.`}
           </div>
         </div>
 
@@ -133,11 +147,39 @@ export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
             </div>
           </div>
 
+                   {alreadySigned ? (
+            <div className="px-4 py-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl">
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">
+                Counted and signed off
+              </div>
+              <div className="font-mono font-black text-xl text-[var(--text)]">
+                {fmt(sheet.signed_closing)}
+              </div>
+              <div className="text-xs text-[var(--text-3)] mt-1">
+                {sheet.cashier_name || 'The cashier'} signed at{' '}
+                {new Date(sheet.signed_off_at).toLocaleTimeString('en-GH', {
+                  hour: 'numeric', minute: '2-digit',
+                })}
+              </div>
+              {toPesewas(sheet.signed_variance) !== 0 && (
+                <div className="text-xs text-amber-700 mt-2">
+                  {fmt(Math.abs(sheet.signed_variance))}{' '}
+                  {parseFloat(sheet.signed_variance) > 0 ? 'more' : 'less'} than expected,
+                  recorded at the time
+                </div>
+              )}
+              <div className="text-xs text-[var(--text-3)] mt-2 leading-relaxed">
+                Her count stands as recorded and is not re-entered here.
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Opening float */}
           <div>
             <label className="block text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">
               Float she started with
             </label>
+
             <input
               type="number" min="0" step="0.01"
               value={openingFloat}
@@ -199,10 +241,12 @@ export default function RecoverSheetModal({ sheet, onClose, onSuccess }) {
                 className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)]
                   rounded-lg text-sm outline-none focus:border-[var(--border-dark)] resize-none"
               />
-              <div className="mt-1 text-xs text-[var(--text-3)]">
+                            <div className="mt-1 text-xs text-[var(--text-3)]">
                 This is a record of what was found, kept with the day. Minimum 10 characters.
               </div>
             </div>
+          )}
+          </>
           )}
 
           {/* Reason */}
