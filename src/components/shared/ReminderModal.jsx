@@ -13,7 +13,7 @@ const VERB_ICON = {
  * useReminders() surfaces. Replaces ShiftEndingModal and the inline
  * GenericReminderNudge entirely. Mounted identically in every portal.
  */
-export default function ReminderModal({ reminder, onDismiss, isDismissing }) {
+export default function ReminderModal({ reminder, onDismiss, isDismissing, onSignOff }) {
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState('')
   const [verifying, setVerifying] = useState(false)
@@ -100,26 +100,46 @@ export default function ReminderModal({ reminder, onDismiss, isDismissing }) {
             </div>
           </>
         ) : (
-          <>
+                    <>
             <h2 className="text-xl font-black text-zinc-900 mb-2">
               {realContent?.title || reminder.message}
             </h2>
             <p className="text-sm text-zinc-500 mb-6">
               {realContent?.body || reminder.link ? 'Tap below for details.' : ''}
             </p>
-            <button
-              onClick={() => {
-                if (reminder.requires_pin && reminder.object_id) {
-                  client.post(`/api/v1/personal-notes/checkpoints/${reminder.object_id}/acknowledge/`)
-                    .catch(() => {}) // best-effort — Notification dismissal is the source of truth for the modal itself
-                }
-                onDismiss()
-              }}
-              disabled={isDismissing}
-              className="w-full px-4 py-2.5 bg-zinc-900 text-white text-sm font-bold
-                rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
-              {isDismissing ? 'Dismissing…' : 'Got it'}
-            </button>
+            {/* Past the end of her shift the cashier often has nothing
+                left to do but sign off, so the way through is on the
+                reminder itself rather than an hour away in the wizard. */}
+            {onSignOff ? (
+              <div className="flex gap-3">
+                <button onClick={onDismiss} disabled={isDismissing}
+                  className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-xl
+                    text-sm font-semibold text-zinc-600 hover:bg-zinc-50
+                    transition-colors disabled:opacity-40">
+                  {isDismissing ? 'Closing…' : 'Okay'}
+                </button>
+                <button onClick={() => { onDismiss(); onSignOff() }}
+                  disabled={isDismissing}
+                  className="flex-1 px-4 py-2.5 bg-zinc-900 text-white text-sm font-bold
+                    rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
+                  Sign off
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  if (reminder.requires_pin && reminder.object_id) {
+                    client.post(`/api/v1/personal-notes/checkpoints/${reminder.object_id}/acknowledge/`)
+                      .catch(() => {}) // best-effort — Notification dismissal is the source of truth for the modal itself
+                  }
+                  onDismiss()
+                }}
+                disabled={isDismissing}
+                className="w-full px-4 py-2.5 bg-zinc-900 text-white text-sm font-bold
+                  rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
+                {isDismissing ? 'Dismissing…' : 'Got it'}
+              </button>
+            )}
           </>
         )}
 

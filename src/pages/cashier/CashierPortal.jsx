@@ -304,10 +304,15 @@ export default function CashierPortal() {
           Backend Celery task generates these; this just displays whatever
           useReminders() surfaces, identically across all three portals. */}
       {!showPortalLocked && reminder.hasReminder && (
-        <ReminderModal
+                <ReminderModal
           reminder={reminder.current}
           onDismiss={reminder.dismiss}
           isDismissing={reminder.isDismissing}
+          onSignOff={
+            reminder.current?.link === 'signoff' && floatId && !isSignedOff
+              ? () => setShowSignOff(true)
+              : undefined
+          }
         />
       )}
 

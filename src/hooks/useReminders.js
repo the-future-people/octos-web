@@ -28,10 +28,25 @@ export default function useReminders() {
   })
 
   const reminders = Array.isArray(data) ? data : (data?.results || [])
-  // Oldest first — same ordering the backend already returns
-  // (Notification.Meta.ordering = ['-created_at'] means newest first,
-  // so reverse to surface the longest-waiting reminder)
-  const current = reminders.length > 0 ? reminders[reminders.length - 1] : null
+
+  // Two kinds of reminder, and they want opposite orderings.
+  //
+  // A shift warning is about the clock, so only the newest is true — the
+  // one from twenty minutes ago is wrong now, and showing it first means
+  // clicking through four stale modals to reach the current one. The
+  // backend marks the older ones read as each new one is made; this is
+  // the same rule on the client, so a poll landing mid-window still shows
+  // the right thing.
+  //
+  // A private note is not about the clock. It waits until it is answered,
+  // and the longest-waiting one goes first.
+  const shift = reminders.filter(r => r.verb === 'shift_ending')
+  const other = reminders.filter(r => r.verb !== 'shift_ending')
+
+  const current =
+    other.length > 0 ? other[other.length - 1] :
+    shift.length > 0 ? shift[0] :
+    null
 
   const { mutate: dismiss, isPending: isDismissing } = useMutation({
     mutationFn: (id) => markRead(id),
