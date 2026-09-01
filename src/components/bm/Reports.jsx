@@ -529,6 +529,102 @@ function DailyTab() {
 
 // ── Weekly Tab ────────────────────────────────────────────────────────────────
 
+const FolderIcon = ({ open, tone = 'muted' }) => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+    className={tone === 'warn' ? 'text-amber-600' : 'text-[var(--text-3)]'}>
+    {open
+      ? <path d="M5 19h14a2 2 0 0 0 1.84-1.22L23 12H7a2 2 0 0 0-1.84 1.22L3 19V6a2 2 0 0 1 2-2h4l2 2h5a2 2 0 0 1 2 2v2" />
+      : <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />}
+  </svg>
+)
+
+const WeekIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+    className="text-[var(--text-3)] shrink-0">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+)
+
+// Marks one half of a week the month boundary cut in two, so a one-day
+// filing reads as deliberate rather than as a mistake.
+const SplitIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+    className="text-[var(--text-3)] shrink-0">
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <line x1="20" y1="4" x2="8.12" y2="15.88" />
+    <line x1="14.47" y1="14.48" x2="20" y2="20" />
+    <line x1="8.12" y1="8.12" x2="12" y2="12" />
+  </svg>
+)
+
+const PdfIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M9 15h1.5a1.5 1.5 0 0 0 0-3H9v6" />
+    <path d="M14 18v-6h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2z" />
+  </svg>
+)
+
+const CheckIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    className="text-emerald-600 shrink-0">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="8 12 11 15 16 9" />
+  </svg>
+)
+
+const ProgressIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+    className="text-amber-600 shrink-0">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 7 12 12 15 14" />
+  </svg>
+)
+
+// A week that ends inside one month is named by its dates; a week split by
+// a month boundary is named by the part that falls in this folder. The
+// week number moves to the second line — it is what the system calls the
+// week, not what a person recognises it by.
+function weekLabel(r) {
+  const from = new Date(r.date_from)
+  const to   = new Date(r.date_to)
+  const sameDay = r.date_from === r.date_to
+  if (sameDay) return `${from.getDate()} ${MONTH_SHORT[from.getMonth() + 1]}`
+  const sameMonth = from.getMonth() === to.getMonth()
+  return sameMonth
+    ? `${from.getDate()} – ${to.getDate()} ${MONTH_SHORT[to.getMonth() + 1]}`
+    : `${from.getDate()} ${MONTH_SHORT[from.getMonth() + 1]} – ${to.getDate()} ${MONTH_SHORT[to.getMonth() + 1]}`
+}
+
+// True when this filing is one half of a calendar week that straddled a
+// month. Both halves carry the same week number, so without saying so the
+// pair reads as a duplicate rather than as two deliberate filings.
+function isSplitWeek(r) {
+  const from = new Date(r.date_from)
+  const to   = new Date(r.date_to)
+  const monday = new Date(from)
+  monday.setDate(from.getDate() - ((from.getDay() + 6) % 7))
+  const saturday = new Date(monday)
+  saturday.setDate(monday.getDate() + 5)
+  return from.getTime() !== monday.getTime() || to.getTime() !== saturday.getTime()
+}
+
+function monthKey(r) {
+  const d = new Date(r.date_from)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 function isWeeklyFilingWindowOpen() {
   const now = new Date()
   const isSaturday = now.getDay() === 6
@@ -677,6 +773,33 @@ function WeeklyTab() {
   const draft    = reports.find(r => r.status === 'DRAFT')
   const previous = reports.filter(r => r.status !== 'DRAFT')
 
+  // Grouped by the month a filing belongs to, newest first. A week split
+  // by a month boundary appears in both months, as two filings, which is
+  // what the month field on the record exists to allow.
+  const months = []
+  const byMonth = new Map()
+  for (const r of previous) {
+    const key = monthKey(r)
+    if (!byMonth.has(key)) {
+      const d = new Date(r.date_from)
+      const group = {
+        key,
+        label: `${MONTH_NAMES[d.getMonth() + 1]} ${d.getFullYear()}`,
+        weeks: [],
+        jobs: 0,
+      }
+      byMonth.set(key, group)
+      months.push(group)
+    }
+    const g = byMonth.get(key)
+    g.weeks.push(r)
+    g.jobs += r.total_jobs_created || 0
+  }
+  months.sort((a, b) => b.key.localeCompare(a.key))
+  for (const g of months) {
+    g.weeks.sort((a, b) => b.date_from.localeCompare(a.date_from))
+  }
+
   return (
     <div>
       <SectionHeader title="Weekly Filing" subtitle="Monday – Saturday consolidated operations report"
@@ -690,93 +813,114 @@ function WeeklyTab() {
           rounded-lg text-xs text-[var(--red-text)]">{error}</div>
       )}
 
-      {!filingOpen ? (
-        <EmptyState
-          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
-          title="Weekly filing isn't open yet"
-          subtitle="Filing opens at 5pm on Saturday, or on the last day of the month if it falls earlier in the week"
-        />
-      ) : !draft ? (
-        <EmptyState
-          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
-          title="No filing for this week"
-          subtitle={(() => { const n = new Date(), mo = new Date(n); mo.setDate(n.getDate() - n.getDay() + 1); const sa = new Date(mo); sa.setDate(mo.getDate() + 5); return `${fmtShort(mo.toISOString())} – ${fmtShort(sa.toISOString())}` })()}
-          action={<button onClick={() => prepareMut.mutate()} disabled={prepareMut.isPending} className="px-5 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{prepareMut.isPending ? 'Preparing…' : 'Prepare Filing'}</button>}
-        />
-      ) : (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 mb-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-widest mb-1">Current Week — Draft</div>
-              <div className="text-lg font-black text-[var(--text)]">Week {draft.week_number}, {draft.year}</div>
-              <div className="text-xs text-[var(--text-3)] mt-0.5">{fmtShort(draft.date_from)} – {fmtShort(draft.date_to)}</div>
+            {draft && (
+        <div className="bg-[var(--panel)] border border-[var(--border-dark)] rounded-2xl
+          px-4 py-3.5 mb-6 flex items-center gap-3 flex-wrap">
+          <ProgressIcon />
+          <div className="flex-1 min-w-[190px]">
+            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase
+              tracking-widest">This week</div>
+            <div className="text-sm font-bold text-[var(--text)] mt-0.5">{weekLabel(draft)}</div>
+            <div className="text-xs text-[var(--text-3)] mt-0.5">
+              {draft.total_jobs_created || 0} jobs so far
+              {!draft.all_sheets_closed && ' · a day is still open'}
             </div>
-            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">DRAFT</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            {[{label:'Total',value:fmt(draft.total_collected),color:'text-[var(--text)]'},{label:'Cash',value:fmt(draft.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(draft.total_momo),color:'text-amber-600'},{label:'Jobs',value:draft.total_jobs_created ?? '—',color:'text-blue-600'}].map(c=>(
-              <div key={c.label} className="bg-[var(--bg)] rounded-xl p-3">
-                <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                <div className={`font-mono font-black text-lg ${c.color}`}>{c.value}</div>
-              </div>
-            ))}
-          </div>
-          {!draft.all_sheets_closed && <div className="mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">⚠ Not all sheets are closed. Close all daily sheets before submitting.</div>}
-          <div className="mb-4">
-            <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">Branch Manager Notes</label>
-            <textarea rows={2} value={notesId === draft.id ? notesText : (draft.bm_notes || '')} onChange={e => { setNotesId(draft.id); setNotesText(e.target.value) }} onBlur={() => { if (notesId === draft.id) notesMut.mutate({ id: draft.id, notes: notesText }) }} placeholder="Add notes for this week's filing…" className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-lg outline-none focus:border-[var(--border-dark)] transition-colors resize-none"/>
-            <p className="text-[10px] text-[var(--text-3)] mt-1">Auto-saves when you click away</p>
-          </div>
-          <button onClick={() => setSubmitId(draft.id)} disabled={!draft.all_sheets_closed} className="w-full py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">Submit & Lock Filing</button>
+          {draft.all_sheets_closed ? (
+            <button onClick={() => setSubmitId(draft.id)}
+              className="px-4 py-2 bg-[var(--text)] text-white text-xs font-bold
+                rounded-lg hover:opacity-90 transition-opacity">
+              Submit &amp; lock
+            </button>
+          ) : (
+            <div className="text-xs text-[var(--text-3)] text-right">
+              Submits Saturday
+            </div>
+          )}
         </div>
       )}
 
-      {previous.length > 0 && (
-        <div>
-          <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-3">Previous Filed Weeks</div>
-          <div className="space-y-2">
-            {previous.map(r => {
-              const isOpen = expanded === r.id
-              return (
-                <div key={r.id} className="bg-[var(--panel)] border border-[var(--border)] rounded-xl overflow-hidden">
-                  <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-[var(--text)]">Week {r.week_number}, {r.year}</span>
-                        <span className="text-xs text-[var(--text-3)]">{fmtShort(r.date_from)} – {fmtShort(r.date_to)}</span>
-                      </div>
-                      {r.submitted_by_name && <div className="text-[10px] text-[var(--text-3)] mt-0.5">Filed by {r.submitted_by_name} · {fmtShort(r.submitted_at)}</div>}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">✓ Locked</span>
-                      {r.pdf_path && (
-                        <button onClick={() => window.open(`/api/v1/finance/weekly/${r.id}/pdf/`, '_blank')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--text)] text-white text-[10px] font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                          PDF
-                        </button>
-                      )}
-                      <button onClick={() => setExpanded(isOpen ? null : r.id)} className="text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div className="px-5 pb-4 border-t border-[var(--border)]">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                        {[{label:'Total',value:fmt(r.total_collected),color:'text-[var(--text)]'},{label:'Cash',value:fmt(r.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(r.total_momo),color:'text-amber-600'},{label:'Jobs',value:r.total_jobs_created ?? '—',color:'text-blue-600'}].map(c=>(
-                          <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
-                            <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
-                            <div className={`font-mono font-black text-sm ${c.color}`}>{c.value}</div>
+      {months.length === 0 ? (
+        <EmptyState
+          icon={<FolderIcon />}
+          title="Nothing filed yet"
+          subtitle="Weekly filings appear here once a week has been submitted"
+        />
+      ) : (
+        <div className="space-y-2">
+          {months.map((g, gi) => {
+            const isOpen = expanded === g.key || (expanded === null && gi === 0)
+            return (
+              <div key={g.key}
+                className={`bg-[var(--panel)] border border-[var(--border)] rounded-xl
+                  overflow-hidden ${gi > 2 ? 'opacity-85' : ''}`}>
+                <button onClick={() => setExpanded(isOpen ? '' : g.key)}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left
+                    hover:bg-[var(--bg)] transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2"
+                    className={`text-[var(--text-3)] shrink-0 transition-transform
+                      ${isOpen ? 'rotate-90' : ''}`}>
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <FolderIcon open={isOpen} />
+                  <span className="text-sm font-bold text-[var(--text)] flex-1">{g.label}</span>
+                  <span className="text-xs text-[var(--text-2)] hidden sm:block">
+                    {g.weeks.length} {g.weeks.length === 1 ? 'week' : 'weeks'} · {g.jobs} jobs
+                  </span>
+                  <CheckIcon />
+                </button>
+
+                {isOpen && (
+                  <div className="bg-[var(--bg)]">
+                    {g.weeks.map(r => (
+                      <div key={r.id}
+                        className="flex items-center gap-3 px-4 py-2.5
+                          border-t border-[var(--border)]">
+                        {isSplitWeek(r) ? <SplitIcon /> : <WeekIcon />}
+                        <button onClick={() => setExpanded(expanded === `w${r.id}` ? g.key : `w${r.id}`)}
+                          className="flex-1 min-w-0 text-left">
+                          <div className="text-xs font-semibold text-[var(--text)]">
+                            {weekLabel(r)}
+                            {r.date_from === r.date_to && (
+                              <span className="text-[var(--text-3)] font-normal"> · 1 day</span>
+                            )}
                           </div>
-                        ))}
+                          <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                            Week {r.week_number}
+                            {isSplitWeek(r) && ' · part of a week split by the month'}
+                            {r.submitted_at && ` · filed ${fmtShort(r.submitted_at)}`}
+                          </div>
+                        </button>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs text-[var(--text-2)]">
+                            {r.total_jobs_created ?? '—'} jobs
+                          </div>
+                          <div className="font-mono text-[10px] text-[var(--text-3)]">
+                            {fmt(r.total_collected)}
+                          </div>
+                        </div>
+                        {r.pdf_path && (
+                          <button
+                            onClick={() => window.open(`/api/v1/finance/weekly/${r.id}/pdf/`, '_blank')}
+                            title="Download the filing"
+                            className="text-[var(--text-3)] hover:text-[var(--text)]
+                              transition-colors shrink-0">
+                            <PdfIcon />
+                          </button>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                    ))}
+                    {g.weeks.map(r => expanded === `w${r.id}` && (
+                      <div key={`d${r.id}`} className="border-t border-[var(--border)]">
+                        <WeeklyExpandedDetail report={r} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
