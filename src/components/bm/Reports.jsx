@@ -43,6 +43,7 @@ const prepareMonthly = (month, year)       => client.post('/api/v1/finance/month
 const submitMonthly  = (month, year, notes)=> client.post('/api/v1/finance/monthly-close/submit/', { month, year, bm_notes: notes })
 const getJobHistory  = (params)            => client.get('/api/v1/jobs/history/', { params })
 const getWeeklyList  = ()                  => client.get('/api/v1/finance/weekly/')
+const getMonthlyPdf  = (id)                => client.get(`/api/v1/finance/monthly-close/${id}/pdf/`, { responseType: 'blob' })
 // Fetched through the client rather than opened in a tab: a bare path
 // resolves against wherever the app is served from, not the API, and
 // carries none of the auth headers either.
@@ -1010,12 +1011,50 @@ function MonthlyTab() {
   const [submitNotes, setSubmitNotes]         = useState('')
   const [snapshot, setSnapshot]               = useState(null)
   const [prepareError, setPrepareError]       = useState('')
+  const [sharingMonth, setSharingMonth]       = useState(false)
+  const [downloadingPdf, setDownloadingPdf]   = useState(false)
+
+  const downloadMonthlyPdf = async () => {
+    if (!close?.id) return
+    setDownloadingPdf(true)
+    try {
+      const res = await getMonthlyPdf(close.id)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `monthly-close-${year}-${String(month).padStart(2, '0')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      setSharingMonth(false)
+    } catch {
+      setPrepareError('Could not build that document.')
+            setSharingMonth(false)
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
 
   const { data: closeData, isLoading, refetch } = useQuery({
     queryKey: ['monthly-close', month, year],
     queryFn: () => getMonthlyClose(month, year).then(r => r.data),
     staleTime: 30_000,
   })
+
+  // The weeks this month consolidates. The close carries totals but not
+  // its parts, so a figure has to be taken on trust — showing the weeks
+  // makes the total visibly the sum of six rows instead.
+  const { data: allWeeks = [] } = useQuery({
+    queryKey: ['weekly-reports'],
+    queryFn: () => getWeeklyList().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.results || []) }),
+    staleTime: 30_000,
+  })
+
+  const monthWeeks = allWeeks
+    .filter(w => {
+      const d = new Date(w.date_from)
+      return d.getMonth() + 1 === month && d.getFullYear() === year
+    })
+    .sort((a, b) => b.date_from.localeCompare(a.date_from))
 
   const prepareMut = useMutation({
     mutationFn: () => prepareMonthly(month, year),
@@ -1050,6 +1089,7 @@ function MonthlyTab() {
   const checks    = integrity.checks || {}
   const snap      = snapshot || (close?.status !== 'OPEN' ? close?.summary_snapshot : null)
   const isFuture  = year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth() + 1)
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
   const STATUS_COLOR = { 
     OPEN: 'bg-zinc-100 text-zinc-600', 
@@ -1102,15 +1142,41 @@ function MonthlyTab() {
               <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-widest mb-1">{MONTH_NAMES[month]} {year}</div>
               <div className="text-2xl font-black text-[var(--text)]">Monthly Close</div>
             </div>
-            <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full ${STATUS_COLOR[close.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{close.status?.replace(/_/g, ' ')}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+              <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full ${STATUS_COLOR[close.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{close.status?.replace(/_/g, ' ')}</span>
+              {!isOpen && close.id && (
+                <button onClick={() => setSharingMonth(true)}
+                  title="Share this filing"
+                  className="text-red-600 hover:text-red-700 transition-colors">
+                  <PdfIcon />
+                </button>
+              )}
+            </div>
           </div>
 
+                    {/* A month still being lived in is not failing its checks — a
+              sheet is open because the shop is open, and this week cannot
+              be filed until Saturday. Red crosses for things that are not
+              wrong yet teach a manager to stop reading them, so until the
+              last day of the month this states what is left rather than
+              what has failed. */}
           {isOpen && Object.keys(checks).length > 0 && (
             <div className="mb-4 space-y-1.5">
-              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">Integrity Checks</div>
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">
+                {isCurrentMonth ? 'What is left before this month can close' : 'Integrity checks'}
+              </div>
               {Object.entries(checks).map(([key, check]) => (
-                <div key={key} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium ${check.pass ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                  <span className="shrink-0">{check.pass ? '✓' : '✕'}</span><span>{check.detail}</span>
+                <div key={key}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium
+                    ${check.pass
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : isCurrentMonth
+                        ? 'bg-[var(--bg)] text-[var(--text-3)]'
+                        : 'bg-red-50 text-red-700'}`}>
+                  <span className="shrink-0">
+                    {check.pass ? '✓' : isCurrentMonth ? '○' : '✕'}
+                  </span>
+                  <span>{check.detail}</span>
                 </div>
               ))}
             </div>
@@ -1132,13 +1198,66 @@ function MonthlyTab() {
           {close.rejected_by  && <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-lg"><div className="text-xs font-bold text-[var(--red-text)]">Rejected by {close.rejected_by}</div>{close.rejection_reason && <div className="text-xs text-[var(--red-text)] mt-0.5">{close.rejection_reason}</div>}</div>}
           {prepareError && <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-lg text-xs text-[var(--red-text)]">{prepareError}</div>}
 
-          {isOpen && (
+                    {isOpen && (
             <button onClick={() => { setPrepareError(''); prepareMut.mutate() }} disabled={prepareMut.isPending || !integrity.can_submit}
               className="w-full py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
               {prepareMut.isPending ? 'Checking…' : 'Prepare Monthly Sheet'}
             </button>
           )}
+
+          {/* What the month consolidates. Same treatment as the weekly
+              tab, so the two views of the same filings look like the same
+              filings. */}
+          {monthWeeks.length > 0 && (
+            <div className="mt-5 -mx-5 -mb-5 border-t border-[var(--border)]">
+              <div className="px-5 pt-3 pb-2 text-[10px] font-bold text-[var(--text-3)]
+                uppercase tracking-wider">
+                The weeks in this month
+              </div>
+              {monthWeeks.map(r => (
+                <div key={r.id}
+                  style={{
+                    background: isSplitWeek(r) ? '#fbf6e4' : '#fbf8ea',
+                    borderTopColor: '#ece5d2',
+                    borderLeft: isSplitWeek(r) ? '3px solid #e0a82e' : undefined,
+                  }}
+                  className="flex items-center gap-3 px-5 py-2.5 border-t">
+                  {isSplitWeek(r) ? <SplitIcon /> : <WeekIcon />}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-[var(--text)]">
+                      {weekLabel(r)}
+                      {r.date_from === r.date_to && (
+                        <span className="text-[var(--text-3)] font-normal"> · 1 day</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                      Week {r.week_number}
+                      {r.status === 'DRAFT' ? ' · not yet filed' : ''}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs text-[var(--text-2)]">
+                      {r.total_jobs_created ?? '—'} jobs
+                    </div>
+                    <div className="font-mono text-[10px] text-[var(--text-3)]">
+                      {fmt(r.total_collected)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )}
+
+      {sharingMonth && (
+        <ShareDocumentModal
+          title="Share this filing"
+          reference={`${MONTH_NAMES[month]} ${year} · monthly close`}
+          onDownload={downloadMonthlyPdf}
+          onClose={() => setSharingMonth(false)}
+          busy={downloadingPdf}
+        />
       )}
 
       {showSubmitModal && createPortal(

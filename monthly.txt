@@ -1,0 +1,95 @@
+﻿        <button onClick={nextMonth} disabled={isFuture} className="w-8 h-8 flex items-center justify-center rounded-lg border border-[var(--border)] hover:border-[var(--border-dark)] text-[var(--text-2)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">â†’</button>
+      </div>
+
+      {isLoading && !closeData ? (
+        <div className="h-48 bg-[var(--panel)] border border-[var(--border)] rounded-2xl animate-pulse" />
+      ) : !close ? (
+        <EmptyState icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>} title="No close record" subtitle="Monthly close will be created automatically" />
+      ) : (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <div className="text-xs font-bold text-[var(--text-3)] uppercase tracking-widest mb-1">{MONTH_NAMES[month]} {year}</div>
+              <div className="text-2xl font-black text-[var(--text)]">Monthly Close</div>
+            </div>
+            <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full ${STATUS_COLOR[close.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{close.status?.replace(/_/g, ' ')}</span>
+          </div>
+
+          {isOpen && Object.keys(checks).length > 0 && (
+            <div className="mb-4 space-y-1.5">
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">Integrity Checks</div>
+              {Object.entries(checks).map(([key, check]) => (
+                <div key={key} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium ${check.pass ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  <span className="shrink-0">{check.pass ? 'âœ“' : 'âœ•'}</span><span>{check.detail}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {snap?.revenue && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[{label:'Total Collected',value:fmt(snap.revenue.total_collected),color:'text-[var(--text)]'},{label:'Cash',value:fmt(snap.revenue.total_cash),color:'text-emerald-600'},{label:'MoMo',value:fmt(snap.revenue.total_momo),color:'text-amber-600'},{label:'Total Jobs',value:snap.jobs?.total ?? 'â€”',color:'text-blue-600'}].map(c=>(
+                <div key={c.label} className="bg-[var(--bg)] rounded-xl p-3">
+                  <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1">{c.label}</div>
+                  <div className={`font-mono font-black text-lg ${c.color}`}>{c.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {close.submitted_by && <div className="text-xs text-[var(--text-3)] mb-3">Submitted by {close.submitted_by} Â· {fmtShort(close.submitted_at)}</div>}
+          {close.endorsed_by  && <div className="text-xs text-emerald-600 font-semibold mb-3">âœ“ Endorsed by {close.endorsed_by} Â· {fmtShort(close.endorsed_at)}</div>}
+          {close.rejected_by  && <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-lg"><div className="text-xs font-bold text-[var(--red-text)]">Rejected by {close.rejected_by}</div>{close.rejection_reason && <div className="text-xs text-[var(--red-text)] mt-0.5">{close.rejection_reason}</div>}</div>}
+          {prepareError && <div className="mb-3 px-3 py-2 bg-[var(--red-bg)] border border-[var(--red-border)] rounded-lg text-xs text-[var(--red-text)]">{prepareError}</div>}
+
+          {isOpen && (
+            <button onClick={() => { setPrepareError(''); prepareMut.mutate() }} disabled={prepareMut.isPending || !integrity.can_submit}
+              className="w-full py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
+              {prepareMut.isPending ? 'Checkingâ€¦' : 'Prepare Monthly Sheet'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showSubmitModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-black text-[var(--text)] mb-1">Submit Monthly Close â€” {MONTH_NAMES[month]} {year}</h3>
+            <p className="text-xs text-[var(--text-3)] mb-5">This will lock all weekly reports and send the close to Finance for review. This cannot be undone.</p>
+            {snap?.revenue && (
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {[{label:'Total Collected',value:fmt(snap.revenue.total_collected)},{label:'Total Cash',value:fmt(snap.revenue.total_cash)},{label:'Total MoMo',value:fmt(snap.revenue.total_momo)},{label:'Total Jobs',value:snap.jobs?.total ?? 'â€”'}].map(c=>(
+                  <div key={c.label} className="bg-[var(--bg)] rounded-lg p-3">
+                    <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-0.5">{c.label}</div>
+                    <div className="font-mono font-bold text-sm text-[var(--text)]">{c.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mb-4">
+              <label className="block text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1.5">Branch Manager Notes</label>
+              <textarea rows={3} value={submitNotes} onChange={e => setSubmitNotes(e.target.value)} placeholder="Any notes for Finance or the Regional Managerâ€¦" className="w-full px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-lg outline-none focus:border-[var(--border-dark)] transition-colors resize-none"/>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setShowSubmitModal(false); setSubmitNotes(''); }} className="flex-1 py-2.5 text-sm font-semibold text-[var(--text-2)] border border-[var(--border)] rounded-xl hover:border-[var(--border-dark)] transition-colors">Cancel</button>
+              <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending} className="flex-1 py-2.5 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">{submitMut.isPending ? 'Submittingâ€¦' : 'Submit Monthly Close'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// â”€â”€ Yearly Tabâ€” table layout matching old design â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function YearlyTab() {
+  const now  = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['sheets-yearly', year],
+    queryFn: () => getSheets({ 
+      year,
