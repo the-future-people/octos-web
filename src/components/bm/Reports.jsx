@@ -787,6 +787,7 @@ function WeeklyTab() {
         label: `${MONTH_NAMES[d.getMonth() + 1]} ${d.getFullYear()}`,
         weeks: [],
         jobs: 0,
+        collected: 0,
       }
       byMonth.set(key, group)
       months.push(group)
@@ -794,6 +795,7 @@ function WeeklyTab() {
     const g = byMonth.get(key)
     g.weeks.push(r)
     g.jobs += r.total_jobs_created || 0
+    g.collected += r.total_collected || 0
   }
   months.sort((a, b) => b.key.localeCompare(a.key))
   for (const g of months) {
@@ -865,8 +867,12 @@ function WeeklyTab() {
                   </svg>
                   <FolderIcon open={isOpen} />
                   <span className="text-sm font-bold text-[var(--text)] flex-1">{g.label}</span>
-                  <span className="text-xs text-[var(--text-2)] hidden sm:block">
+                  <span className="text-xs text-[var(--text-3)] hidden sm:block">
                     {g.weeks.length} {g.weeks.length === 1 ? 'week' : 'weeks'} · {g.jobs} jobs
+                  </span>
+                  <span className="font-mono text-xs font-bold text-emerald-700
+                    hidden sm:block">
+                    {fmt(g.collected)}
                   </span>
                   <CheckIcon />
                 </button>
