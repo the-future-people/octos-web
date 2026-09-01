@@ -545,7 +545,7 @@ const FolderIcon = ({ open, tone = 'muted' }) => (
 )
 
 const WeekIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
     className="text-[var(--text-3)] shrink-0">
     <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -558,9 +558,9 @@ const WeekIcon = () => (
 // Marks one half of a week the month boundary cut in two, so a one-day
 // filing reads as deliberate rather than as a mistake.
 const SplitIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-    className="text-[var(--text-3)] shrink-0">
+    className="text-amber-700 shrink-0">
     <circle cx="6" cy="6" r="3" />
     <circle cx="6" cy="18" r="3" />
     <line x1="20" y1="4" x2="8.12" y2="15.88" />
@@ -903,12 +903,20 @@ function WeeklyTab() {
                   <CheckIcon />
                 </button>
 
-                {isOpen && (
-                  <div className="bg-[var(--bg)]">
+                                {isOpen && (
+                  <div>
                     {g.weeks.map(r => (
+                      // A split week is warmer and carries a square left
+                      // edge: it is the one row in a column of six that is
+                      // not an ordinary Monday-to-Saturday, and it should
+                      // not have to be read to be noticed.
                       <div key={r.id}
-                        className="flex items-center gap-3 px-4 py-2.5
-                          border-t border-[var(--border)]">
+                        style={{
+                          background: isSplitWeek(r) ? '#fbf6e4' : '#fbf8ea',
+                          borderTopColor: '#ece5d2',
+                          borderLeft: isSplitWeek(r) ? '3px solid #e0a82e' : undefined,
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 border-t">
                         {isSplitWeek(r) ? <SplitIcon /> : <WeekIcon />}
                         <button onClick={() => setExpanded(expanded === `w${r.id}` ? g.key : `w${r.id}`)}
                           className="flex-1 min-w-0 text-left">
@@ -933,9 +941,9 @@ function WeeklyTab() {
                           </div>
                         </div>
                         {r.pdf_path && (
-                          <button onClick={() => setSharing(r)}
+                            <button onClick={() => setSharing(r)}
                             title="Share this filing"
-                            className="text-red-600/70 hover:text-red-600
+                            className="text-red-600 hover:text-red-700
                               transition-colors shrink-0">
                             <PdfIcon />
                           </button>
