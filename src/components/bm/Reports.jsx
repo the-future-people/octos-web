@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 import { reportMissingDayDisruption } from '../../api/bm'
 import { downloadBranchStatement } from '../../api/bm'
+import ShareDocumentModal from '../shared/ShareDocumentModal'
 
 const fmt = (n) =>
   `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -42,6 +43,10 @@ const prepareMonthly = (month, year)       => client.post('/api/v1/finance/month
 const submitMonthly  = (month, year, notes)=> client.post('/api/v1/finance/monthly-close/submit/', { month, year, bm_notes: notes })
 const getJobHistory  = (params)            => client.get('/api/v1/jobs/history/', { params })
 const getWeeklyList  = ()                  => client.get('/api/v1/finance/weekly/')
+// Fetched through the client rather than opened in a tab: a bare path
+// resolves against wherever the app is served from, not the API, and
+// carries none of the auth headers either.
+const getWeeklyPdf   = (id)                => client.get(`/api/v1/finance/weekly/${id}/pdf/`, { responseType: 'blob' })
 
 // Add roundRect utility for canvas
 if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -721,7 +726,28 @@ function WeeklyTab() {
   const [submitId, setSubmitId] = useState(null)
   const [submitNotes, setSubmitNotes] = useState('')
   const [error, setError] = useState('')
+  const [sharing, setSharing] = useState(null)
+  const [downloading, setDownloading] = useState(false)
   const filingOpen = isWeeklyFilingWindowOpen()
+
+  const downloadPdf = async (r) => {
+    setDownloading(true)
+    try {
+      const res = await getWeeklyPdf(r.id)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `weekly-${r.date_from}-to-${r.date_to}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      setSharing(null)
+    } catch {
+      setError('Could not build that document.')
+      setSharing(null)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ['weekly-reports'],
@@ -795,7 +821,7 @@ function WeeklyTab() {
     const g = byMonth.get(key)
     g.weeks.push(r)
     g.jobs += r.total_jobs_created || 0
-    g.collected += r.total_collected || 0
+    g.collected += parseFloat(r.total_collected || 0)
   }
   months.sort((a, b) => b.key.localeCompare(a.key))
   for (const g of months) {
@@ -907,10 +933,9 @@ function WeeklyTab() {
                           </div>
                         </div>
                         {r.pdf_path && (
-                          <button
-                            onClick={() => window.open(`/api/v1/finance/weekly/${r.id}/pdf/`, '_blank')}
-                            title="Download the filing"
-                            className="text-[var(--text-3)] hover:text-[var(--text)]
+                          <button onClick={() => setSharing(r)}
+                            title="Share this filing"
+                            className="text-red-600/70 hover:text-red-600
                               transition-colors shrink-0">
                             <PdfIcon />
                           </button>
@@ -928,6 +953,16 @@ function WeeklyTab() {
             )
           })}
         </div>
+      )}
+
+            {sharing && (
+        <ShareDocumentModal
+          title="Share this filing"
+          reference={`${weekLabel(sharing)} · week ${sharing.week_number}`}
+          onDownload={() => downloadPdf(sharing)}
+          onClose={() => setSharing(null)}
+          busy={downloading}
+        />
       )}
 
       {submitId && createPortal(
