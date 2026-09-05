@@ -7,6 +7,7 @@ import client from '../../api/client'
 import { reportMissingDayDisruption } from '../../api/bm'
 import { downloadBranchStatement } from '../../api/bm'
 import ShareDocumentModal from '../shared/ShareDocumentModal'
+import MonthReview from './MonthReview'
 
 const fmt = (n) =>
   `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -1205,48 +1206,12 @@ function MonthlyTab() {
             </button>
           )}
 
-          {/* What the month consolidates. Same treatment as the weekly
-              tab, so the two views of the same filings look like the same
-              filings. */}
-          {monthWeeks.length > 0 && (
-            <div className="mt-5 -mx-5 -mb-5 border-t border-[var(--border)]">
-              <div className="px-5 pt-3 pb-2 text-[10px] font-bold text-[var(--text-3)]
-                uppercase tracking-wider">
-                The weeks in this month
-              </div>
-              {monthWeeks.map(r => (
-                <div key={r.id}
-                  style={{
-                    background: isSplitWeek(r) ? '#fbf6e4' : '#fbf8ea',
-                    borderTopColor: '#ece5d2',
-                    borderLeft: isSplitWeek(r) ? '3px solid #e0a82e' : undefined,
-                  }}
-                  className="flex items-center gap-3 px-5 py-2.5 border-t">
-                  {isSplitWeek(r) ? <SplitIcon /> : <WeekIcon />}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-[var(--text)]">
-                      {weekLabel(r)}
-                      {r.date_from === r.date_to && (
-                        <span className="text-[var(--text-3)] font-normal"> · 1 day</span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                      Week {r.week_number}
-                      {r.status === 'DRAFT' ? ' · not yet filed' : ''}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-[var(--text-2)]">
-                      {r.total_jobs_created ?? '—'} jobs
-                    </div>
-                    <div className="font-mono text-[10px] text-[var(--text-3)]">
-                      {fmt(r.total_collected)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Every day of the month, inside the weekly filing that covers
+              it. The review is the work of the monthly close — the totals
+              above are its result. */}
+          <div className="mt-5">
+            <MonthReview month={month} year={year} />
+          </div>
         </div>
       )}
 
