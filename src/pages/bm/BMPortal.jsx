@@ -19,6 +19,7 @@ import Inbox        from '../../components/bm/Inbox'
 import DailyGreeting from '../../components/layout/DailyGreeting'
 import PersonalNotes from '../../components/shared/PersonalNotes'
 import ReminderModal from '../../components/shared/ReminderModal'
+import WeeklyFilingBlock from '../../components/bm/WeeklyFilingBlock'
 import useReminders from '../../hooks/useReminders'
 
 const SECTIONS = [
@@ -115,6 +116,11 @@ export default function BMPortal() {
 
         </div>
       </div>
+          {/* Mounted at the portal rather than inside Reports: the block is
+          meant to stop work, not wait until the manager happens to open
+          the filing page. */}
+      <WeeklyFilingBlock onGoToDaySheet={() => handleNav('daysheet')} />
+
     {reminder.hasReminder && (
         <ReminderModal
           reminder={reminder.current}
