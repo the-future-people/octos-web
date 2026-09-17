@@ -72,6 +72,7 @@ export default function CashierPortal() {
   const [mobileOpen,         setMobileOpen]         = useState(false)
   const [showSignOff,        setShowSignOff]         = useState(false)
   const [pendingJobs,        setPendingJobs]         = useState(0)
+  const [deferUntil,         setDeferUntil]          = useState(0)
   const reminder = useReminders()
 
   // Poll shift status every 60s
@@ -125,12 +126,28 @@ export default function CashierPortal() {
   const [intakeHeldPending, setIntakeHeldPending] = useState(false)
   const showIntakeHeld = !showFloatAck && !showPortalLocked && intakeHeldPending
 
-  // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF
+    // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF.
+  // should_lock stays true for the rest of the evening, so without
+  // deferUntil the wizard reopens the moment she closes it.
   useEffect(() => {
-    if ((shouldLock || floatStatus === 'PENDING_SIGNOFF') && !showSignOff && floatId && !isSignedOff) {
+    if ((shouldLock || floatStatus === 'PENDING_SIGNOFF') && !showSignOff && floatId && !isSignedOff && !deferUntil) {
       setShowSignOff(true)
     }
-  }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff])
+  }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff, deferUntil])
+
+  // Clearing the deferral re-runs the effect above, which reopens the wizard.
+  // The shift reminder keeps firing every five minutes in the meantime, so
+  // sign-off can be postponed but not forgotten.
+  useEffect(() => {
+    if (!deferUntil) return
+    const t = setTimeout(() => setDeferUntil(0), Math.max(deferUntil - Date.now(), 0))
+    return () => clearTimeout(t)
+  }, [deferUntil])
+
+  const deferSignOff = () => {
+    setShowSignOff(false)
+    setDeferUntil(Date.now() + 15 * 60_000)
+  }
 
   // Fetch pending job count for sign-off step 1
   useEffect(() => {
@@ -332,6 +349,7 @@ export default function CashierPortal() {
           pendingJobs={pendingJobs}
           firstName={user?.first_name}
           onLogout={logout}
+          onDefer={deferSignOff}
         />
       )}
 

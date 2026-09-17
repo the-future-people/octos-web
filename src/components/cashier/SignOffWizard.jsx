@@ -23,7 +23,7 @@ function fmt(n) {
 
 // ── Step components ───────────────────────────────────────────────────────────
 
-function Step1QueueStatus({ pendingCount, ackQueue, setAckQueue, onNext }) {
+function Step1QueueStatus({ pendingCount, ackQueue, setAckQueue, onNext, onDefer }) {
   return (
     <div>
       <h3 className="text-base font-black text-[var(--text)] mb-1">Queue Status</h3>
@@ -56,7 +56,14 @@ function Step1QueueStatus({ pendingCount, ackQueue, setAckQueue, onNext }) {
         </p>
       </label>
 
-      <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex items-center justify-between gap-3">
+        {onDefer && pendingCount > 0 ? (
+          <button onClick={onDefer}
+            className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)]
+              hover:text-[var(--text)] transition-colors">
+            Still handing over — remind me in 15 min
+          </button>
+        ) : <span />}
         <button onClick={onNext} disabled={!ackQueue}
           className="px-5 py-2.5 bg-[var(--text)] text-white text-sm font-bold
             rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity">
@@ -331,7 +338,7 @@ function ProgressBar({ step, total }) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function SignOffWizard({ floatId, expectedCash, openingFloat, pendingJobs, firstName, onLogout }) {
+export default function SignOffWizard({ floatId, expectedCash, openingFloat, pendingJobs, firstName, onLogout, onDefer }) {
   const queryClient = useQueryClient()
   const [step,          setStep]          = useState(1)
   const [ackQueue,      setAckQueue]      = useState(false)
@@ -448,6 +455,7 @@ export default function SignOffWizard({ floatId, expectedCash, openingFloat, pen
               ackQueue={ackQueue}
               setAckQueue={setAckQueue}
               onNext={() => setStep(2)}
+              onDefer={onDefer}
             />
           )}
           {step === 2 && (
