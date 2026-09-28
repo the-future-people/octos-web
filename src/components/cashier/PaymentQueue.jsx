@@ -24,18 +24,18 @@ const BoltIcon = () => (
   </svg>
 )
 
-const ToolsIcon = () => (
+const PrinterIcon = () => (
   <svg className="w-[17px] h-[17px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round"
-      d="M11 4.5 8 7.5l-1.5-1.5a3.5 3.5 0 0 1-4-5l2.5 2.5 2-2L4.5 -0.5a3.5 3.5 0 0 1 5 4L11 5" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M14.5 9.5 20 15a2 2 0 0 1-3 3l-5.5-5.5" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 4.5 19.5 2 22 4.5 19.5 9 17 9.5 6 20.5a2 2 0 0 1-3-3L14 6.5z" />
+      d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v4" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 15h10v4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-4z" />
   </svg>
 )
 
 const KINDS = [
   { id: 'instant',   label: 'Instant',   Icon: BoltIcon },
-  { id: 'processed', label: 'Processed', Icon: ToolsIcon },
+  { id: 'processed', label: 'Processed', Icon: PrinterIcon },
 ]
 
 export default function PaymentQueue() {
@@ -76,7 +76,7 @@ export default function PaymentQueue() {
         </div>
               </div>
 
-            <div className="inline-flex gap-0.5 bg-[var(--bg)] p-1 rounded-xl mb-4">
+                  <div className="inline-flex gap-1 bg-[var(--bg)] p-1 rounded-full mb-4">
         {KINDS.map(({ id, label, Icon }) => {
           const active = kind === id
           const count  = counts[id] ?? 0
@@ -84,17 +84,17 @@ export default function PaymentQueue() {
             <button
               key={id}
               onClick={() => setKind(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors
+              className={`flex items-center gap-2 px-[18px] py-2.5 rounded-full text-sm transition-colors
                 ${active
-                  ? 'bg-[var(--panel)] font-bold text-[var(--text)]'
+                  ? 'bg-[var(--text)] text-white font-bold'
                   : 'font-medium text-[var(--text-3)] hover:text-[var(--text-2)]'}`}
             >
               <Icon />
               {label}
-              <span className={`text-xs rounded-md
-                ${count > 0
-                  ? 'px-2 py-0.5 bg-[var(--blue-bg)] text-[var(--blue-text)]'
-                  : 'px-1 text-[var(--text-3)]'}`}>
+              <span className={`text-xs rounded-full
+                ${active
+                  ? 'px-2 py-0.5 bg-white/20 text-white'
+                  : 'text-[var(--text-3)]'}`}>
                 {count}
               </span>
             </button>
