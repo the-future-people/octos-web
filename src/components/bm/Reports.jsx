@@ -486,7 +486,7 @@ function DailyTab() {
 
           const sheet = item.sheet
           const d      = new Date(sheet.date)
-          const total  = parseFloat(sheet.total_cash||0) + parseFloat(sheet.total_momo||0) + parseFloat(sheet.total_pos||0)
+          const total  = parseFloat(sheet.total_collected||0)
           const isOpen = expanded === sheet.id
           const isDisrupted = sheet.is_disrupted
 
@@ -1277,7 +1277,7 @@ function YearlyTab() {
         byMonth[m].cash      += parseFloat(s.total_cash  || 0)
         byMonth[m].momo      += parseFloat(s.total_momo  || 0)
         byMonth[m].pos       += parseFloat(s.total_pos   || 0)
-        byMonth[m].total     += parseFloat(s.total_cash  || 0) + parseFloat(s.total_momo || 0) + parseFloat(s.total_pos || 0)
+        byMonth[m].total     += parseFloat(s.total_collected || 0)
         byMonth[m].jobs      += parseInt(s.total_jobs_created || 0)
         byMonth[m].complete  += parseInt(s.total_jobs_complete ?? s.total_jobs_created ?? 0)
       })
