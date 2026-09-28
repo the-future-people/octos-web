@@ -111,8 +111,14 @@ export default function PaymentQueue() {
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-[var(--text-2)]">Queue is clear</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">No jobs waiting for payment right now</p>
+            <p className="text-sm font-semibold text-[var(--text-2)]">
+            {kind === 'processed' ? 'No processed jobs yet' : 'Queue is clear'}
+          </p>
+          <p className="text-xs text-[var(--text-3)] mt-1 max-w-[340px]">
+            {kind === 'processed'
+              ? 'Banners, business cards and ID cards appear here once the branch starts taking them.'
+              : 'No jobs waiting for payment right now'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
