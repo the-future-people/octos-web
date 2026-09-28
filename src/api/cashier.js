@@ -4,8 +4,8 @@ import client from './client'
 export const getShiftStatus = () =>
   client.get('/api/v1/finance/cashier/shift-status/')
 
-export const getPaymentQueue = () =>
-  client.get('/api/v1/jobs/cashier/queue/')
+export const getPaymentQueue = (kind) =>
+  client.get('/api/v1/jobs/cashier/queue/', { params: kind ? { kind } : {} })
 
 export const getCashierSummary = () =>
   client.get('/api/v1/jobs/cashier/summary/')

@@ -18,15 +18,24 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 60)}h ago`
 }
 
+const KINDS = [
+  { id: 'instant',   label: 'Instant' },
+  { id: 'processed', label: 'Processed' },
+]
+
 export default function PaymentQueue() {
   const [activeJob, setActiveJob] = useState(null)
+  const [kind, setKind] = useState('instant')
   const { data, isLoading } = useQuery({
-    queryKey: ['paymentQueue'],
-    queryFn: () => getPaymentQueue().then(r => r.data),
+    queryKey: ['paymentQueue', kind],
+    queryFn: () => getPaymentQueue(kind).then(r => r.data),
     refetchInterval: 15_000,
   })
 
-  const jobs = Array.isArray(data) ? data : (data?.results || [])
+  const jobs   = Array.isArray(data) ? data : (data?.results || [])
+  // Counts cover both queues, so the tab you aren't looking at still
+  // shows a truthful badge without a second request.
+  const counts = data?.counts || {}
 
   if (isLoading) {
     return (
@@ -50,10 +59,31 @@ export default function PaymentQueue() {
             Jobs waiting for payment confirmation — oldest first
           </p>
         </div>
-        <div className="px-3 py-1 bg-[var(--panel)] border border-[var(--border)]
-          rounded-full text-sm font-semibold text-[var(--text-2)] whitespace-nowrap shrink-0">
-          {jobs.length} pending
-        </div>
+              </div>
+
+      <div className="flex gap-1 border-b border-[var(--border)] mb-4">
+        {KINDS.map(k => {
+          const active = kind === k.id
+          const count  = counts[k.id] ?? 0
+          return (
+            <button
+              key={k.id}
+              onClick={() => setKind(k.id)}
+              className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors
+                ${active
+                  ? 'font-bold text-[var(--text)] border-b-2 border-[var(--text)]'
+                  : 'font-medium text-[var(--text-3)] hover:text-[var(--text-2)]'}`}
+            >
+              {k.label}
+              <span className={`text-xs px-2 py-0.5 rounded-md
+                ${count > 0
+                  ? 'bg-[var(--blue-bg)] text-[var(--blue-text)]'
+                  : 'bg-[var(--bg)] text-[var(--text-3)]'}`}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {jobs.length === 0 ? (
