@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, getBulkPricing, createJob, getCustomers } from '../../api/bm'
+import { getServices, calculatePrice, createJob, getCustomers } from '../../api/bm'
 import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
@@ -55,40 +55,17 @@ export default function NewJobModal({ onClose, onSuccess }) {
     staleTime: 60_000,
   })
 
-  const branchId = user?.branch || 2
-  const { data: bulkPricing = {} } = useQuery({
-    queryKey: ['bulkPricing', branchId],
-    queryFn:  () => getBulkPricing(branchId).then(r => r.data),
-    staleTime: 300_000,
-  })
+const branchId = user?.branch || 2
 
-  // Local price calculation from bulk map — instant, no network call
-  // Falls back to network only for conditional/tiered services (binding, passport)
-  const needsNetworkPrice = !!(selRingSize || selOutputMode)
+  // Every price comes from the server. This used to calculate simple
+  // services here for speed, which meant two implementations of the
+  // pricing engine — and they had already drifted: the local one
+  // ignored the piece count on area services and knew nothing about a
+  // minimum, so a small banner quoted at 3.25 here and cost 10.00 there.
+  //
+  // The 400ms debounce means one call per pause, not per keystroke.
 
-  const localPrice = useMemo(() => {
-    if (!selected || needsNetworkPrice) return null
-    const rule = bulkPricing[selected.id] || bulkPricing[String(selected.id)]
-    if (!rule) return null
-
-    const base       = parseFloat(rule.base_price)
-    const multiplier = parseFloat(rule.color_multiplier)
-    const unit       = (rule.unit || '').toUpperCase().replace('PER_', '')
-
-    let total
-    if (['COPY', 'PIECE', 'PAGE', 'SHEET'].includes(unit)) {
-      total = base * debouncedPages * debouncedQty
-    } else if (['SQFT', 'SQCM', 'SQM'].includes(unit)) {
-      total = base * multiplier * debouncedQty
-    } else if (unit === 'JOB') {
-      total = base * multiplier
-    } else {
-      total = base * debouncedPages * debouncedQty
-    }
-    return { total: total.toFixed(2) }
-  }, [selected, bulkPricing, debouncedQty, debouncedPages, needsNetworkPrice])
-
-  const { data: networkPrice } = useQuery({
+  const { data: selPrice, isFetching: priceLoading } = useQuery({
     queryKey: ['selPrice', selected?.id, debouncedQty, debouncedPages, selRingSize, selOutputMode],
     queryFn: () => calculatePrice({
       service:  selected.id,
@@ -98,11 +75,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
       ...(selRingSize   ? { ring_size:   selRingSize   } : {}),
       ...(selOutputMode ? { output_mode: selOutputMode } : {}),
     }).then(r => r.data),
-    enabled: !!selected && needsNetworkPrice,
+    enabled: !!selected,
     staleTime: 3_000,
   })
-
-  const selPrice = needsNetworkPrice ? networkPrice : localPrice
 
   // Alias map — normalises user intent to tokens present in service names.
   // Keys are what users type, values are what the service name contains.
@@ -446,7 +421,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
                       Total
                     </span>
                     <span className="font-mono font-black text-sm text-green-700">
-                      {selPrice ? fmt(selPrice.total) : '...'}
+                      <span style={{ opacity: priceLoading ? 0.45 : 1, transition: 'opacity 120ms' }}>
+                  {selPrice ? fmt(selPrice.total) : '...'}
+                </span>
                     </span>
                   </div>
                   <button onClick={addToCart}
