@@ -31,6 +31,11 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [selQty,        setSelQty]        = useState(1)
   const [selPages,      setSelPages]      = useState(1)
   const [selRingSize,   setSelRingSize]   = useState(null)
+  // Values for whatever the selected service's spec_template declares,
+  // keyed by the descriptor's key. Binding's ring size and passport's
+  // output mode were each given their own state and their own branch in
+  // the render; a third service would have meant a third of both.
+  const [specValues,    setSpecValues]    = useState({})
   const [selOutputMode, setSelOutputMode] = useState(null)
 
   // Debounced values for pricing query — prevents a request on every keystroke
@@ -65,18 +70,24 @@ const branchId = user?.branch || 2
   //
   // The 400ms debounce means one call per pause, not per keystroke.
 
+  // The spec goes to the server as-is. It computes the area, applies any
+  // minimum and matches conditional tiers — the browser does no pricing
+  // arithmetic of its own.
   const { data: selPrice, isFetching: priceLoading } = useQuery({
-    queryKey: ['selPrice', selected?.id, debouncedQty, debouncedPages, selRingSize, selOutputMode],
+    queryKey: ['selPrice', selected?.id, debouncedQty, debouncedPages,
+               selRingSize, selOutputMode, JSON.stringify(specValues)],
     queryFn: () => calculatePrice({
       service:  selected.id,
       branch:   branchId,
       quantity: debouncedQty,
       pages:    debouncedPages,
+      ...specValues,
       ...(selRingSize   ? { ring_size:   selRingSize   } : {}),
       ...(selOutputMode ? { output_mode: selOutputMode } : {}),
     }).then(r => r.data),
     enabled: !!selected,
     staleTime: 3_000,
+    retry: false,
   })
 
   // Alias map — normalises user intent to tokens present in service names.
@@ -138,6 +149,13 @@ const branchId = user?.branch || 2
     setSelPages(service.smart_defaults?.pages || 1)
     setSelRingSize(isBinding(service) ? 10 : null)
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
+    setSpecValues(
+      Object.fromEntries(
+        (service.spec_template || [])
+          .filter(f => f.key !== 'quantity')
+          .map(f => [f.key, f.default ?? ''])
+      )
+    )
   }
 
   const addToCart = () => {
@@ -147,13 +165,14 @@ const branchId = user?.branch || 2
     // selection where selPrice is undefined. Adding during it froze 0.00 into
     // the cart and produced a real job worth nothing.
     if (!selPrice || parseFloat(selPrice.total) <= 0) return
-    setCart(c => [...c, {
+        setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
       quantity: selQty,
       pages:    selPages,
       ring_size:   selRingSize,
       output_mode: selOutputMode,
+      specifications: { ...specValues },
       _price:  selPrice?.total || 0,
     }])
     setSelected(null)
@@ -197,6 +216,8 @@ const branchId = user?.branch || 2
         sets:        item.quantity,
         ...(item.ring_size   ? { ring_size:   item.ring_size   } : {}),
         ...(item.output_mode ? { output_mode: item.output_mode } : {}),
+        ...(item.specifications && Object.keys(item.specifications).length
+            ? { specifications: item.specifications } : {}),
       })),
       ...(customer ? { customer: customer.id } : {}),
     }
@@ -378,18 +399,41 @@ const branchId = user?.branch || 2
                   </div>
                 )}
 
-                {isBinding(selected) ? (
-                  /* Binding is priced strictly as ring size x quantity. Pages
-                     have no meaning here, and offering a second count field
-                     was a way to double a price by accident. */
-                  <div className="mb-2">
-                    <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
-                      tracking-wider block mb-1">Documents</label>
-                    <input type="number" min="1" value={selQty}
-                      onChange={e => setSelQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
-                        rounded-lg outline-none"
-                    />
+                               {/* Fields come from the service's spec_template. Binding
+                    and passport used to get their own branch here; a
+                    fourth service would have meant a fourth. */}
+                {(selected.spec_template || []).length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    {(selected.spec_template || []).map(field => (
+                      <div key={field.key}>
+                        <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
+                          tracking-wider block mb-1">
+                          {field.label}{field.unit ? ` (${field.unit})` : ''}
+                        </label>
+                        {field.type === 'select' ? (
+                          <select
+                            value={field.key === 'quantity' ? selQty : (specValues[field.key] ?? '')}
+                            onChange={e => setSpecValues(v => ({ ...v, [field.key]: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
+                              rounded-lg outline-none">
+                            {(field.options || []).map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input type="number" min={field.min ?? 1} max={field.max}
+                            value={field.key === 'quantity' ? selQty : (specValues[field.key] ?? '')}
+                            onChange={e => {
+                              const n = Math.max(field.min ?? 1, parseInt(e.target.value) || 0)
+                              if (field.key === 'quantity') setSelQty(n)
+                              else setSpecValues(v => ({ ...v, [field.key]: n }))
+                            }}
+                            className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
+                              rounded-lg outline-none"
+                          />
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 mb-2">
