@@ -421,10 +421,18 @@ const branchId = user?.branch || 2
                             ))}
                           </select>
                         ) : (
-                          <input type="number" min={field.min ?? 1} max={field.max}
+                                                    <input type="number" min={field.min ?? 1} max={field.max}
                             value={field.key === 'quantity' ? selQty : (specValues[field.key] ?? '')}
                             onChange={e => {
-                              const n = Math.max(field.min ?? 1, parseInt(e.target.value) || 0)
+                              // Raw while typing. Clamping on every keystroke
+                              // turned the first digit of 168 into a 6.
+                              const raw = e.target.value
+                              const n = raw === '' ? '' : parseInt(raw)
+                              if (field.key === 'quantity') setSelQty(n)
+                              else setSpecValues(v => ({ ...v, [field.key]: n }))
+                            }}
+                            onBlur={e => {
+                              const n = Math.max(field.min ?? 1, parseInt(e.target.value) || (field.min ?? 1))
                               if (field.key === 'quantity') setSelQty(n)
                               else setSpecValues(v => ({ ...v, [field.key]: n }))
                             }}
