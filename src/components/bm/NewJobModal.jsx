@@ -524,8 +524,10 @@ const branchId = user?.branch || 2
                       <div className="text-xs font-semibold text-[var(--text)] truncate leading-tight">
                         {item.service.name}
                       </div>
-                      <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-                        {item.quantity} × {item.pages}pp
+                                            <div className="text-[10px] text-[var(--text-3)] mt-0.5">
+                        {item.specifications?.width_in && item.specifications?.height_in
+                          ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
+                          : `${item.quantity} × ${item.pages}pp`}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
