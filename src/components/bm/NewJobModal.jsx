@@ -149,10 +149,14 @@ const branchId = user?.branch || 2
     setSelPages(service.smart_defaults?.pages || 1)
     setSelRingSize(isBinding(service) ? 10 : null)
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
+        // quantity and pages are held in their own state and sent as their
+    // own fields. Leaving them in specValues too gave two sources for
+    // one number: the spec carried pages, the price used selPages, and
+    // every multi-page job was charged for a single page.
     setSpecValues(
       Object.fromEntries(
         (service.spec_template || [])
-          .filter(f => f.key !== 'quantity')
+          .filter(f => f.key !== 'quantity' && f.key !== 'pages')
           .map(f => [f.key, f.default ?? ''])
       )
     )
@@ -422,18 +426,24 @@ const branchId = user?.branch || 2
                           </select>
                         ) : (
                                                     <input type="number" min={field.min ?? 1} max={field.max}
-                            value={field.key === 'quantity' ? selQty : (specValues[field.key] ?? '')}
+                            value={
+                              field.key === 'quantity' ? selQty
+                              : field.key === 'pages'  ? selPages
+                              : (specValues[field.key] ?? '')
+                            }
                             onChange={e => {
                               // Raw while typing. Clamping on every keystroke
                               // turned the first digit of 168 into a 6.
                               const raw = e.target.value
                               const n = raw === '' ? '' : parseInt(raw)
-                              if (field.key === 'quantity') setSelQty(n)
+                              if (field.key === 'quantity')   setSelQty(n)
+                              else if (field.key === 'pages') setSelPages(n)
                               else setSpecValues(v => ({ ...v, [field.key]: n }))
                             }}
                             onBlur={e => {
                               const n = Math.max(field.min ?? 1, parseInt(e.target.value) || (field.min ?? 1))
-                              if (field.key === 'quantity') setSelQty(n)
+                              if (field.key === 'quantity')   setSelQty(n)
+                              else if (field.key === 'pages') setSelPages(n)
                               else setSpecValues(v => ({ ...v, [field.key]: n }))
                             }}
                             className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
