@@ -39,6 +39,19 @@ function services(job) {
     .join(', ')
 }
 
+// Online work has no attendant and nobody counted the money. The
+// database leaves intake_by and cashier empty because that is what is
+// true; the screen says where the job actually came from instead of
+// reading the empty field as "the counter".
+function isOnline(job) {
+  return job.intake_channel === 'ONLINE'
+}
+
+function channelLabel(channel) {
+  if (channel === 'ONLINE') return 'Print Octos'
+  return channel.replace('_', ' ').toLowerCase()
+}
+
 // file.url is a path, not an origin. In an API call Axios prefixes the
 // base for us; in an <img src> or an <iframe> the browser resolves it
 // against wherever the app is served from, which is not the API.
@@ -561,7 +574,7 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
           </div>
           <div className="text-xs text-[var(--text-3)] mt-0.5">
             {job.customer_name || 'Walk-in'}
-            {job.intake_channel ? ` · ${job.intake_channel.replace('_', ' ').toLowerCase()}` : ''}
+            {job.intake_channel ? ` · ${channelLabel(job.intake_channel)}` : ''}
           </div>
         </div>
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0
@@ -673,12 +686,15 @@ function Workspace({ job, onClear, onSuspend, onPreview, busy }) {
 
           <div className="border-t border-[var(--border)] mt-2.5 pt-2">
             <div className="text-xs text-[var(--text-2)]">
-              {job.payment_state === 'SETTLED' ? 'Paid in full'
+              {job.payment_state === 'SETTLED'
+                ? (isOnline(job) ? 'Paid online' : 'Paid in full')
                 : job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid'
                 : 'Unpaid'}
             </div>
             <div className="text-[10px] text-[var(--text-3)] mt-0.5">
-              {job.intake_by_name ? `Taken by ${job.intake_by_name}` : 'Taken at the counter'}
+              {isOnline(job)
+                ? 'Ordered on Print Octos'
+                : job.intake_by_name ? `Taken by ${job.intake_by_name}` : 'Taken at the counter'}
               {job.created_at ? ` · ${waited(job.created_at)} ago` : ''}
             </div>
           </div>
