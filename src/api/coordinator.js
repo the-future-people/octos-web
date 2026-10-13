@@ -42,3 +42,15 @@ export const getSuspendedJobs = () =>
 
 export const suspendJob = (id, payload) =>
   client.post(`/api/v1/jobs/${id}/verify/suspend/`, payload)
+
+// Take the next job into the inspection workspace, or keep the claim
+// alive while it is open. The server refuses (409) a job someone else
+// holds or one that is not next — the strict queue is enforced there,
+// not only by which buttons this page shows.
+export const claimJob = (id) =>
+  client.post(`/api/v1/jobs/${id}/inspect/`)
+
+// Close the workspace without clearing or suspending. Frees only this
+// coordinator's own claim.
+export const releaseJob = (id) =>
+  client.post(`/api/v1/jobs/${id}/inspect/release/`)
