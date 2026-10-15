@@ -176,11 +176,13 @@ function Waiting({ row, position, onMove }) {
           {row.customer_name} · ~{row.minutes_until_done} min
         </div>
       </div>
-      <button onClick={() => onMove(row)} aria-label={`Move ${row.job_number} to another machine`}
-        className="w-9 h-9 rounded-lg border border-[var(--border)] flex items-center justify-center
-          text-[var(--text-2)] hover:border-[var(--border-dark)] shrink-0">
-        <Glyph name="swap" size={15} />
-      </button>
+      {!row.by_hand && (
+        <button onClick={() => onMove(row)} aria-label={`Move ${row.job_number} to another machine`}
+          className="w-9 h-9 rounded-lg border border-[var(--border)] flex items-center justify-center
+            text-[var(--text-2)] hover:border-[var(--border-dark)] shrink-0">
+          <Glyph name="swap" size={15} />
+        </button>
+      )}
     </div>
   )
 }
@@ -301,7 +303,9 @@ export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone,
             <span className="text-sm font-bold text-amber-800">
               {unassigned.length} waiting for a machine
             </span>
-            <span className="text-xs text-amber-800/80">No machine that fits was up when it was cleared</span>
+            <span className="text-xs text-amber-800/80">
+              Nothing that fits was up, or the branch has no such machine. Place it, or mark it done if it was done another way.
+            </span>
           </div>
           {unassigned.map(row => (
             <div key={row.step} className="flex items-center gap-3 bg-[var(--panel)] rounded-xl px-3 py-2">
@@ -312,6 +316,11 @@ export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone,
               <button onClick={() => setMoving(row)}
                 className="min-h-[38px] px-4 text-sm font-bold bg-amber-500 text-white rounded-xl">
                 Place
+              </button>
+              <button onClick={() => onDone(row)} disabled={busyStep === row.step}
+                className="min-h-[38px] px-4 text-sm font-bold border border-amber-300 text-amber-800
+                  rounded-xl disabled:opacity-40">
+                Mark done
               </button>
             </div>
           ))}
