@@ -60,3 +60,16 @@ export const releaseJob = (id) =>
 // refuses quantity, pages and anything else the price was built from.
 export const changeSpecs = (id, lineId, payload) =>
   client.post(`/api/v1/jobs/${id}/lines/${lineId}/specs/`, payload)
+
+// The floor: every machine with its line-up, the hand-finishing bench,
+// and anything waiting for a machine to be chosen.
+export const getFloor = () =>
+  client.get('/api/v1/jobs/coordinator/floor/')
+
+// The job on a machine is finished there; the next one moves up.
+export const markStepDone = (stepId) =>
+  client.post(`/api/v1/jobs/steps/${stepId}/done/`)
+
+// Put a step on another machine of the same work that is up and fits.
+export const moveStep = (stepId, machineId) =>
+  client.post(`/api/v1/jobs/steps/${stepId}/move/`, { machine: machineId })

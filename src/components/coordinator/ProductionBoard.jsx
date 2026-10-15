@@ -12,12 +12,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  claimJob, getJobDetail, getProductionBoard, getSuspendedJobs,
-  getVerificationQueue, haltJob, moveJobAxis, releaseJob, resumeJob,
-  suspendJob, verifyJob,
+  claimJob, getFloor, getJobDetail, getProductionBoard, getSuspendedJobs,
+  getVerificationQueue, haltJob, markStepDone, moveJobAxis, moveStep,
+  releaseJob, resumeJob, suspendJob, verifyJob,
 } from '../../api/coordinator'
 import ArrivalQueue from './ArrivalQueue'
 import InspectionModal from './InspectionModal'
+import MachineLanes from './MachineLanes'
 import ReadyModal from './ReadyModal'
 import StageFlow from './StageFlow'
 import StageList from './StageList'
@@ -46,6 +47,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const [busyId, setBusyId]       = useState(null)
   const [halting, setHalting]     = useState(null)
   const [readyRow, setReadyRow]   = useState(null)
+  const [busyStep, setBusyStep]   = useState(null)
 
   // ── Reads ──────────────────────────────────────────────────────
 
@@ -70,6 +72,15 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     placeholderData: prev => prev,
   })
 
+  // Every machine with its line-up. Refreshed often: the progress bars
+  // and minutes left are only as good as the last look.
+  const { data: floor } = useQuery({
+    queryKey: ['floor'],
+    queryFn:  () => getFloor().then(r => r.data),
+    refetchInterval: 20_000,
+    placeholderData: prev => prev,
+  })
+
   const { data: openJob } = useQuery({
     queryKey: ['job-detail', openJobId],
     queryFn:  () => getJobDetail(openJobId, { predict: true }).then(r => r.data),
@@ -80,6 +91,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     queryClient.invalidateQueries({ queryKey: ['productionBoard'] })
     queryClient.invalidateQueries({ queryKey: ['verificationQueue'] })
     queryClient.invalidateQueries({ queryKey: ['suspendedJobs'] })
+    queryClient.invalidateQueries({ queryKey: ['floor'] })
   }, [queryClient])
 
   // ── Lanes ──────────────────────────────────────────────────────
@@ -105,6 +117,21 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   ]
 
   const openRow = queue.find(j => j.id === openJobId)
+
+  // Jobs with steps live in the machine lanes. What is left in a stage
+  // without a lane is work from before machine tracking, and, in
+  // Finishing, jobs whose every step is done and which wait only for
+  // the final check.
+  const pressLanes     = floor?.press || []
+  const finishingLanes = floor?.finishing || []
+  const unassigned     = floor?.unassigned || []
+  const allLanes       = [...pressLanes, ...finishingLanes]
+  const onFloor = new Set([
+    ...allLanes.flatMap(e => e.queue.map(r => r.job)),
+    ...unassigned.map(r => r.job),
+  ])
+  const pressLegacy     = press.filter(j => !onFloor.has(j.id))
+  const finishingOthers = finishing.filter(j => !onFloor.has(j.id))
 
   // ── Claiming ───────────────────────────────────────────────────
 
@@ -230,6 +257,32 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     onError:    (e) => setError(detail(e, 'Could not stop that job.')),
   })
 
+  const stepDone = async (row) => {
+    setBusyStep(row.step)
+    try {
+      await markStepDone(row.step)
+      setError('')
+      refresh()
+    } catch (e) {
+      setError(detail(e, 'Could not mark that done.'))
+    } finally {
+      setBusyStep(null)
+    }
+  }
+
+  const stepMove = async (row, machineId) => {
+    setBusyStep(row.step)
+    try {
+      await moveStep(row.step, machineId)
+      setError('')
+      refresh()
+    } catch (e) {
+      setError(detail(e, 'Could not move that job.'))
+    } finally {
+      setBusyStep(null)
+    }
+  }
+
   const on = {
     advance:   move,
     markReady,
@@ -270,10 +323,40 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
       )}
 
       {stage === 'press' && (
-        <StageList stage="press" jobs={press} busyId={busyId} blocked={!!openJobId} on={on} />
+        <div className="space-y-6">
+          {(pressLanes.length > 0 || unassigned.length > 0) && (
+            <MachineLanes lanes={pressLanes} unassigned={unassigned} allLanes={allLanes}
+              onDone={stepDone} onMove={stepMove} busyStep={busyStep} />
+          )}
+          {(pressLegacy.length > 0 || pressLanes.length === 0) && (
+            <section>
+              {pressLanes.length > 0 && (
+                <h3 className="text-xs font-semibold text-[var(--text-3)] mb-2">
+                  From before machine tracking
+                </h3>
+              )}
+              <StageList stage="press" jobs={pressLegacy} busyId={busyId} blocked={!!openJobId} on={on} />
+            </section>
+          )}
+        </div>
       )}
       {stage === 'finishing' && (
-        <StageList stage="finishing" jobs={finishing} busyId={busyId} blocked={!!openJobId} on={on} />
+        <div className="space-y-6">
+          {finishingLanes.length > 0 && (
+            <MachineLanes lanes={finishingLanes} allLanes={allLanes}
+              onDone={stepDone} onMove={stepMove} busyStep={busyStep} />
+          )}
+          {(finishingOthers.length > 0 || finishingLanes.length === 0) && (
+            <section>
+              {finishingLanes.length > 0 && (
+                <h3 className="text-xs font-semibold text-[var(--text-3)] mb-2">
+                  Ready for the final check
+                </h3>
+              )}
+              <StageList stage="finishing" jobs={finishingOthers} busyId={busyId} blocked={!!openJobId} on={on} />
+            </section>
+          )}
+        </div>
       )}
       {stage === 'ready' && (
         <StageList stage="ready" jobs={ready} busyId={busyId} blocked={!!openJobId} on={on} />
