@@ -69,7 +69,7 @@ function Panel({ icon, title, action, children, className = '' }) {
   return (
     <section className={`bg-[var(--panel)] border border-[var(--border)] rounded-2xl
       ${className}`}>
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
+      <div className="flex items-center gap-2.5 px-4 pt-3 pb-2.5">
         <span className="text-[var(--text-2)]"><Icon d={icon} /></span>
         <h3 className="text-sm font-bold text-[var(--text)] flex-1">{title}</h3>
         {action}
@@ -99,8 +99,8 @@ function SmallButton({ icon, children, onClick, href, disabled }) {
 
 function Fact({ icon, label, children }) {
   return (
-    <div className="flex gap-3 py-3.5 border-t border-[var(--border)]">
-      <span className="w-9 h-9 rounded-xl bg-[var(--bg)] text-[var(--text-2)] flex
+    <div className="flex gap-3 py-2.5 border-t border-[var(--border)]">
+      <span className="w-8 h-8 rounded-lg bg-[var(--bg)] text-[var(--text-2)] flex
         items-center justify-center shrink-0">
         <Icon d={icon} />
       </span>
@@ -116,8 +116,8 @@ function CheckRow({ on, auto, onToggle, children, detail }) {
   return (
     <button onClick={auto ? undefined : onToggle} role="checkbox" aria-checked={on}
       aria-disabled={auto}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left
-        min-h-[48px] transition-colors
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border text-left
+        min-h-[44px] transition-colors
         ${on ? 'bg-emerald-50 border-emerald-200' : 'bg-[var(--panel)] border-[var(--border)]'}
         ${auto ? 'cursor-default' : 'hover:border-[var(--border-dark)]'}`}>
       <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0
@@ -237,17 +237,46 @@ function Viewer({ files, onOpenLarge }) {
 
 // ── Specifications ──────────────────────────────────────────────
 
-function specRows(line) {
-  const rows = [
-    { key: null,         label: 'Product', value: line.service_name || line.label },
-    { key: 'paper_size', label: 'Size',    value: line.paper_size },
-  ]
-  for (const [k, v] of Object.entries(line.specifications || {})) {
-    if (PRICED.has(k) || v === null || v === '' || v === undefined) continue
-    rows.push({ key: k, label: k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase()), value: String(v) })
+// "width_in" reads as "Width (in)": the unit is part of the name.
+function prettyKey(k) {
+  if (k === 'paper_size') return 'Paper size'
+  const m = k.match(/^(.*)_(in|mm|cm|ft|m)$/)
+  const base = (m ? m[1] : k).replace(/_/g, ' ')
+  const word = base.charAt(0).toUpperCase() + base.slice(1)
+  return m ? `${word} (${m[2]})` : word
+}
+
+/**
+ * A line's own width and height, if it has them. Every line carries a
+ * paper_size that defaults to A4, so a 6 × 6 in banner also said "A4" —
+ * two sizes, one of them false. When real dimensions exist they are the
+ * size, and the paper size is not shown at all.
+ */
+function dimensionsOf(line) {
+  const specs = line.specifications || {}
+  for (const unit of ['in', 'ft', 'cm', 'mm', 'm']) {
+    const w = specs[`width_${unit}`]
+    const h = specs[`height_${unit}`]
+    if (w !== undefined && w !== '' && h !== undefined && h !== '') {
+      return { text: `${w} × ${h} ${unit}`, keys: [`width_${unit}`, `height_${unit}`] }
+    }
   }
-  rows.push({ key: 'sides', label: 'Sides', value: line.sides === 'DOUBLE' ? 'Double-sided' : 'Single-sided' })
-  rows.push({ key: null, label: 'Quantity', value: `${line.quantity}${line.pages > 1 ? ` × ${line.pages}pp` : ''}` })
+  return null
+}
+
+function specRows(line) {
+  const dims = dimensionsOf(line)
+  const rows = [
+    { label: 'Product', value: line.service_name || line.label },
+    { label: 'Size',    value: dims ? dims.text : line.paper_size },
+  ]
+  const skip = new Set(dims ? dims.keys : [])
+  for (const [k, v] of Object.entries(line.specifications || {})) {
+    if (PRICED.has(k) || skip.has(k) || v === null || v === '' || v === undefined) continue
+    rows.push({ label: prettyKey(k), value: String(v) })
+  }
+  rows.push({ label: 'Sides', value: line.sides === 'DOUBLE' ? 'Double-sided' : 'Single-sided' })
+  rows.push({ label: 'Quantity', value: `${line.quantity}${line.pages > 1 ? ` × ${line.pages}pp` : ''}` })
   return rows
 }
 
@@ -260,7 +289,7 @@ function SpecTable({ job, onSaved }) {
   const [problem, setProblem] = useState('')
 
   const start = (line) => {
-    const d = { paper_size: line.paper_size || '' }
+    const d = dimensionsOf(line) ? {} : { paper_size: line.paper_size || '' }
     for (const [k, v] of Object.entries(line.specifications || {})) {
       if (!PRICED.has(k)) d[k] = v ?? ''
     }
@@ -269,7 +298,9 @@ function SpecTable({ job, onSaved }) {
 
   const save = async (line) => {
     const changes = {}
-    if ((draft.paper_size || '') !== (line.paper_size || '')) changes.paper_size = draft.paper_size
+    if ('paper_size' in draft && (draft.paper_size || '') !== (line.paper_size || '')) {
+      changes.paper_size = draft.paper_size
+    }
     for (const [k, v] of Object.entries(line.specifications || {})) {
       if (!PRICED.has(k) && draft[k] !== undefined && String(draft[k]) !== String(v ?? '')) {
         changes[k] = draft[k]
@@ -290,15 +321,18 @@ function SpecTable({ job, onSaved }) {
   }
 
   return (
-    <div className="px-4 pb-4 space-y-3">
+    <div className="px-4 pb-3.5 space-y-2.5">
       {lines.map(line => {
         const open = editing === line.id
         return (
           <div key={line.id} className="border border-[var(--border)] rounded-xl overflow-hidden">
-            {lines.length > 1 && (
-              <div className="px-3 py-2 bg-[var(--bg)] text-xs font-semibold text-[var(--text-2)]
-                flex items-center">
+            {!open && (
+              <div className="pl-3 pr-1.5 py-1.5 bg-[var(--bg)] text-xs font-semibold
+                text-[var(--text-2)] flex items-center gap-2">
                 <span className="flex-1 truncate">{line.label || line.service_name}</span>
+                <SmallButton icon={I.pencil} onClick={() => start(line)} disabled={editing !== null}>
+                  Edit
+                </SmallButton>
               </div>
             )}
             {!open ? (
@@ -306,8 +340,8 @@ function SpecTable({ job, onSaved }) {
                 <tbody>
                   {specRows(line).map((r, i) => (
                     <tr key={i} className="border-t border-[var(--border)] first:border-t-0">
-                      <td className="px-3 py-2 text-[var(--text-3)] w-[38%] align-top">{r.label}</td>
-                      <td className="px-3 py-2 text-[var(--text)]">{r.value || '—'}</td>
+                      <td className="px-3 py-1.5 text-[var(--text-3)] w-[38%] align-top">{r.label}</td>
+                      <td className="px-3 py-1.5 text-[var(--text)]">{r.value || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -316,9 +350,7 @@ function SpecTable({ job, onSaved }) {
               <div className="p-3 space-y-2.5">
                 {Object.keys(draft).map(k => (
                   <label key={k} className="block">
-                    <span className="text-xs text-[var(--text-3)]">
-                      {k === 'paper_size' ? 'Size' : k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())}
-                    </span>
+                    <span className="text-xs text-[var(--text-3)]">{prettyKey(k)}</span>
                     <input value={draft[k]} onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))}
                       className="mt-1 w-full px-3 py-2 text-sm border border-[var(--border)] rounded-lg
                         bg-[var(--panel)] outline-none focus:border-[var(--text-3)]" />
@@ -348,13 +380,6 @@ function SpecTable({ job, onSaved }) {
                     Cancel
                   </button>
                 </div>
-              </div>
-            )}
-            {!open && (
-              <div className="border-t border-[var(--border)] px-3 py-2 flex justify-end">
-                <SmallButton icon={I.pencil} onClick={() => start(line)} disabled={editing !== null}>
-                  Edit
-                </SmallButton>
               </div>
             )}
           </div>
@@ -529,14 +554,14 @@ export default function InspectionModal({
               </Panel>
 
               {/* Specifications, checks, floor */}
-              <div className="flex flex-col gap-4 min-w-0">
+              <div className="flex flex-col gap-3 min-w-0">
                 <Panel icon={I.list} title="Order specifications">
                   <SpecTable job={job}
                     onSaved={() => queryClient.invalidateQueries({ queryKey: ['job-detail', job.id] })} />
                 </Panel>
 
                 <Panel icon={I.check} title="Pre-production checks">
-                  <div className="px-4 pb-4 space-y-2">
+                  <div className="px-4 pb-3.5 space-y-1.5">
                     <CheckRow on={fileOk} auto
                       detail={fileOk ? null : files.length ? 'A file could not be read' : 'No file attached'}>
                       File received and opens correctly
@@ -560,9 +585,9 @@ export default function InspectionModal({
                 </Panel>
 
                 <Panel icon={I.clock} title="Floor information">
-                  <div className="px-4 pb-4">
+                  <div className="px-4 pb-3.5">
                     <div className="border border-[var(--border)] rounded-xl overflow-hidden text-sm">
-                      <div className="flex items-center px-3 py-2.5">
+                      <div className="flex items-center px-3 py-2">
                         <span className="text-[var(--text-3)] w-32">Floor says</span>
                         <span className="text-[var(--text)] flex-1">
                           {floor ? `${job.predicted.is_next_day ? 'tomorrow ' : ''}${clockTime(floor)}` : '—'}
@@ -570,7 +595,7 @@ export default function InspectionModal({
                             <span className="text-xs text-[var(--text-3)]"> (estimated)</span>}
                         </span>
                       </div>
-                      <div className="flex items-center px-3 py-2.5 border-t border-[var(--border)]">
+                      <div className="flex items-center px-3 py-2 border-t border-[var(--border)]">
                         <span className="text-[var(--text-3)] w-32">Promised</span>
                         <span className="text-[var(--text)] flex-1">{promise ? dueTime(promise) : 'No promise yet'}</span>
                         {minsLeft !== null && (
