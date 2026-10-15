@@ -21,9 +21,7 @@ import InspectionModal from './InspectionModal'
 import ReadyModal from './ReadyModal'
 import StageFlow from './StageFlow'
 import StageList from './StageList'
-import {
-  HaltDialog, TONE_TEXT, channelLabel, dueLine, services,
-} from './shared'
+import { HaltDialog } from './shared'
 
 // How long a cleared job takes to slide out before the queue refreshes
 // and the rest glide up. Matches the transition in ArrivalQueue.
@@ -37,48 +35,6 @@ function laneTone(rows) {
 
 function detail(e, fallback) {
   return e?.response?.data?.detail || fallback
-}
-
-/**
- * Counter production jobs at RECEIVED. The customer was standing there,
- * so there is nothing to inspect; they wait only to be started.
- */
-function FromTheCounter({ jobs, onStart, busyId }) {
-  if (!jobs.length) return null
-  return (
-    <div className="max-w-2xl mx-auto mt-8">
-      <div className="text-xs font-semibold text-[var(--text-3)] mb-2 px-1">
-        From the counter · ready to start
-      </div>
-      <div className="space-y-2">
-        {jobs.map(job => {
-          const due = dueLine(job)
-          return (
-            <div key={job.id}
-              className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-                px-4 py-3 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[11px] text-[var(--text-3)]">{job.job_number}</div>
-                <div className="text-sm font-semibold text-[var(--text)] truncate">{services(job)}</div>
-                <div className="text-[11px] text-[var(--text-3)] truncate">
-                  {job.customer_name || 'Walk-in'}
-                  {job.intake_channel ? ` · ${channelLabel(job.intake_channel)}` : ''}
-                </div>
-              </div>
-              <span className={`text-xs shrink-0 hidden sm:block ${TONE_TEXT[due.tone]}`}>
-                {due.text}
-              </span>
-              <button onClick={() => onStart(job)} disabled={busyId === job.id}
-                className="min-h-[44px] px-4 text-sm font-bold bg-[var(--text)] text-white
-                  rounded-xl hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0">
-                Start
-              </button>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
 }
 
 export default function ProductionBoard({ openJobId, setOpenJobId }) {
@@ -132,7 +88,6 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const halted  = board?.halted || []
   const haltedIn = (...states) => halted.filter(j => states.includes(j.work_state))
 
-  const counter   = columns.RECEIVED || []
   const press     = [...(columns.IN_PRODUCTION || []), ...haltedIn('IN_PRODUCTION')]
   const finishing = [
     ...(columns.FINISHING || []), ...(columns.QUALITY_CHECK || []),
@@ -141,8 +96,9 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const ready = columns.READY || []
 
   const stages = [
-    { id: 'arrived',   label: 'Arrived',   count: queue.length + counter.length,
-      tone: laneTone([...queue, ...counter]) },
+    // Arrived is the inspection queue alone. Clearing sends a job
+    // straight to press; there is no separate step to start it.
+    { id: 'arrived',   label: 'Arrived',   count: queue.length, tone: laneTone(queue) },
     { id: 'press',     label: 'In press',  count: press.length,     tone: laneTone(press) },
     { id: 'finishing', label: 'Finishing', count: finishing.length, tone: laneTone(finishing) },
     { id: 'ready',     label: 'Ready',     count: ready.length,     tone: null },
@@ -302,20 +258,13 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
       />
 
       {stage === 'arrived' && (
-        <>
-          <ArrivalQueue
-            queue={queue}
-            onInspect={inspect}
-            claiming={claimingNow ? claimingId : null}
-            leavingId={leavingId}
-            blocked={!!openJobId}
-          />
-          <FromTheCounter
-            jobs={counter}
-            busyId={busyId}
-            onStart={(job) => move(job, 'IN_PRODUCTION')}
-          />
-        </>
+        <ArrivalQueue
+          queue={queue}
+          onInspect={inspect}
+          claiming={claimingNow ? claimingId : null}
+          leavingId={leavingId}
+          blocked={!!openJobId}
+        />
       )}
 
       {stage === 'press' && (

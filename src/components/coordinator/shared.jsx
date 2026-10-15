@@ -59,6 +59,46 @@ export function dueLine(row) {
   return { text: due, tone: 'normal' }
 }
 
+// ── Chips ────────────────────────────────────────────────────────
+//
+// Colour that means something: where a job came from, and whether its
+// promise is safe. Never colour alone; the chip always says it in words.
+
+const CHANNEL_TONE = {
+  ONLINE:   'bg-blue-50 text-blue-700',
+  WHATSAPP: 'bg-emerald-50 text-emerald-700',
+  EMAIL:    'bg-violet-50 text-violet-700',
+  PHONE:    'bg-sky-50 text-sky-700',
+}
+
+const NEUTRAL_CHIP = 'bg-[var(--bg)] text-[var(--text-2)] border border-[var(--border)]'
+
+export function Chip({ children, className = NEUTRAL_CHIP }) {
+  return (
+    <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5
+      rounded-full whitespace-nowrap ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+export function ChannelChip({ channel }) {
+  if (!channel) return null
+  return <Chip className={CHANNEL_TONE[channel] || NEUTRAL_CHIP}>{channelLabel(channel)}</Chip>
+}
+
+const DUE_TONE = {
+  late:   'bg-red-50 text-red-700',
+  risk:   'bg-amber-50 text-amber-800',
+  normal: NEUTRAL_CHIP,
+  muted:  NEUTRAL_CHIP,
+}
+
+export function DueChip({ row }) {
+  const due = dueLine(row)
+  return <Chip className={DUE_TONE[due.tone]}>{due.text}</Chip>
+}
+
 export const TONE_TEXT = {
   late:   'text-red-600 font-semibold',
   risk:   'text-amber-700 font-semibold',

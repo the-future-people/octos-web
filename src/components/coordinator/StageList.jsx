@@ -9,7 +9,7 @@
 // what the coordinator needs to know about it.
 
 import {
-  FINDING_LABEL, TONE_TEXT, channelLabel, clockTime, dueLine, services, waited,
+  ChannelChip, DueChip, FINDING_LABEL, clockTime, services, waited,
 } from './shared'
 
 const EMPTY = {
@@ -60,7 +60,6 @@ function Chip({ children, tone }) {
 }
 
 function Row({ job, stage, busy, blocked, on }) {
-  const due = dueLine(job)
   const stuck = job.is_halted
   const floor = clockTime(job.predicted?.ready_at)
   const checking = job.work_state === 'QUALITY_CHECK'
@@ -74,9 +73,11 @@ function Row({ job, stage, busy, blocked, on }) {
         <div className="text-sm font-semibold text-[var(--text)] leading-snug truncate">
           {services(job)}
         </div>
-        <div className="text-[11px] text-[var(--text-3)] truncate">
-          {job.customer_name || 'Walk-in'}
-          {job.intake_channel ? ` · ${channelLabel(job.intake_channel)}` : ''}
+        <div className="flex items-center gap-2 mt-0.5 min-w-0">
+          <span className="text-xs text-[var(--text-3)] truncate">
+            {job.customer_name || 'Walk-in'}
+          </span>
+          <ChannelChip channel={job.intake_channel} />
         </div>
       </div>
 
@@ -92,7 +93,7 @@ function Row({ job, stage, busy, blocked, on }) {
           <div className="text-xs text-[var(--text-2)]">Awaiting collection</div>
         ) : (
           <>
-            <div className={`text-xs ${TONE_TEXT[due.tone]}`}>{due.text}</div>
+            <DueChip row={job} />
             {floor && !stuck && (
               <div className="text-[11px] text-[var(--text-3)] mt-0.5">
                 Floor says {job.predicted.is_next_day ? 'tomorrow ' : ''}{floor}
@@ -150,7 +151,7 @@ export default function StageList({ stage, jobs, busyId, blocked, on }) {
   if (!jobs.length) {
     const [title, hint] = EMPTY[stage]
     return (
-      <div className="max-w-3xl mx-auto bg-[var(--panel)] border border-[var(--border)]
+      <div className="bg-[var(--panel)] border border-[var(--border)]
         rounded-2xl px-6 py-14 text-center">
         <p className="text-sm font-semibold text-[var(--text-2)]">{title}</p>
         <p className="text-xs text-[var(--text-3)] mt-1">{hint}</p>
@@ -161,7 +162,7 @@ export default function StageList({ stage, jobs, busyId, blocked, on }) {
   const sorted = stage === 'held' ? jobs : [...jobs].sort(byPromise)
 
   return (
-    <div className="max-w-3xl mx-auto space-y-2">
+    <div className="space-y-2">
       {sorted.map(job => (
         <Row key={job.id} job={job} stage={stage}
           busy={busyId === job.id} blocked={blocked} on={on} />

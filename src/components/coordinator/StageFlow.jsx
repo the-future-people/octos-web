@@ -13,7 +13,9 @@ const DOT_TONE = {
   late:  'bg-red-50 border-red-400 text-red-700',
   risk:  'bg-amber-50 border-amber-400 text-amber-700',
   some:  'bg-[var(--panel)] border-[var(--text-3)] text-[var(--text)]',
-  empty: 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-3)]',
+  // Flat like the others, only the number greyed. A filled grey dot
+  // read as a shaded ball rather than an empty stage.
+  empty: 'bg-[var(--panel)] border-[var(--border-dark)] text-[var(--text-3)]',
 }
 
 function toneOf(stage) {

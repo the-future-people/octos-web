@@ -9,21 +9,20 @@
 // The order and which job is next come from the server (is_next), so this
 // list and the claim that opens a job can never disagree.
 //
-// Movement: when a job is cleared the board marks it leaving, it slides
+// Clearing sends a job straight to press; there is no second step to
+// start it. When a job is cleared the board marks it leaving, it slides
 // out toward In press, and the queue is then refreshed. Every row that
 // moved glides from where it was to where it now is, measured before and
 // after, so the same glide covers another coordinator taking a job too.
 
 import { useLayoutEffect, useRef } from 'react'
-import {
-  TONE_TEXT, channelLabel, dueLine, services, waited,
-} from './shared'
+import { Chip, ChannelChip, DueChip, isOnline, services, waited } from './shared'
 
 const FADE = [
   { opacity: 1,    filter: 'none' },
-  { opacity: 0.62, filter: 'blur(0.6px)' },
-  { opacity: 0.42, filter: 'blur(1.2px)' },
-  { opacity: 0.28, filter: 'blur(1.6px)' },
+  { opacity: 0.66, filter: 'blur(0.5px)' },
+  { opacity: 0.44, filter: 'blur(1px)' },
+  { opacity: 0.3,  filter: 'blur(1.5px)' },
 ]
 
 function fadeFor(i) {
@@ -36,6 +35,16 @@ const LockIcon = () => (
     className="shrink-0 text-[var(--text-3)]">
     <rect x="4" y="11" width="16" height="10" rx="2" />
     <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+)
+
+const InspectIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <circle cx="11.5" cy="14.5" r="2.5" />
+    <path d="M13.3 16.3 15 18" />
   </svg>
 )
 
@@ -69,37 +78,37 @@ function useGlide() {
 }
 
 function Head({ job, onInspect, claiming, blocked }) {
-  const due = dueLine(job)
   const mine = job.inspecting_is_me
+  const paidOnline = isOnline(job) && job.payment_state === 'SETTLED'
 
   return (
-    <div className="bg-[var(--panel)] border-2 border-[var(--border-dark)] rounded-2xl
-      px-5 py-4 flex items-center gap-4">
-      <div className="flex-1 min-w-0">
-        <div className="text-[11px] font-semibold text-[var(--text-3)]">
-          {mine ? 'You are inspecting' : 'Next'}
-        </div>
-        <div className="font-mono text-xs text-[var(--text-3)] mt-0.5">{job.job_number}</div>
-        <div className="text-base font-semibold text-[var(--text)] leading-snug mt-0.5">
-          {services(job)}
-        </div>
-        <div className="text-xs text-[var(--text-2)] mt-0.5">
-          {job.customer_name || 'Walk-in'}
-          {job.intake_channel ? ` · ${channelLabel(job.intake_channel)}` : ''}
-        </div>
+    <div className="bg-[var(--panel)] border-2 border-blue-300 rounded-2xl px-5 py-4
+      shadow-[0_6px_20px_-12px_rgba(29,78,216,0.35)]">
+      <div className="flex items-center gap-2">
+        <Chip className="bg-blue-600 text-white">{mine ? 'You are inspecting' : 'Next'}</Chip>
+        <ChannelChip channel={job.intake_channel} />
+        <span className="ml-auto font-mono text-xs text-[var(--text-3)]">{job.job_number}</span>
       </div>
 
-      <div className="text-right shrink-0">
-        <div className={`text-xs ${TONE_TEXT[due.tone]}`}>{due.text}</div>
-        <div className="text-[11px] text-[var(--text-3)] mt-0.5">
-          Waiting {waited(job.created_at)}
+      <div className="flex items-end gap-4 mt-3.5">
+        <div className="flex-1 min-w-0">
+          <div className="text-lg font-bold text-[var(--text)] leading-snug">
+            {services(job)}
+          </div>
+          <div className="text-sm text-[var(--text-2)] mt-0.5">
+            {job.customer_name || 'Walk-in'}
+            {paidOnline ? ' · paid online' : ''}
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            <DueChip row={job} />
+            <Chip>Waiting {waited(job.created_at)}</Chip>
+          </div>
         </div>
         <button
           onClick={() => onInspect(job.id)}
           disabled={!!claiming || blocked}
-          className="mt-2.5 min-h-[44px] px-5 text-sm font-bold bg-[var(--text)]
-            text-white rounded-xl hover:opacity-90 disabled:opacity-40
-            transition-opacity">
+          className="min-h-[48px] px-6 text-sm font-bold bg-[var(--text)] text-white
+            rounded-xl hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0">
           {claiming === job.id ? 'Opening…' : mine ? 'Continue' : 'Inspect'}
         </button>
       </div>
@@ -108,23 +117,19 @@ function Head({ job, onInspect, claiming, blocked }) {
 }
 
 function Waiting({ job, position }) {
-  const due = dueLine(job)
   return (
     <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
       px-4 py-3 flex items-center gap-3">
-      <span className="w-5 text-center text-xs font-semibold text-[var(--text-3)] shrink-0">
+      <span className="w-5 text-center text-xs font-bold text-[var(--text-3)] shrink-0">
         {position}
       </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-[var(--text)] truncate">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <span className="text-sm font-semibold text-[var(--text)] truncate">
           {services(job)}
-        </div>
-        <div className="text-[11px] text-[var(--text-3)] truncate">
-          {job.customer_name || 'Walk-in'}
-          {job.intake_channel ? ` · ${channelLabel(job.intake_channel)}` : ''}
-        </div>
+        </span>
+        <span className="hidden sm:inline-flex"><ChannelChip channel={job.intake_channel} /></span>
       </div>
-      <span className={`text-[11px] shrink-0 ${TONE_TEXT[due.tone]}`}>{due.text}</span>
+      <DueChip row={job} />
       <LockIcon />
     </div>
   )
@@ -147,23 +152,30 @@ export default function ArrivalQueue({ queue, onInspect, claiming, leavingId, bl
   const line = queue.filter(j => !(j.inspecting_by_name && !j.inspecting_is_me))
 
   return (
-    <div className="max-w-2xl mx-auto">
-      {elsewhere.map(job => (
-        <div key={job.id}
-          className="flex items-center gap-2 text-xs text-[var(--text-2)] mb-2 px-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {job.inspecting_by_name} is inspecting {job.job_number} · {services(job)}
-          </span>
-        </div>
-      ))}
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center
+          justify-center">
+          <InspectIcon />
+        </span>
+        <span className="text-sm font-semibold text-[var(--text)]">To inspect</span>
+        <Chip>{line.length}</Chip>
+      </div>
 
       {line.length === 0 ? (
         <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          px-6 py-14 text-center">
-          <p className="text-sm font-semibold text-[var(--text-2)]">Nothing waiting</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">
-            Everything that arrived has been looked at
+          px-6 py-12 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-700 mx-auto
+            flex items-center justify-center">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="m8 12 3 3 5-6" />
+            </svg>
+          </div>
+          <p className="text-base font-bold text-[var(--text)] mt-3">All caught up</p>
+          <p className="text-sm text-[var(--text-2)] mt-1">
+            Every file that arrived has been checked. New orders land here.
           </p>
         </div>
       ) : (
@@ -182,7 +194,7 @@ export default function ArrivalQueue({ queue, onInspect, claiming, leavingId, bl
                   motion-reduce:transition-none">
                 {i > 0 && (
                   <div aria-hidden="true"
-                    className="text-center text-sm leading-none text-[var(--text-3)] py-1.5">
+                    className="text-center text-sm leading-none text-[var(--text-3)] py-2">
                     ↑
                   </div>
                 )}
@@ -197,6 +209,17 @@ export default function ArrivalQueue({ queue, onInspect, claiming, leavingId, bl
           })}
         </div>
       )}
+
+      {elsewhere.map(job => (
+        <div key={job.id}
+          className="mt-3 flex items-center gap-2 text-sm text-[var(--text-2)]
+            bg-[var(--panel)] border border-[var(--border)] rounded-xl px-4 py-2.5">
+          <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {job.inspecting_by_name} is inspecting {job.job_number} · {services(job)}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
