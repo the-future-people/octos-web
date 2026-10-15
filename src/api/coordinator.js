@@ -54,3 +54,9 @@ export const claimJob = (id) =>
 // coordinator's own claim.
 export const releaseJob = (id) =>
   client.post(`/api/v1/jobs/${id}/inspect/release/`)
+
+// Correct a line's specification during inspection, after the customer
+// agreed on the recorded company line. Price never changes; the server
+// refuses quantity, pages and anything else the price was built from.
+export const changeSpecs = (id, lineId, payload) =>
+  client.post(`/api/v1/jobs/${id}/lines/${lineId}/specs/`, payload)

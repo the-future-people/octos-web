@@ -151,7 +151,9 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   // ── Inspection outcomes ────────────────────────────────────────
 
   const { mutate: clear, isPending: clearing } = useMutation({
-    mutationFn: ({ id, note }) => verifyJob(id, { note }),
+    // The payload carries the note and, when the order was corrected
+    // after a call, that the customer was contacted and what they said.
+    mutationFn: ({ id, ...payload }) => verifyJob(id, payload),
     onSuccess:  (_r, { id }) => {
       setError('')
       setOpenJobId(null)
@@ -286,7 +288,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
           row={openRow}
           onHeartbeat={heartbeat}
           onClose={close}
-          onClear={(note) => clear({ id: openJobId, note })}
+          onClear={(payload) => clear({ id: openJobId, ...payload })}
           clearing={clearing}
           onSuspend={(outcome, note) => suspend({ id: openJobId, outcome, note })}
           suspending={suspending}
