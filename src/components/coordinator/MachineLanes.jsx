@@ -111,7 +111,7 @@ function progressOf(row) {
   return total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0
 }
 
-function OnTheMachine({ row, machine, onDone, busy }) {
+function OnTheMachine({ row, machine, onDone, onCheck, busy }) {
   const look = lookOf(machine)
   const halted = row.is_halted || !machine.is_available
   const tone = halted ? LOOK.DOWN : look
@@ -149,7 +149,7 @@ function OnTheMachine({ row, machine, onDone, busy }) {
             : row.running_over ? 'Taking a little longer than usual' : `~${row.minutes_until_done} min left`}
         </span>
         {!halted && (
-          <button onClick={() => onDone(row)} disabled={busy}
+          <button onClick={() => (row.is_last ? onCheck(row) : onDone(row))} disabled={busy}
             className="inline-flex items-center gap-1.5 min-h-[40px] px-4 text-sm font-bold
               bg-emerald-600 text-white rounded-xl hover:opacity-90 disabled:opacity-40">
             <Glyph name="check" size={15} />{busy ? 'Saving…' : 'Done'}
@@ -196,7 +196,7 @@ function Empty({ children, wide }) {
   )
 }
 
-function Lane({ entry, busyStep, onDone, onMove }) {
+function Lane({ entry, busyStep, onDone, onCheck, onMove }) {
   const { machine, queue } = entry
   const [first, ...rest] = queue
   const onIt = first && first.state === 'ACTIVE' ? first : null
@@ -213,7 +213,7 @@ function Lane({ entry, busyStep, onDone, onMove }) {
       ) : (
         <>
           {onIt
-            ? <OnTheMachine row={onIt} machine={machine} onDone={onDone} busy={busyStep === onIt.step} />
+            ? <OnTheMachine row={onIt} machine={machine} onDone={onDone} onCheck={onCheck} busy={busyStep === onIt.step} />
             : <Empty>{machine.is_available ? 'Starting the next job…' : 'Down'}</Empty>}
           <div className="flex flex-col gap-1.5">
             {waiting.length === 0
@@ -273,10 +273,11 @@ function MovePicker({ row, choices, onPick, onClose, busy }) {
  * unassigned: steps waiting for a machine to be chosen (press only)
  * allLanes:   every lane on the floor, to offer machines to move to
  * onDone:     (row) => mark the job on a machine done
+ * onCheck:    (row) => open the final check, for a piece at its last step
  * onMove:     (row, machineId) => put a step on another machine
  * busyStep:   a step with a request in flight
  */
-export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone, onMove, busyStep }) {
+export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone, onCheck, onMove, busyStep }) {
   const [moving, setMoving] = useState(null)
 
   // Machines that do this step's work and are up, other than the one
@@ -291,7 +292,7 @@ export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone,
     <div className="space-y-3">
       {lanes.map(entry => (
         <Lane key={entry.machine.id ?? `bench-${entry.machine.station}`} entry={entry}
-          busyStep={busyStep} onDone={onDone} onMove={setMoving} />
+          busyStep={busyStep} onDone={onDone} onCheck={onCheck} onMove={setMoving} />
       ))}
 
       {unassigned.length > 0 && (
@@ -317,7 +318,7 @@ export default function MachineLanes({ lanes, unassigned = [], allLanes, onDone,
                 className="min-h-[38px] px-4 text-sm font-bold bg-amber-500 text-white rounded-xl">
                 Place
               </button>
-              <button onClick={() => onDone(row)} disabled={busyStep === row.step}
+              <button onClick={() => (row.is_last ? onCheck(row) : onDone(row))} disabled={busyStep === row.step}
                 className="min-h-[38px] px-4 text-sm font-bold border border-amber-300 text-amber-800
                   rounded-xl disabled:opacity-40">
                 Mark done

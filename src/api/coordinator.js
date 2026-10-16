@@ -73,3 +73,11 @@ export const markStepDone = (stepId) =>
 // Put a step on another machine of the same work that is up and fits.
 export const moveStep = (stepId, machineId) =>
   client.post(`/api/v1/jobs/steps/${stepId}/move/`, { machine: machineId })
+
+// The final check at a piece's last step: what was ordered, row by row.
+export const getCheck = (stepId) =>
+  client.get(`/api/v1/jobs/steps/${stepId}/check/`)
+
+// What was made. Matches: ready. Differs: back to be made again.
+export const submitCheck = (stepId, made, note = '') =>
+  client.post(`/api/v1/jobs/steps/${stepId}/check/`, { made, note })

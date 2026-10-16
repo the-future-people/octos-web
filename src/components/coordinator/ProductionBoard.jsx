@@ -14,9 +14,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   claimJob, getFloor, getJobDetail, getProductionBoard, getSuspendedJobs,
   getVerificationQueue, haltJob, markStepDone, moveJobAxis, moveStep,
-  releaseJob, resumeJob, suspendJob, verifyJob,
+  releaseJob, resumeJob, submitCheck, suspendJob, verifyJob,
 } from '../../api/coordinator'
 import ArrivalQueue from './ArrivalQueue'
+import FinalCheckModal from './FinalCheckModal'
 import InspectionModal from './InspectionModal'
 import MachineLanes from './MachineLanes'
 import ReadyModal from './ReadyModal'
@@ -48,6 +49,8 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
   const [halting, setHalting]     = useState(null)
   const [readyRow, setReadyRow]   = useState(null)
   const [busyStep, setBusyStep]   = useState(null)
+  const [checking, setChecking]   = useState(null)
+  const [notice, setNotice]       = useState('')
 
   // ── Reads ──────────────────────────────────────────────────────
 
@@ -283,6 +286,24 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     }
   }
 
+  const finishCheck = async (made, note) => {
+    if (!checking) return
+    setBusyStep(checking.step)
+    try {
+      const { data } = await submitCheck(checking.step, made, note)
+      setError('')
+      setNotice(data.outcome === 'PASSED'
+        ? `${checking.job_number} checked and finished.`
+        : `${checking.job_number} sent back to be made again.`)
+      setChecking(null)
+      refresh()
+    } catch (e) {
+      setError(detail(e, 'Could not save the check.'))
+    } finally {
+      setBusyStep(null)
+    }
+  }
+
   const on = {
     advance:   move,
     markReady,
@@ -302,6 +323,15 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
           <span>{error}</span>
           <button onClick={() => setError('')} aria-label="Dismiss"
             className="w-8 h-8 shrink-0 font-bold">✕</button>
+        </div>
+      )}
+
+      {notice && (
+        <div role="status"
+          className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm
+            text-emerald-800 flex items-center justify-between gap-3">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} aria-label="Dismiss" className="w-8 h-8 shrink-0 font-bold">✕</button>
         </div>
       )}
 
@@ -326,7 +356,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
         <div className="space-y-6">
           {(pressLanes.length > 0 || unassigned.length > 0) && (
             <MachineLanes lanes={pressLanes} unassigned={unassigned} allLanes={allLanes}
-              onDone={stepDone} onMove={stepMove} busyStep={busyStep} />
+              onDone={stepDone} onCheck={setChecking} onMove={stepMove} busyStep={busyStep} />
           )}
           {(pressLegacy.length > 0 || pressLanes.length === 0) && (
             <section>
@@ -342,10 +372,8 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
       )}
       {stage === 'finishing' && (
         <div className="space-y-6">
-          {finishingLanes.length > 0 && (
-            <MachineLanes lanes={finishingLanes} allLanes={allLanes}
-              onDone={stepDone} onMove={stepMove} busyStep={busyStep} />
-          )}
+          {/* Waiting on a person, not a machine: shown first, never below
+              the lanes where it can be scrolled past. */}
           {(finishingOthers.length > 0 || finishingLanes.length === 0) && (
             <section>
               {finishingLanes.length > 0 && (
@@ -355,6 +383,10 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
               )}
               <StageList stage="finishing" jobs={finishingOthers} busyId={busyId} blocked={!!openJobId} on={on} />
             </section>
+          )}
+          {finishingLanes.length > 0 && (
+            <MachineLanes lanes={finishingLanes} allLanes={allLanes}
+              onDone={stepDone} onCheck={setChecking} onMove={stepMove} busyStep={busyStep} />
           )}
         </div>
       )}
@@ -384,6 +416,15 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
           onClose={() => { setReadyRow(null); refresh() }}
           onConfirm={() => confirmReady(readyRow)}
           confirming={confirming}
+        />
+      )}
+
+      {checking && (
+        <FinalCheckModal
+          row={checking}
+          busy={busyStep === checking.step}
+          onClose={() => setChecking(null)}
+          onSubmit={finishCheck}
         />
       )}
 
