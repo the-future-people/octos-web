@@ -22,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { changeSpecs } from '../../api/coordinator'
 import {
   Chip, ChannelChip, FilePreviewModal, SuspendDialog, clockTime, dueTime,
-  fileSrc, isImage, isOnline, isPdf, services, waited,
+  PdfFrame, fileSrc, isImage, isOnline, isPdf, services, waited,
 } from './shared'
 
 const HEARTBEAT_MS = 2 * 60 * 1000
@@ -186,7 +186,7 @@ function Viewer({ files, onOpenLarge }) {
             style={{ transform: `scale(${zoom}) rotate(${turn}deg)` }}
             className="max-h-full max-w-full object-contain transition-transform duration-200" />
         ) : isPdf(file) ? (
-          <iframe src={fileSrc(file)} title={file.filename} className="w-full h-full bg-white" />
+          <PdfFrame file={file} className="w-full h-full bg-white" />
         ) : (
           <button onClick={() => onOpenLarge(file)} className="text-center text-white/80">
             <div className="font-mono text-lg font-bold">{ext}</div>

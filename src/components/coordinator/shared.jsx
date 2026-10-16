@@ -5,7 +5,7 @@
 // Moved out of the old ProductionBoard so that each new piece reads the
 // same rules instead of keeping its own copy.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 // ── Time ─────────────────────────────────────────────────────────
@@ -159,6 +159,54 @@ export function isPdf(file) {
     || /\.pdf$/i.test(file.filename || '')
 }
 
+/**
+ * A PDF the page can frame. The file lives on the backend, another site
+ * from this page, and the backend forbids being shown inside another
+ * site's frame, so pointing an iframe at it shows Chrome's torn page.
+ * Fetched here and held as a local file instead, it is the page's own,
+ * and nothing can refuse it.
+ */
+export function usePdfUrl(file) {
+  const [state, setState] = useState({ url: null, failed: false })
+  const src = file && isPdf(file) ? fileSrc(file) : null
+
+  useEffect(() => {
+    if (!src) return undefined
+    let gone = false
+    let made = null
+    setState({ url: null, failed: false })
+    fetch(src)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.blob() })
+      .then(blob => {
+        if (gone) return
+        made = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+        setState({ url: made, failed: false })
+      })
+      .catch(() => { if (!gone) setState({ url: null, failed: true }) })
+    return () => {
+      gone = true
+      if (made) URL.revokeObjectURL(made)
+    }
+  }, [src])
+
+  return state
+}
+
+export function PdfFrame({ file, className = '' }) {
+  const { url, failed } = usePdfUrl(file)
+  if (failed) {
+    return (
+      <div className={`${className} flex flex-col items-center justify-center gap-2 text-center p-6`}>
+        <p className="text-sm text-[var(--text-2)]">This PDF can’t be shown here.</p>
+        <a href={fileSrc(file)} target="_blank" rel="noreferrer"
+          className="text-sm font-semibold underline underline-offset-4">Open it in a new tab</a>
+      </div>
+    )
+  }
+  if (!url) return <div className={`${className} animate-pulse bg-[var(--bg)]`} />
+  return <iframe src={url} title={file.filename} className={className} />
+}
+
 function fileFacts(file) {
   const dims = file.width_mm && file.height_mm
     ? `${Math.round(file.width_mm)} × ${Math.round(file.height_mm)} mm`
@@ -296,8 +344,7 @@ export function FilePreviewModal({ file, onClose }) {
           ) : isPdf(file) ? (
             // fileSrc, not file.url: a bare path in an iframe resolves
             // against this app's address rather than the API's.
-            <iframe src={fileSrc(file)} title={file.filename}
-              className="w-full h-[80vh] bg-white rounded-lg border border-[var(--border)]" />
+            <PdfFrame file={file} className="w-full h-[80vh] bg-white rounded-lg border border-[var(--border)]" />
           ) : (
             <div className="text-center px-6">
               <p className="text-sm font-semibold text-[var(--text-2)]">
