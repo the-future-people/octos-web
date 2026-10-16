@@ -108,8 +108,24 @@ export const TONE_TEXT = {
 
 // ── What a job is ────────────────────────────────────────────────
 
+// A job's pieces: the lines that are not add-ons. Lamination, binding
+// and envelopes finish a piece; they are listed under it, not beside it.
+export function pieces(job) {
+  return (job.line_items || []).filter(li => !li.parent)
+}
+
+export function addonsOf(job, piece) {
+  return (job.line_items || []).filter(li => li.parent === piece.id)
+}
+
+// "A4 Binding (8mm ring) × 2"
+export function addonText(li) {
+  const detail = li.specifications?.detail
+  return `${li.service_name || li.label}${detail ? ` (${detail})` : ''} × ${li.quantity}`
+}
+
 export function services(job) {
-  const items = job.line_items || []
+  const items = pieces(job)
   if (!items.length) return job.title || '—'
   const counts = new Map()
   for (const it of items) {

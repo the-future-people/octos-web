@@ -22,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { changeSpecs } from '../../api/coordinator'
 import {
   Chip, ChannelChip, FilePreviewModal, SuspendDialog, clockTime, dueTime,
-  PdfFrame, fileSrc, isImage, isOnline, isPdf, services, waited,
+  PdfFrame, addonText, addonsOf, fileSrc, isImage, isOnline, isPdf, pieces, services, waited,
 } from './shared'
 
 const HEARTBEAT_MS = 2 * 60 * 1000
@@ -264,7 +264,7 @@ function dimensionsOf(line) {
   return null
 }
 
-function specRows(line) {
+function specRows(line, addons = []) {
   const dims = dimensionsOf(line)
   const rows = [
     { label: 'Product', value: line.service_name || line.label },
@@ -277,11 +277,16 @@ function specRows(line) {
   }
   rows.push({ label: 'Sides', value: line.sides === 'DOUBLE' ? 'Double-sided' : 'Single-sided' })
   rows.push({ label: 'Quantity', value: `${line.quantity}${line.pages > 1 ? ` × ${line.pages}pp` : ''}` })
+  if (addons.length) {
+    rows.push({ label: 'Add-ons', value: addons.map(addonText).join(', ') })
+  }
   return rows
 }
 
 function SpecTable({ job, onSaved }) {
-  const lines = job.line_items || []
+  // One block per piece; its add-ons are a row in it, not blocks of
+  // their own with sizes and sides that mean nothing for an envelope.
+  const lines = pieces(job)
   const [editing, setEditing] = useState(null)   // line id
   const [draft, setDraft] = useState({})
   const [said, setSaid] = useState('')
@@ -338,7 +343,7 @@ function SpecTable({ job, onSaved }) {
             {!open ? (
               <table className="w-full text-sm">
                 <tbody>
-                  {specRows(line).map((r, i) => (
+                  {specRows(line, addonsOf(job, line)).map((r, i) => (
                     <tr key={i} className="border-t border-[var(--border)] first:border-t-0">
                       <td className="px-3 py-1.5 text-[var(--text-3)] w-[38%] align-top">{r.label}</td>
                       <td className="px-3 py-1.5 text-[var(--text)]">{r.value || '—'}</td>
@@ -530,9 +535,14 @@ export default function InspectionModal({
                   </Fact>
                   <Fact icon={I.bag} label="Job type">{services(job)}</Fact>
                   <Fact icon={I.layers} label="Quantity">
-                    {(job.line_items || []).map(li => (
+                    {pieces(job).map(li => (
                       <span key={li.id} className="block">
                         {li.quantity} × {li.label || li.service_name}
+                        {addonsOf(job, li).map(a => (
+                          <span key={a.id} className="block text-xs text-[var(--text-3)]">
+                            + {addonText(a)}
+                          </span>
+                        ))}
                       </span>
                     ))}
                   </Fact>
