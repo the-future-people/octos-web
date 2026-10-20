@@ -506,10 +506,20 @@ export default function Catalogue() {
   const { data: pricingRules = [] } = useQuery({
     // Prices are company-wide: the catalogue shows (and sets) the company's.
     queryKey: ['pricing', 'company'],
-    queryFn:  () => client.get('/api/v1/jobs/pricing/?company=1').then(r => {
-      const d = r.data
-      return Array.isArray(d) ? d : (d?.results || [])
-    }),
+    // Every price, however the server sends them: a plain list, or pages
+    // to follow. Reading only the first page made everything past the
+    // twentieth service look unpriced.
+    queryFn:  async () => {
+      let url = '/api/v1/jobs/pricing/?company=1'
+      const all = []
+      while (url) {
+        const { data } = await client.get(url)
+        if (Array.isArray(data)) return data
+        all.push(...(data?.results || []))
+        url = data?.next || null
+      }
+      return all
+    },
     staleTime: 60_000,
   })
 
