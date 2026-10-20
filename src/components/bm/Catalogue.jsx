@@ -58,7 +58,7 @@ function EditPricingModal({ service, pricing, branchId, onClose }) {
         // Create new
         return client.post('/api/v1/jobs/pricing/create/', {
           service:           service.id,
-          branch:            branchId,
+          // No branch: a company price, the same at every branch.
           base_price:        parseFloat(basePrice),
           color_multiplier:  parseFloat(colorMultiplier),
           is_active:         true,
@@ -95,6 +95,7 @@ function EditPricingModal({ service, pricing, branchId, onClose }) {
             {pricing ? 'Edit Pricing' : 'Set Pricing'}
           </div>
           <div className="text-xs text-[var(--text-3)] mt-0.5">{service.name}</div>
+          <div className="text-[10px] text-amber-700 mt-1">Applies at every branch, on the website and in the app.</div>
         </div>
 
         <div className="px-6 py-5 space-y-4">
@@ -503,8 +504,9 @@ export default function Catalogue() {
   })
 
   const { data: pricingRules = [] } = useQuery({
-    queryKey: ['pricing', branchId],
-    queryFn:  () => client.get(`/api/v1/jobs/pricing/?branch=${branchId}`).then(r => {
+    // Prices are company-wide: the catalogue shows (and sets) the company's.
+    queryKey: ['pricing', 'company'],
+    queryFn:  () => client.get('/api/v1/jobs/pricing/?company=1').then(r => {
       const d = r.data
       return Array.isArray(d) ? d : (d?.results || [])
     }),
