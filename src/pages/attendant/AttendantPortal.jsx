@@ -15,6 +15,7 @@ import AttendantBranchJobs from '../../components/attendant/AttendantBranchJobs'
 import AttendantDrafts     from '../../components/attendant/AttendantDrafts'
 import AttendantServices   from '../../components/attendant/AttendantServices'
 import AttendantInbox      from '../../components/attendant/AttendantInbox'
+import AttendantCollect    from '../../components/attendant/AttendantCollect'
 import Inbox               from '../../components/bm/Inbox'
 import NewJobModal         from '../../components/bm/NewJobModal'
 import NewCustomerModal    from '../../components/bm/NewCustomerModal'
@@ -28,6 +29,12 @@ const NAV = [
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
       <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+    </svg>,
+  },
+  {
+    key: 'collect', label: 'Collect', section: 'WORKSPACE',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>
     </svg>,
   },
   {
@@ -116,6 +123,7 @@ export default function AttendantPortal() {
           onRegisterCustomer={() => setShowNewCustomer(true)}
         />
       )
+      case 'collect':     return <AttendantCollect />
       case 'my-jobs':     return <AttendantMyJobs sheet={sheet} />
       case 'branch-jobs': return <AttendantBranchJobs sheet={sheet} />
       case 'drafts':      return <AttendantDrafts sheet={sheet} onNavigate={handleNav} />
