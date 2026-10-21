@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, createJob, getCustomers } from '../../api/bm'
+import { getServices, calculatePrice, createJob, getCustomers, getPromise } from '../../api/bm'
 import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
@@ -14,6 +14,33 @@ const JOB_TYPE_THEME = {
   INSTANT:    { accent: 'bg-zinc-900',   tab: 'bg-zinc-900',   tint: 'bg-zinc-50'   },
   PRODUCTION: { accent: 'bg-blue-600',   tab: 'bg-blue-600',   tint: 'bg-blue-50'   },
   DESIGN:     { accent: 'bg-violet-600', tab: 'bg-violet-600', tint: 'bg-violet-50' },
+}
+
+// "3:40 pm today", "10:00 am tomorrow", "Friday 2:00 pm": how the
+// attendant reads it to the customer.
+function readyLabel(iso) {
+  const at = new Date(iso)
+  const today = new Date()
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const time = at.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+  if (at.toDateString() === today.toDateString()) return `${time} today`
+  if (at.toDateString() === tomorrow.toDateString()) return `${time} tomorrow`
+  return `${at.toLocaleDateString('en-GB', { weekday: 'long' })} ${time}`
+}
+
+function PromiseLine({ promise, loading, previewing }) {
+  if (!promise && !loading) return null
+  return (
+    <div className="mt-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200"
+         style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 120ms' }}>
+      <div className="text-[9px] font-bold uppercase tracking-wider text-blue-700">
+        {previewing ? 'Ready about, with this item' : 'Ready about'}
+      </div>
+      <div className="text-sm font-black text-blue-900">
+        {promise?.ready_at ? readyLabel(promise.ready_at) : (promise?.detail || '…')}
+      </div>
+    </div>
+  )
 }
 
 export default function NewJobModal({ onClose, onSuccess }) {
@@ -60,7 +87,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
     staleTime: 60_000,
   })
 
-const branchId = user?.branch || 2
+  // The attendant's own branch. The old fallback guessed branch 2, which
+  // priced (and would now promise) for the wrong shop.
+  const branchId = typeof user?.branch === 'object' ? user?.branch?.id : user?.branch
 
   // Every price comes from the server. This used to calculate simple
   // services here for speed, which meant two implementations of the
@@ -182,6 +211,21 @@ const branchId = user?.branch || 2
     setSelected(null)
   }
 
+  // When it would be ready: production and design only (instant work
+  // leaves with the customer). The whole cart, plus whatever is being set
+  // up, so the attendant can answer "and if I add the flyers?" first.
+  const promiseLines = [
+    ...cart.map(i => ({ service: i.service.id, quantity: i.quantity, pages: i.pages })),
+    ...(selected ? [{ service: selected.id, quantity: debouncedQty, pages: debouncedPages }] : []),
+  ]
+  const { data: promise, isFetching: promiseLoading } = useQuery({
+    queryKey: ['counterPromise', JSON.stringify(promiseLines)],
+    queryFn: () => getPromise(promiseLines).then(r => r.data),
+    enabled: jobType !== 'INSTANT' && promiseLines.length > 0,
+    staleTime: 30_000,
+    retry: false,
+  })
+
   const removeFromCart = (id) => setCart(c => c.filter(i => i._id !== id))
   const cartTotal = cart.reduce((s, i) => s + parseFloat(i._price || 0), 0)
 
@@ -207,9 +251,19 @@ const branchId = user?.branch || 2
     if (isPending) return
     setError('')
     if (cart.length === 0) { setError('Add at least one service.'); return }
+    // A production or design customer is told the promise and, when it is
+    // ready, their collection PIN: so we must be able to reach them.
+    if (jobType !== 'INSTANT' && !customer) {
+      setError('Production and design jobs need a customer, for their ready message and collection PIN.')
+      return
+    }
+    if (jobType !== 'INSTANT' && !customer?.phone) {
+      setError('This customer has no phone number. Add one, so they can be told when it is ready.')
+      return
+    }
     const payload = {
       job_type:           jobType,
-      branch:             user?.branch || 2,
+      branch:             branchId,
       intake_channel:     'WALK_IN',
       deposit_percentage: 100,
       line_items: cart.map(item => ({
@@ -270,7 +324,7 @@ const branchId = user?.branch || 2
               type="text"
               value={custSearch}
               onChange={e => { setCustSearch(e.target.value); setCustomer(null) }}
-              placeholder="Whose job is this? (leave blank for walk-in)"
+              placeholder={jobType === 'INSTANT' ? 'Whose job is this? (leave blank for walk-in)' : 'Whose job is this? (needed for production and design)'}
               className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
                 ${customer
                   ? 'bg-green-50 border-green-300 text-green-800 font-semibold'
@@ -568,6 +622,9 @@ const branchId = user?.branch || 2
                     {fmt(cartTotal)}
                   </span>
                 </div>
+                {jobType !== 'INSTANT' && (
+                  <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} />
+                )}
               </div>
             )}
           </div>
@@ -603,7 +660,10 @@ const branchId = user?.branch || 2
               ))}
             </div>
           )}
-          <div className="flex items-center gap-2">
+          {jobType !== 'INSTANT' && (
+            <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} />
+          )}
+          <div className="flex items-center gap-2 mt-2">
             <button onClick={onClose}
               className="px-3 py-2.5 text-sm font-semibold text-[var(--text-2)]
                 hover:text-[var(--text)] transition-colors border border-black/10

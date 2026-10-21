@@ -177,3 +177,7 @@ export const sendInvoice          = (invoiceId) =>
 
 export const getInvoicePdfUrl     = (invoiceId) =>
   `/api/v1/finance/invoices/${invoiceId}/pdf/`
+
+// When a counter job would be ready: the same engine that promises online.
+export const getPromise = (lines) =>
+  client.post('/api/v1/jobs/promise/', { lines })
