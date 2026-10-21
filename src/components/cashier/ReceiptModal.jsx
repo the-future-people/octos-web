@@ -1,6 +1,6 @@
 // src/components/cashier/ReceiptModal.jsx
 // Shown after a successful payment confirmation.
-
+import client from '../../api/client'
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
@@ -12,16 +12,26 @@ const METHOD_LABELS = {
   SPLIT: 'Split',
 }
 
+// "3:40 pm today", "10:00 am tomorrow", "Friday 2:00 pm".
+function readyLabel(iso) {
+  const at = new Date(iso)
+  const today = new Date()
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const time = at.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+  if (at.toDateString() === today.toDateString()) return `${time} today`
+  if (at.toDateString() === tomorrow.toDateString()) return `${time} tomorrow`
+  return `${at.toLocaleDateString('en-GB', { weekday: 'long' })} ${time}`
+}
+
 export default function ReceiptModal({ result, onClose }) {
 
   const handlePrint = async (receiptId) => {
     if (!receiptId) return
     try {
-      const res  = await fetch(
-        `http://localhost:8000/api/v1/finance/receipts/${receiptId}/thermal/`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } }
-      )
-      const data = await res.json()
+      // Through the portal's own connection: the live server, signed in.
+      // The old address was this computer's (localhost), so printing
+      // only ever worked on the machine the code was written on.
+      const { data } = await client.get(`/api/v1/finance/receipts/${receiptId}/thermal/`)
       const text = data.text || ''
       const win  = window.open('', '_blank', 'width=400,height=600')
       win.document.write(`<html><head><title>Receipt</title>
@@ -58,7 +68,7 @@ export default function ReceiptModal({ result, onClose }) {
         {/* Details */}
         <div className="px-6 py-4 space-y-3">
           <Row label="Amount Paid"     value={fmt(result.amount_paid)} bold />
-          <Row label="Balance Due"     value={fmt(result.balance_due)} />
+          <Row label={result.ready_at ? 'Balance on Collection' : 'Balance Due'} value={fmt(result.balance_due)} />
           <Row label="Payment Method"  value={METHOD_LABELS[result.payment_method] || result.payment_method} />
           {showCash && (
             <>
@@ -69,6 +79,22 @@ export default function ReceiptModal({ result, onClose }) {
           <div className="border-t border-[var(--border)] pt-3">
             <Row label="Receipt No." value={result.receipt_number} mono />
           </div>
+
+          {/* Floor work: when it will be ready, and where to follow it. */}
+          {result.ready_at && (
+            <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Ready about</div>
+              <div className="text-base font-black text-blue-900">{readyLabel(result.ready_at)}</div>
+              {result.track_url && (
+                <div className="mt-1.5 text-xs text-blue-900/80">
+                  Follow it: <span className="font-mono font-semibold break-all">{result.track_url}</span>
+                </div>
+              )}
+              <div className="mt-1 text-[11px] text-blue-900/70">
+                The customer has been sent this, with their collection PIN to follow when it’s ready.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
