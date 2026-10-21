@@ -28,7 +28,14 @@ function readyLabel(iso) {
   return `${at.toLocaleDateString('en-GB', { weekday: 'long' })} ${time}`
 }
 
-function PromiseLine({ promise, loading, previewing }) {
+function PromiseLine({ promise, loading, previewing, error }) {
+  if (error) {
+    return (
+      <div className="mt-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+        Octos couldn’t give a ready time: {error.response?.data?.detail || 'it could not be reached.'}
+      </div>
+    )
+  }
   if (!promise && !loading) return null
   return (
     <div className="mt-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200"
@@ -218,7 +225,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     ...cart.map(i => ({ service: i.service.id, quantity: i.quantity, pages: i.pages })),
     ...(selected ? [{ service: selected.id, quantity: debouncedQty, pages: debouncedPages }] : []),
   ]
-  const { data: promise, isFetching: promiseLoading } = useQuery({
+  const { data: promise, isFetching: promiseLoading, error: promiseError } = useQuery({
     queryKey: ['counterPromise', JSON.stringify(promiseLines)],
     queryFn: () => getPromise(promiseLines).then(r => r.data),
     enabled: jobType !== 'INSTANT' && promiseLines.length > 0,
@@ -555,6 +562,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
                     Add to Cart
                   </button>
                 </div>
+                {jobType !== 'INSTANT' && cart.length === 0 && (
+                  <PromiseLine promise={promise} loading={promiseLoading} previewing error={promiseError} />
+                )}
               </div>
             )}
           </div>
@@ -623,7 +633,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   </span>
                 </div>
                 {jobType !== 'INSTANT' && (
-                  <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} />
+                  <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} error={promiseError} />
                 )}
               </div>
             )}
@@ -661,7 +671,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
             </div>
           )}
           {jobType !== 'INSTANT' && (
-            <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} />
+            <PromiseLine promise={promise} loading={promiseLoading} previewing={!!selected} error={promiseError} />
           )}
           <div className="flex items-center gap-2 mt-2">
             <button onClick={onClose}
