@@ -133,6 +133,7 @@ function OnTheMachine({ row, machine, onDone, onCheck, busy }) {
         <div className={`text-xs ${row.late ? 'text-red-600 font-semibold' : row.at_risk ? 'text-amber-700 font-semibold' : 'text-[var(--text-2)]'}`}>
           {row.customer_name}
           {row.promise ? ` · due ${dueTime(row.promise)}` : ''}
+          {row.first_promise ? ` (was ${dueTime(row.first_promise)})` : ''}
           {row.late ? ' · late' : row.at_risk ? ' · at risk' : ''}
         </div>
       </div>
