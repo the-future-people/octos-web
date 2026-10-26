@@ -16,11 +16,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AsYouType, getCountries, getCountryCallingCode, parsePhoneNumberFromString,
 } from 'libphonenumber-js'
+// Flags as small drawings: Windows shows flag emoji as two letters ("GH").
+import * as FLAGS from 'country-flag-icons/react/3x2'
 
 const NAMES = typeof Intl !== 'undefined' && Intl.DisplayNames
   ? new Intl.DisplayNames(['en'], { type: 'region' }) : null
 
-const flag = cc => cc.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)))
+function Flag({ cc }) {
+  const Drawn = FLAGS[cc]
+  return Drawn
+    ? <Drawn title="" className="w-5 h-[13px] rounded-[2px] shadow-[0_0_0_1px_rgba(0,0,0,0.08)] shrink-0" />
+    : <span className="w-5 text-[10px] font-bold">{cc}</span>
+}
 
 const COUNTRIES = getCountries()
   .map(cc => ({ cc, code: getCountryCallingCode(cc), name: NAMES?.of(cc) || cc }))
@@ -101,7 +108,7 @@ export default function PhoneInput({ value = '', onChange, placeholder = '024 41
         <button type="button" onClick={() => setOpen(o => !o)}
                 className="flex items-center gap-1.5 px-3 border-r border-[var(--border)] text-sm shrink-0"
                 aria-label={`Country: ${current?.name}. Change`}>
-          <span className="text-base leading-none">{flag(country)}</span>
+          <Flag cc={country} />
           <span className="font-mono text-[var(--text-2)]">+{current?.code}</span>
           <span className="text-[var(--text-3)] text-xs">▾</span>
         </button>
@@ -123,7 +130,7 @@ export default function PhoneInput({ value = '', onChange, placeholder = '024 41
                       onClick={() => { setCountry(c.cc); setOpen(false); setFind(''); setText(t => new AsYouType(c.cc).input(t.replace(/^\+\d+\s*/, ''))) }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-[var(--bg)]
                                   ${c.cc === country ? 'font-bold' : ''}`}>
-                <span className="text-base leading-none">{flag(c.cc)}</span>
+                <Flag cc={c.cc} />
                 <span className="flex-1 truncate">{c.name}</span>
                 <span className="font-mono text-[var(--text-3)]">+{c.code}</span>
               </button>
