@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCustomer, lookupCustomer } from '../../api/bm'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
+import PhoneInput from '../shared/PhoneInput'
 import { invalidateAfterCustomerRegistered } from '../../api/invalidations'
 
 // null = idle, 'checking' = in-flight, { found: true, customer } = taken, { found: false } = clear
@@ -70,6 +71,9 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     address:             '',
   })
   const [error, setError] = useState('')
+  // Whether each number is a real one, and why not: from the picker.
+  const [phoneCheck, setPhoneCheck] = useState({ valid: false, problem: '' })
+  const [altCheck, setAltCheck] = useState({ valid: true, problem: '', text: '' })
   const [successCustomer, setSuccessCustomer] = useState(null)
   const { status: phoneStatus, lookup: lookupPhone, reset: resetLookup } = usePhonenLookup()
   const [affiliationSearch, setAffiliationSearch] = useState('')
@@ -96,7 +100,15 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
 
   const set = (key, val) => {
     setForm(f => ({ ...f, [key]: val }))
-    if (key === 'phone') lookupPhone(val)
+  }
+
+  // The main number: checked by the picker, and looked up (is it already
+  // someone's?) only once it is a real one, in its international form.
+  const onPhone = (number, meta) => {
+    setForm(f => ({ ...f, phone: number }))
+    setPhoneCheck(meta)
+    if (meta.valid) lookupPhone(number)
+    else resetLookup()
   }
 
   const { mutate, isPending } = useMutation({
@@ -123,6 +135,8 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
     console.log('Submitting form:', form)
     if (!form.first_name.trim())                { setError('First name is required.'); return }
     if (!form.phone.trim())                     { setError('Phone number is required.'); return }
+    if (!phoneCheck.valid)                      { setError(phoneCheck.problem || 'Check the phone number.'); return }
+    if (altCheck.text?.trim() && !altCheck.valid) { setError(`Alt phone: ${altCheck.problem || 'check the number.'}`); return }
     if ((isBusiness || isInstitution) && !form.company_name.trim()) { setError('Organisation name is required.'); return }
     if ((isBusiness || isInstitution) && !form.address.trim())      { setError('Address is required.'); return }
     if (phoneStatus?.found === true)            { setError('This phone number is already registered.'); return }
@@ -377,40 +391,16 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Phone */}
-          <div className="grid grid-cols-2 gap-3">
+                    {/* Phone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={LABEL_CLS}>
                 Phone<span className="text-[var(--red-text)] ml-0.5">*</span>
               </label>
-              <div className="relative">
-                <input
-                  value={form.phone}
-                  onChange={e => set('phone', e.target.value)}
-                  placeholder="0244123456"
-                  type="tel"
-                  className={`${INPUT_CLS} pr-8 ${
-                    phoneStatus?.found === true  ? 'border-[var(--red-border)] focus:border-[var(--red-border)]' :
-                    phoneStatus?.found === false ? 'border-green-400 focus:border-green-400' : ''
-                  }`}
-                />
-                {/* Status icon */}
-                {phoneStatus === 'checking' && (
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                    <svg className="w-3.5 h-3.5 animate-spin text-[var(--text-3)]" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                  </span>
-                )}
-                {phoneStatus?.found === false && (
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-green-500 text-sm font-bold">✓</span>
-                )}
-                {phoneStatus?.found === true && (
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--red-text)] text-sm font-bold">✕</span>
-                )}
-              </div>
-              {/* Taken warning */}
+              <PhoneInput value={form.phone} onChange={onPhone} />
+              {phoneStatus === 'checking' && (
+                <p className="mt-1 text-[10px] text-[var(--text-3)]">Checking whether it’s registered…</p>
+              )}
               {phoneStatus?.found === true && (() => {
                 const c = phoneStatus.customer
                 const name = c.customer_type === 'INDIVIDUAL'
@@ -424,23 +414,17 @@ export default function NewCustomerModal({ onClose, onSuccess }) {
                   </div>
                 )
               })()}
-              {/* Clear confirmation */}
               {phoneStatus?.found === false && (
                 <p className="mt-1 text-[10px] text-green-600 font-semibold">Number is available</p>
               )}
             </div>
             <div>
               <label className={LABEL_CLS}>Alt Phone</label>
-              <input
-                value={form.secondary_phone}
-                onChange={e => set('secondary_phone', e.target.value)}
-                placeholder="0244123456"
-                type="tel"
-                className={INPUT_CLS}
-              />
+              <PhoneInput value={form.secondary_phone} placeholder="Optional"
+                          onChange={(number, meta) => { setForm(f => ({ ...f, secondary_phone: meta.text?.trim() ? number : '' })); setAltCheck(meta) }} />
             </div>
           </div>
-
+          
           {/* Email */}
           <div>
             <label className={LABEL_CLS}>Email</label>
