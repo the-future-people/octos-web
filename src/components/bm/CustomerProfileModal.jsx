@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getCustomerDetail, getJobs } from '../../api/bm'
 import client from '../../api/client'
+import LinksPanel from './LinksPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -509,6 +510,7 @@ export default function CustomerProfileModal({ customerId, onClose }) {
                           <Row label="Email"     value={customer.email} />
                           <Row label="Address"   value={customer.address} />
                         </div>
+                        <LinksPanel customer={customer} />
                         <CreditPanel data={creditData} />
                         <NotesPanel customerId={customer.id} initialNotes={customer.notes} />
                       </>
