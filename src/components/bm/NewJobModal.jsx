@@ -58,6 +58,10 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [search,        setSearch]        = useState('')
   const [cart,          setCart]          = useState([])
   const [customer,      setCustomer]      = useState(null)
+  // A person linked to a business or institution can order for it: the
+  // job is then the organisation's (its payment, its receipt), with the
+  // person recorded as who ordered it. null means for the person themself.
+  const [orderFor,      setOrderFor]      = useState(null)
   const [custSearch,    setCustSearch]    = useState('')
   const [error,         setError]         = useState('')
   const [successJob,    setSuccessJob]    = useState(null)
@@ -264,7 +268,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
       setError('Production and design jobs need a customer, for their ready message and collection PIN.')
       return
     }
-    if (jobType !== 'INSTANT' && !customer?.phone) {
+    if (jobType !== 'INSTANT' && !orderFor && !customer?.phone) {
       setError('This customer has no phone number. Add one, so they can be told when it is ready.')
       return
     }
@@ -284,7 +288,10 @@ export default function NewJobModal({ onClose, onSuccess }) {
         ...(item.specifications && Object.keys(item.specifications).length
             ? { specifications: item.specifications } : {}),
       })),
-      ...(customer ? { customer: customer.id } : {}),
+      // For an organisation: its job, and the person who ordered it.
+      ...(customer ? (orderFor
+        ? { customer: orderFor.organisation, ordered_by: customer.id }
+        : { customer: customer.id }) : {}),
     }
     console.log('JOB PAYLOAD:', JSON.stringify(payload, null, 2))
     mutate(payload)
@@ -330,7 +337,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
             <input
               type="text"
               value={custSearch}
-              onChange={e => { setCustSearch(e.target.value); setCustomer(null) }}
+              onChange={e => { setCustSearch(e.target.value); setCustomer(null); setOrderFor(null) }}
               placeholder={jobType === 'INSTANT' ? 'Whose job is this? (leave blank for walk-in)' : 'Whose job is this? (needed for production and design)'}
               className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
                 ${customer
@@ -339,7 +346,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                 }`}
             />
             {custSearch && (
-              <button onClick={() => { setCustSearch(''); setCustomer(null) }}
+              <button onClick={() => { setCustSearch(''); setCustomer(null); setOrderFor(null) }}
                 className="absolute right-3 top-2.5 text-black/30 hover:text-black/50 text-sm">
                 ✕
               </button>
@@ -351,6 +358,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   <button key={c.id}
                     onClick={() => {
                       setCustomer(c)
+                      setOrderFor(null)
                       setCustSearch(c.customer_type !== 'INDIVIDUAL' ? (c.company_name || c.full_name) : c.full_name)
                     }}
                     className="w-full px-4 py-2.5 text-left hover:bg-[var(--bg)]
@@ -376,6 +384,23 @@ export default function NewJobModal({ onClose, onSuccess }) {
               </div>
             )}
           </div>
+          {customer?.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)] mr-1">This job is for</span>
+              <button type="button" onClick={() => setOrderFor(null)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors
+                  ${!orderFor ? `${theme.accent} text-white border-transparent` : 'bg-white/70 border-black/10 text-[var(--text-2)]'}`}>
+                {customer.first_name || 'Them'} themself
+              </button>
+              {customer.links.map(l => (
+                <button key={l.organisation} type="button" onClick={() => setOrderFor(l)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors
+                    ${orderFor?.organisation === l.organisation ? `${theme.accent} text-white border-transparent` : 'bg-white/70 border-black/10 text-[var(--text-2)]'}`}>
+                  {l.name}<span className="font-normal opacity-70"> · {({ REP: 'Rep', STAFF: 'Staff', OWNER: 'Owner', MEMBER: 'Member' })[l.role] || l.role}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Body — 2 columns */}
