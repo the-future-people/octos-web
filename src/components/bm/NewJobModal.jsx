@@ -48,7 +48,12 @@ const initials = c => ((c?.customer_type !== 'INDIVIDUAL' && c?.company_name)
   : `${c?.first_name?.[0] || ''}${c?.last_name?.[0] || ''}`).toUpperCase() || '?'
 const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.full_name) : c?.full_name)
 
-export default function NewJobModal({ onClose, onSuccess }) {
+/**
+ * late   after closing: the same window, with a required reason (Branch
+ *        Manager only; the server checks). held: no cashier on duty, so
+ *        the job waits for the morning handover.
+ */
+export default function NewJobModal({ onClose, onSuccess, late = false, held = false }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -62,6 +67,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [custSearch,    setCustSearch]    = useState('')
   const [registering,   setRegistering]   = useState(false)
   const [error,         setError]         = useState('')
+  const [lateReason,    setLateReason]    = useState('')
   const [successJob,    setSuccessJob]    = useState(null)
   const [selected,      setSelected]      = useState(null)
   const [selQty,        setSelQty]        = useState(1)
@@ -269,6 +275,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     if (isPending) return
     setError('')
     if (cart.length === 0) { setError('Add at least one item.'); return }
+    if (late && !lateReason.trim()) { setError('Say why this job is being recorded after closing.'); return }
     if (jobType !== 'INSTANT' && !customer) {
       setError('Production and design jobs need a customer, for their ready message and collection PIN.')
       return
@@ -282,6 +289,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
       branch: branchId,
       intake_channel: 'WALK_IN',
       idempotency_key: attemptKey.current,
+      ...(late ? { post_closing_reason: lateReason.trim() } : {}),
       deposit_percentage: 100,
       line_items: cart.map(item => ({
         service: item.service.id,
@@ -625,16 +633,39 @@ export default function NewJobModal({ onClose, onSuccess }) {
             {selected ? <span className="text-[var(--text-3)]"> (with this item)</span> : null}
           </p>
         ) : null)}
+        {lateBox}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
                 className="mt-3 w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-black disabled:opacity-40">
-          {isPending ? 'Creating…' : forName ? `Create job for ${forName}` : 'Create job'}
+          {isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
         <button onClick={onClose} className="mt-1.5 w-full py-2 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
       </div>
     </div>
   )
 
+
+  // ── After closing: the note, and the reason ────────────────────
+  const lateNote = late && (
+    <div className="flex items-center gap-2.5 px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs shrink-0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+      </svg>
+      <span>
+        <b>Recording after closing.</b>{' '}
+        {held ? 'The cashier has signed off: this job is held until the morning handover.'
+              : 'The cashier is still on duty: the job is paid for as usual.'}
+      </span>
+    </div>
+  )
+  const lateBox = late && (
+    <div className="mt-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 mb-1">Why is it being recorded late?</div>
+      <textarea rows={2} maxLength={500} value={lateReason} onChange={e => setLateReason(e.target.value)}
+                placeholder="e.g. Customer arrived as we were closing with an urgent job"
+                className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl outline-none focus:border-amber-500 resize-none" />
+    </div>
+  )
 
   // ── Instant: the compact window, as it has always been ─────────
   const THEME = { accent: 'bg-zinc-900', tab: 'bg-zinc-900', tint: 'bg-zinc-50' }
@@ -647,6 +678,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
         </div>
         <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/10 text-[var(--text-3)] text-lg">✕</button>
       </div>
+      {lateNote}
 
       <div className="px-6 pt-4 shrink-0">
         <div className="grid grid-cols-3 gap-1 bg-black/10 p-1 rounded-xl">
@@ -790,13 +822,14 @@ export default function NewJobModal({ onClose, onSuccess }) {
         </div>
       </div>
 
+      {late && <div className="px-6 shrink-0">{lateBox}</div>}
       {error && <div className="mx-6 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 shrink-0">{error}</div>}
 
       <div className="flex px-6 py-4 items-center justify-end gap-3 shrink-0 border-t border-black/10">
         <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]">Cancel</button>
         <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
                 className="px-5 py-2.5 text-white text-sm font-bold rounded-xl bg-zinc-900 disabled:opacity-40">
-          {isPending ? 'Creating...' : 'Create Job'}
+          {isPending ? 'Creating...' : late ? 'Record late job' : 'Create Job'}
         </button>
       </div>
     </div>
@@ -816,6 +849,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   className={`${branchName ? '' : 'ml-auto'} w-8 h-8 grid place-items-center rounded-full hover:bg-black/5 text-[var(--text-3)]`}>✕</button>
         </div>
 
+        {lateNote}
         <div className="shrink-0">{customerBar}</div>
 
         <div className={`flex-1 min-h-0 grid grid-cols-[220px_1fr_300px]`}>
