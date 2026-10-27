@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 import CounterArtwork from '../shared/CounterArtwork'
 import NewCustomerModal from './NewCustomerModal'
+import client from '../../api/client'
 
 const fmt = n => `GHS ${parseFloat(n || 0).toFixed(2)}`
 const TYPES = [['INSTANT', 'Instant'], ['PRODUCTION', 'Production'], ['DESIGN', 'Design']]
@@ -69,6 +70,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
   const [specValues,    setSpecValues]    = useState({})
   const [selOutputMode, setSelOutputMode] = useState(null)
   const [selArtwork,    setSelArtwork]    = useState(null)
+  // The finishing ticked for the item being set up: add-on ids, or, for an
+  // envelope, { service, per_copy }. Priced by the server as it's chosen.
+  const [selAddons,     setSelAddons]     = useState([])
 
   const roomy = jobType !== 'INSTANT'
   const wantsFile = jobType === 'PRODUCTION'
@@ -107,6 +111,30 @@ export default function NewJobModal({ onClose, onSuccess }) {
     staleTime: 3_000,
     retry: false,
   })
+
+  // The ticked finishing, priced with the app's own rules (by the sheet,
+  // by the copy, one per copy or one for all). Job creation prices it again.
+  const { data: addonQuote, isFetching: addonLoading, error: addonError } = useQuery({
+    queryKey: ['addonQuote', selected?.id, debouncedQty, debouncedPages, JSON.stringify(specValues), JSON.stringify(selAddons)],
+    queryFn: () => client.post('/api/v1/jobs/addons/quote/', {
+      service: selected.id, quantity: debouncedQty, pages: debouncedPages,
+      specifications: specValues, addons: selAddons,
+    }).then(r => r.data),
+    enabled: !!selected && selAddons.length > 0,
+    staleTime: 3_000,
+    retry: false,
+  })
+  const addonsPriced = selAddons.length ? (addonQuote?.addons || []) : []
+  const itemTotal = (parseFloat(selPrice?.total || 0) + (selAddons.length ? parseFloat(addonQuote?.total || 0) : 0))
+
+  function toggleAddon(a) {
+    setSelAddons(list => (list.some(x => (x.service ?? x) === a.id)
+      ? list.filter(x => (x.service ?? x) !== a.id)
+      : [...list, a.packing ? { service: a.id, per_copy: (selQty || 1) > 1 } : a.id]))
+  }
+  function setPerCopy(id, perCopy) {
+    setSelAddons(list => list.map(x => ((x.service ?? x) === id ? { service: id, per_copy: perCopy } : x)))
+  }
 
   const SERVICE_ALIASES = [
     { patterns: ['black', 'blk', 'bw', 'b&w', 'mono', 'monochrome', 'grayscale'], resolves: 'b&w' },
@@ -164,6 +192,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     setSelRingSize(isBinding(service) ? 10 : null)
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
     setSelArtwork(null)
+    setSelAddons([])
     // quantity and pages are held in their own state and sent as their
     // own fields; leaving them in specValues too gave two sources for one
     // number, and multi-page jobs were charged for a single page.
@@ -176,7 +205,8 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
   const needsFile = wantsFile && !!selected?.requires_file_upload
   const fileReady = !needsFile || (selArtwork && selArtwork.verdict !== 'refuse')
-  const canAdd = !!selPrice && parseFloat(selPrice.total) > 0 && fileReady
+  const addonsReady = !selAddons.length || (!!addonQuote && !addonError && !addonLoading)
+  const canAdd = !!selPrice && parseFloat(selPrice.total) > 0 && fileReady && addonsReady
 
   const addToCart = () => {
     if (!selected || !canAdd) return
@@ -188,11 +218,14 @@ export default function NewJobModal({ onClose, onSuccess }) {
       ring_size: selRingSize,
       output_mode: selOutputMode,
       specifications: { ...specValues },
-      _price: selPrice?.total || 0,
+      _price: itemTotal.toFixed(2),
       artwork: selArtwork,
+      addons: selAddons,
+      addonsPriced,
     }])
     setSelected(null)
     setSelArtwork(null)
+    setSelAddons([])
   }
 
   // When it would be ready: production and design only. The whole cart,
@@ -255,6 +288,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
         ...(item.output_mode ? { output_mode: item.output_mode } : {}),
         ...(item.specifications && Object.keys(item.specifications).length ? { specifications: item.specifications } : {}),
         ...(item.artwork?.token ? { artwork_token: item.artwork.token } : {}),
+        ...(item.addons?.length ? { addons: item.addons } : {}),
       })),
       // For an organisation: its job, and the person who ordered it.
       ...(customer ? (orderFor
@@ -447,10 +481,43 @@ export default function NewJobModal({ onClose, onSuccess }) {
           ].map(specField)}
       </div>
 
-      {roomy && (
+      {roomy && (selected.addons || []).length > 0 && (
         <div className="mt-5">
           <div className={`${H} mb-1.5`}>Finishing</div>
-          <p className="text-xs text-[var(--text-3)]">Finishing for this item comes with the next update.</p>
+          <div className="flex flex-wrap gap-2">
+            {selected.addons.map(a => {
+              const on = selAddons.some(x => (x.service ?? x) === a.id)
+              const priced = addonsPriced.find(x => x.service === a.id)
+              return (
+                <button key={a.id} type="button" onClick={() => toggleAddon(a)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[13px] font-semibold transition-colors
+                                    ${on ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
+                  <span className={`w-4 h-4 rounded grid place-items-center text-[10px] text-white
+                                    ${on ? 'bg-blue-600' : 'border-[1.5px] border-black/20'}`}>{on ? '✓' : ''}</span>
+                  {a.name}
+                  {on && priced && (
+                    <span className="font-normal text-[var(--text-3)]">
+                      +{parseFloat(priced.total).toFixed(2)}{priced.detail ? ` · ${priced.detail}` : ''}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          {selected.addons.filter(a => a.packing && selAddons.some(x => x.service === a.id)).map(a => {
+            const choice = selAddons.find(x => x.service === a.id)
+            return (selQty || 1) > 1 && (
+              <div key={a.id} className="mt-2 inline-flex p-[3px] rounded-xl bg-black/[0.05]">
+                {[[true, 'One per copy'], [false, 'One for all']].map(([v, t]) => (
+                  <button key={t} type="button" onClick={() => setPerCopy(a.id, v)}
+                          className={`px-3 py-1 rounded-[9px] text-xs font-bold ${choice?.per_copy === v ? 'bg-white shadow-sm text-[var(--text)]' : 'text-[var(--text-3)]'}`}>
+                    {a.name}: {t.toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+          {addonError && <p className="mt-1.5 text-xs text-red-600">{addonError.response?.data?.detail || 'That finishing couldn’t be priced.'}</p>}
         </div>
       )}
 
@@ -481,9 +548,12 @@ export default function NewJobModal({ onClose, onSuccess }) {
       <div className="mt-6 flex items-end gap-4">
         <div>
           <div className={H}>Item total</div>
-          <div className="text-xl font-black tabular-nums" style={{ opacity: priceLoading ? 0.45 : 1 }}>
-            {selPrice ? fmt(selPrice.total) : '…'}
+          <div className="text-xl font-black tabular-nums" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>
+            {selPrice ? fmt(itemTotal) : '…'}
           </div>
+          {selAddons.length > 0 && selPrice && (
+            <div className="text-[11px] text-[var(--text-3)]">includes finishing {fmt(addonQuote?.total || 0)}</div>
+          )}
         </div>
         <button onClick={addToCart} disabled={!canAdd}
                 className="ml-auto px-5 py-3 rounded-xl bg-blue-600 text-white text-sm font-black disabled:bg-black/10 disabled:text-[var(--text-3)]">
@@ -511,6 +581,11 @@ export default function NewJobModal({ onClose, onSuccess }) {
                     ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
                     : `${item.quantity} × ${item.pages}pp`}
                 </div>
+                {item.addonsPriced?.length > 0 && (
+                  <div className="text-[11px] text-[var(--text-3)] truncate">
+                    + {item.addonsPriced.map(x => x.service_name + (x.detail ? ` (${x.detail})` : '')).join(', ')}
+                  </div>
+                )}
                 {item.artwork && (
                   <div className={`text-[11px] font-semibold truncate ${item.artwork.verdict === 'warn' ? 'text-amber-700' : 'text-emerald-700'}`}>
                     {item.artwork.filename} · {item.artwork.verdict === 'warn' ? 'worth a look' : 'good to print'}
