@@ -34,6 +34,9 @@ export default function CounterArtwork({ service, specifications, result, onResu
     form.append('specifications', JSON.stringify(specifications || {}))
     try {
       const { data } = await client.post('/api/v1/storefront/check/', form, {
+        // The portal's client sends JSON by default; a file goes as a form.
+        // Axios fills in the boundary itself when it sees FormData.
+        headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: e => e.total && setProgress(Math.round((e.loaded / e.total) * 100)),
       })
       onResult(data)
