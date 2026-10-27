@@ -13,7 +13,7 @@
 // pricing of its own. Files are checked exactly as the app checks them and
 // go with the job, so they reach the floor through Octos and nothing else.
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServices, calculatePrice, createJob, getCustomers, getPromise } from '../../api/bm'
@@ -73,6 +73,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
   // The finishing ticked for the item being set up: add-on ids, or, for an
   // envelope, { service, per_copy }. Priced by the server as it's chosen.
   const [selAddons,     setSelAddons]     = useState([])
+  // One key per attempt: pressed twice, or retried after an error shown
+  // once the job was made, it is still one job. Fresh after a success.
+  const attemptKey = useRef(crypto.randomUUID().replace(/-/g, ''))
 
   const roomy = jobType !== 'INSTANT'
   const wantsFile = jobType === 'PRODUCTION'
@@ -250,6 +253,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     onSuccess: res => {
       invalidateAfterJobCreated(queryClient)
       setSuccessJob(res.data?.job_number || res.data?.id || '—')
+      attemptKey.current = crypto.randomUUID().replace(/-/g, '')
     },
     onError: err => {
       const d = err.response?.data
@@ -277,6 +281,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
       job_type: jobType,
       branch: branchId,
       intake_channel: 'WALK_IN',
+      idempotency_key: attemptKey.current,
       deposit_percentage: 100,
       line_items: cart.map(item => ({
         service: item.service.id,
