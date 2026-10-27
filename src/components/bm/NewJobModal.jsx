@@ -6,6 +6,7 @@ import { getServices, calculatePrice, createJob, getCustomers, getPromise } from
 import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
+import CounterArtwork from '../shared/CounterArtwork'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toFixed(2)}`
@@ -75,6 +76,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
   // the render; a third service would have meant a third of both.
   const [specValues,    setSpecValues]    = useState({})
   const [selOutputMode, setSelOutputMode] = useState(null)
+  // The customer's file for the item being set up: checked as the app
+  // checks it, and sent with the job so it lands on its line.
+  const [selArtwork,    setSelArtwork]    = useState(null)
 
   // Debounced values for pricing query — prevents a request on every keystroke
   const [debouncedQty,   setDebouncedQty]   = useState(1)
@@ -189,6 +193,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
     setSelPages(service.smart_defaults?.pages || 1)
     setSelRingSize(isBinding(service) ? 10 : null)
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
+    setSelArtwork(null)
         // quantity and pages are held in their own state and sent as their
     // own fields. Leaving them in specValues too gave two sources for
     // one number: the spec carried pages, the price used selPages, and
@@ -209,6 +214,9 @@ export default function NewJobModal({ onClose, onSuccess }) {
     // selection where selPrice is undefined. Adding during it froze 0.00 into
     // the cart and produced a real job worth nothing.
     if (!selPrice || parseFloat(selPrice.total) <= 0) return
+    // A service that prints from a file waits for one, and never takes a
+    // file the check refused.
+    if (selected.requires_file_upload && (!selArtwork || selArtwork.verdict === 'refuse')) return
         setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
@@ -218,8 +226,10 @@ export default function NewJobModal({ onClose, onSuccess }) {
       output_mode: selOutputMode,
       specifications: { ...specValues },
       _price:  selPrice?.total || 0,
+      artwork: selArtwork,
     }])
     setSelected(null)
+    setSelArtwork(null)
   }
 
   // When it would be ready: production and design only (instant work
@@ -285,6 +295,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
         sets:        item.quantity,
         ...(item.ring_size   ? { ring_size:   item.ring_size   } : {}),
         ...(item.output_mode ? { output_mode: item.output_mode } : {}),
+        ...(item.artwork?.token ? { artwork_token: item.artwork.token } : {}),
         ...(item.specifications && Object.keys(item.specifications).length
             ? { specifications: item.specifications } : {}),
       })),
@@ -523,13 +534,13 @@ export default function NewJobModal({ onClose, onSuccess }) {
                               const raw = e.target.value
                               const n = raw === '' ? '' : parseInt(raw)
                               if (field.key === 'quantity')   setSelQty(n)
-                              else if (field.key === 'pages') setSelPages(n)
+                              else if (field.key === 'pages') { if (!selArtwork?.page_count) setSelPages(n) }
                               else setSpecValues(v => ({ ...v, [field.key]: n }))
                             }}
                             onBlur={e => {
                               const n = Math.max(field.min ?? 1, parseInt(e.target.value) || (field.min ?? 1))
                               if (field.key === 'quantity')   setSelQty(n)
-                              else if (field.key === 'pages') setSelPages(n)
+                              else if (field.key === 'pages') { if (!selArtwork?.page_count) setSelPages(n) }
                               else setSpecValues(v => ({ ...v, [field.key]: n }))
                             }}
                             className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
@@ -545,7 +556,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                       <label className="text-[9px] font-bold text-[var(--text-3)] uppercase
                         tracking-wider block mb-1">Sheets</label>
                       <input type="number" min="1" value={selPages}
-                        onChange={e => setSelPages(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={e => { if (!selArtwork?.page_count) setSelPages(Math.max(1, parseInt(e.target.value) || 1)) }}
                         className="w-full px-2 py-1.5 text-sm bg-white/60 border border-black/10
                           rounded-lg outline-none"
                       />
@@ -562,6 +573,23 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   </div>
                 )}
 
+                {(selected.requires_file_upload || jobType !== 'INSTANT') && (
+                  <CounterArtwork
+                    service={selected}
+                    specifications={specValues}
+                    result={selArtwork}
+                    required={!!selected.requires_file_upload}
+                    onResult={r => {
+                      setSelArtwork(r)
+                      // A document's pages come from the file: front and
+                      // back puts two on a sheet. The server counts again.
+                      if (r?.page_count) {
+                        const perSheet = /2[- ]?sided|front and back|double/i.test(selected.name) ? 2 : 1
+                        setSelPages(Math.max(1, Math.ceil(r.page_count / perSheet)))
+                      }
+                    }}
+                  />
+                )}
                 <div className="flex items-center gap-2">
                   <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200
                     rounded-lg flex items-center justify-between">
