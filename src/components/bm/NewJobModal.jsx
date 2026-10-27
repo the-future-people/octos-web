@@ -321,6 +321,28 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const forName = orderFor ? orderFor.name : null
   const deposit = roomy ? cartTotal * 0.7 : cartTotal
 
+  // ── After closing: the note, and the reason ────────────────────
+  const lateNote = late && (
+    <div className="flex items-center gap-2.5 px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs shrink-0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+      </svg>
+      <span>
+        <b>Recording after closing.</b>{' '}
+        {held ? 'The cashier has signed off: this job is held until the morning handover.'
+              : 'The cashier is still on duty: the job is paid for as usual.'}
+      </span>
+    </div>
+  )
+  const lateBox = late && (
+    <div className="mt-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 mb-1">Why is it being recorded late?</div>
+      <textarea rows={2} maxLength={500} value={lateReason} onChange={e => setLateReason(e.target.value)}
+                placeholder="e.g. Customer arrived as we were closing with an urgent job"
+                className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl outline-none focus:border-amber-500 resize-none" />
+    </div>
+  )
+
   // ── The parts ──────────────────────────────────────────────────
 
   const typeTabs = (
@@ -644,28 +666,6 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     </div>
   )
 
-
-  // ── After closing: the note, and the reason ────────────────────
-  const lateNote = late && (
-    <div className="flex items-center gap-2.5 px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs shrink-0">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-      </svg>
-      <span>
-        <b>Recording after closing.</b>{' '}
-        {held ? 'The cashier has signed off: this job is held until the morning handover.'
-              : 'The cashier is still on duty: the job is paid for as usual.'}
-      </span>
-    </div>
-  )
-  const lateBox = late && (
-    <div className="mt-3">
-      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 mb-1">Why is it being recorded late?</div>
-      <textarea rows={2} maxLength={500} value={lateReason} onChange={e => setLateReason(e.target.value)}
-                placeholder="e.g. Customer arrived as we were closing with an urgent job"
-                className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl outline-none focus:border-amber-500 resize-none" />
-    </div>
-  )
 
   // ── Instant: the compact window, as it has always been ─────────
   const THEME = { accent: 'bg-zinc-900', tab: 'bg-zinc-900', tint: 'bg-zinc-50' }
