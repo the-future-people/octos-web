@@ -216,7 +216,8 @@ export default function NewJobModal({ onClose, onSuccess }) {
     if (!selPrice || parseFloat(selPrice.total) <= 0) return
     // A service that prints from a file waits for one, and never takes a
     // file the check refused.
-    if (selected.requires_file_upload && (!selArtwork || selArtwork.verdict === 'refuse')) return
+    if (jobType === 'PRODUCTION' && selected.requires_file_upload
+        && (!selArtwork || selArtwork.verdict === 'refuse')) return
         setCart(c => [...c, {
       _id:     Date.now(),
       service: selected,
@@ -573,7 +574,7 @@ export default function NewJobModal({ onClose, onSuccess }) {
                   </div>
                 )}
 
-                {(selected.requires_file_upload || jobType !== 'INSTANT') && (
+                {jobType === 'PRODUCTION' && (
                   <CounterArtwork
                     service={selected}
                     specifications={specValues}
