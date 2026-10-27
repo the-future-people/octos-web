@@ -555,10 +555,178 @@ export default function NewJobModal({ onClose, onSuccess }) {
     </div>
   )
 
+
+  // ── Instant: the compact window, as it has always been ─────────
+  const THEME = { accent: 'bg-zinc-900', tab: 'bg-zinc-900', tint: 'bg-zinc-50' }
+  const instantModal = (
+    <div className={`rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col overflow-hidden animate-slideUp ${THEME.tint}`}>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 shrink-0">
+        <div>
+          <div className="font-bold text-lg text-[var(--text)]">New Job</div>
+          <div className="text-xs text-[var(--text-3)] mt-0.5">Record a new job for this branch</div>
+        </div>
+        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/10 text-[var(--text-3)] text-lg">✕</button>
+      </div>
+
+      <div className="px-6 pt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-1 bg-black/10 p-1 rounded-xl">
+          {TYPES.map(([v, label]) => (
+            <button key={v} onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
+                    className={`py-2 text-sm font-bold rounded-lg transition-colors
+                                ${jobType === v ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-6 pt-4 shrink-0">
+        <div className="relative">
+          <input type="text"
+                 value={customer ? nameOf(customer) : custSearch}
+                 onChange={e => { setCustSearch(e.target.value); setCustomer(null); setOrderFor(null) }}
+                 placeholder="Whose job is this? (leave blank for walk-in)"
+                 className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
+                             ${customer ? 'bg-green-50 border-green-300 text-green-800 font-semibold'
+                                        : 'bg-red-100 border-red-300 text-red-600 placeholder-red-400 focus:border-red-400'}`} />
+          {(custSearch || customer) && (
+            <button onClick={() => { setCustSearch(''); setCustomer(null); setOrderFor(null) }}
+                    className="absolute right-3 top-2.5 text-black/30 hover:text-black/50 text-sm">✕</button>
+          )}
+          {custResults.length > 0 && !customer && (
+            <div className="absolute top-11 left-0 right-0 bg-[var(--panel)] border border-[var(--border)] rounded-xl shadow-lg z-20 overflow-hidden">
+              {custResults.slice(0, 5).map(c => (
+                <button key={c.id} onClick={() => chooseCustomer(c)}
+                        className="w-full px-4 py-2.5 text-left hover:bg-[var(--bg)] border-b border-[var(--border)] last:border-0">
+                  <div className="text-sm font-medium text-[var(--text)]">{nameOf(c)}</div>
+                  <div className="text-xs text-[var(--text-3)]">
+                    {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Rep: ${c.full_name} · ` : ''}{c.phone}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden mt-4">
+        <div className="flex-1 flex flex-col overflow-hidden px-6 border-r border-black/10">
+          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setSelected(null) }}
+                 placeholder="Search services..."
+                 className="w-full px-3 py-2 text-sm bg-white/60 border border-black/10 rounded-lg outline-none focus:border-black/20 mb-3 shrink-0" />
+          <div className="flex-1 overflow-y-auto space-y-3 pb-2">
+            {Object.keys(grouped).length === 0 ? (
+              <div className="text-sm text-[var(--text-3)] text-center py-8">No services found</div>
+            ) : Object.entries(grouped).map(([grp, items]) => (
+              <div key={grp}>
+                <div className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-1.5">{grp}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map(s => (
+                    <button key={s.id} onClick={() => selectService(s)}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
+                                        ${selected?.id === s.id ? 'bg-zinc-900 text-white border-transparent'
+                                                                : 'bg-white/60 border-black/10 text-[var(--text-2)] hover:border-black/20'}`}>
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {selected && (
+            <div className="shrink-0 border-t border-black/10 pt-3 pb-1">
+              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">{selected.name}</div>
+              {isPassport(selected) && (
+                <div className="mb-2 flex gap-1.5">
+                  {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + Digital'], ['DIGITAL', 'Digital Only']].map(([v, t]) => (
+                    <button key={v} onClick={() => setSelOutputMode(v)}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white/60 border-black/10 text-[var(--text-2)]'}`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isBinding(selected) && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
+                    <button key={size} onClick={() => setSelRingSize(size)}
+                            className={`px-2 py-1 text-[10px] font-bold rounded border ${selRingSize === size ? 'bg-zinc-900 text-white border-transparent' : 'bg-white/60 border-black/10 text-[var(--text-2)]'}`}>
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {(selected.spec_template || []).length > 0
+                  ? selected.spec_template.map(specField)
+                  : [{ key: 'pages', label: 'Sheets', min: 1 }, { key: 'quantity', label: 'Copies', min: 1 }].map(specField)}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                  <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Total</span>
+                  <span className="font-mono font-black text-sm text-green-700" style={{ opacity: priceLoading ? 0.45 : 1 }}>
+                    {selPrice ? fmt(selPrice.total) : '...'}
+                  </span>
+                </div>
+                <button onClick={addToCart} disabled={!canAdd}
+                        className="px-4 py-2 text-white text-sm font-bold rounded-lg bg-zinc-900 disabled:opacity-40 whitespace-nowrap">
+                  + Add to Cart
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="w-60 flex flex-col px-4 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-[var(--text)] uppercase tracking-wider">Cart</span>
+            <span className="text-xs text-[var(--text-3)]">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
+          </div>
+          {cart.length === 0 ? (
+            <div className="flex-1 grid place-items-center text-center">
+              <div><p className="text-xs text-[var(--text-3)]">No items yet</p><p className="text-[10px] text-[var(--text-3)] mt-1">Select a service to begin</p></div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-1.5 pb-2">
+              {cart.map(item => (
+                <div key={item._id} className="flex items-start justify-between gap-2 px-3 py-2 bg-white/60 border border-black/10 rounded-lg">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-[var(--text)] truncate">{item.service.name}</div>
+                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">{item.quantity} × {item.pages}pp</div>
+                  </div>
+                  <span className="font-mono text-xs font-bold">{fmt(item._price)}</span>
+                  <button onClick={() => removeFromCart(item._id)} className="text-black/25 hover:text-red-500 text-xs">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {cart.length > 0 && (
+            <div className="shrink-0 pt-3 border-t border-black/10 flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">Total</span>
+              <span className="font-mono font-black text-base text-[var(--text)]">{fmt(cartTotal)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && <div className="mx-6 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 shrink-0">{error}</div>}
+
+      <div className="flex px-6 py-4 items-center justify-end gap-3 shrink-0 border-t border-black/10">
+        <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]">Cancel</button>
+        <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
+                className="px-5 py-2.5 text-white text-sm font-bold rounded-xl bg-zinc-900 disabled:opacity-40">
+          {isPending ? 'Creating...' : 'Create Job'}
+        </button>
+      </div>
+    </div>
+  )
+
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
+      {!roomy ? instantModal : (
       <div className={`bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp
-                       transition-[max-width] duration-300 ${roomy ? 'max-w-6xl h-[94vh]' : 'max-w-4xl h-[88vh]'}`}>
+                       transition-[max-width] duration-300 max-w-6xl h-[94vh]`}>
 
         <div className="flex items-center gap-4 px-6 py-3.5 border-b border-black/[0.06] shrink-0">
           <span className="text-[17px] font-black">New job</span>
@@ -570,12 +738,13 @@ export default function NewJobModal({ onClose, onSuccess }) {
 
         <div className="shrink-0">{customerBar}</div>
 
-        <div className={`flex-1 min-h-0 grid ${roomy ? 'grid-cols-[220px_1fr_300px]' : 'grid-cols-[200px_1fr_260px]'}`}>
+        <div className={`flex-1 min-h-0 grid grid-cols-[220px_1fr_300px]`}>
           <div className="p-4 border-r border-black/[0.06] min-h-0 flex flex-col">{serviceList}</div>
           <div className="p-5 overflow-y-auto min-h-0">{editor}</div>
           <div className="p-4 bg-black/[0.015] border-l border-black/[0.06] min-h-0">{cartPanel}</div>
         </div>
       </div>
+      )}
     </div>,
     document.body,
   )
