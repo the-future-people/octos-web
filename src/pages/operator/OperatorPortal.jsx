@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
+import OperatorTopbar from '../../components/operator/OperatorTopbar'
 import {
   getOperatorQueue, startStep, finishStep, reportProblem, unlockStation, fileUrl,
 } from '../../api/operator'
@@ -14,18 +15,19 @@ import {
 const IDLE_LOCK_MS = 30 * 60 * 1000
 const LOCK_KEY = 'operator_locked'
 
-// Meaning colours, from the operator spec.
+// Meaning colours, from the theme where it has them.
 const TONE = {
-  blue:   { bg: '#dce8ff', border: '#a8c4ff', text: '#1a4fcc' },
-  green:  { bg: '#d6f5e8', border: '#6ddba8', text: '#1a7a4a' },
-  amber:  { bg: '#fff0c2', border: '#f5c842', text: '#b8860b' },
-  orange: { bg: '#ffe4d0', border: '#ffb085', text: '#cc4400' },
-  red:    { bg: '#fddde0', border: '#f5a0aa', text: '#cc1a2e' },
+  blue:   { bg: 'var(--blue-bg, #dce8ff)',   border: 'var(--blue-border, #a8c4ff)',   text: 'var(--blue-text, #1a4fcc)' },
+  green:  { bg: 'var(--green-bg, #d6f5e8)',  border: 'var(--green-border, #6ddba8)',  text: 'var(--green-text, #1a7a4a)' },
+  amber:  { bg: 'var(--amber-bg, #fff0c2)',  border: 'var(--amber-border, #f5c842)',  text: 'var(--amber-text, #b8860b)' },
+  orange: { bg: 'var(--orange-bg, #ffe4d0)', border: 'var(--orange-border, #ffb085)', text: 'var(--orange-text, #cc4400)' },
+  red:    { bg: 'var(--red-bg, #fddde0)',    border: 'var(--red-border, #f5a0aa)',    text: 'var(--red-text, #cc1a2e)' },
 }
 
-const PANEL  = 'bg-[var(--panel,#ffffff)] border border-[var(--border,#e8e5df)] rounded-xl'
-const BTN    = 'rounded-lg border-[1.5px] border-[var(--border-dark,#d0cdc6)] bg-[var(--panel,#ffffff)] px-4 py-3 text-sm font-medium text-[var(--text,#1a1a1a)] disabled:opacity-50'
-const BTN_PRIMARY = 'rounded-lg bg-[#1a1a1a] px-4 py-3 text-sm font-medium text-white disabled:opacity-50'
+const PANEL = 'bg-[var(--panel)] border border-[var(--border)] rounded-xl'
+const BTN = 'rounded-lg border-[1.5px] border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-semibold text-[var(--text)] hover:bg-[var(--bg)] transition-colors disabled:opacity-50'
+const BTN_PRIMARY = 'rounded-lg bg-[var(--text)] px-4 py-3 text-sm font-semibold text-[var(--panel)] hover:opacity-90 transition-opacity disabled:opacity-50'
+const INPUT = 'w-full rounded-lg border-[1.5px] border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-base text-[var(--text)] focus:outline-none focus:border-[var(--border-dark)]'
 
 // ── Small pieces ─────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ function Chip({ tone, children }) {
   const t = TONE[tone]
   return (
     <span
-      className="inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
+      className="inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold"
       style={{ background: t.bg, color: t.text, border: `1px solid ${t.border}` }}
     >
       {children}
@@ -59,12 +61,15 @@ function SlackChip({ minutes }) {
   return <Chip tone={minutes <= 60 ? 'amber' : 'green'}>{formatMinutes(minutes)} slack</Chip>
 }
 
+function clock(iso) {
+  return new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
+}
+
 function readyLabel(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
-  const time = d.toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
-  if (d.toDateString() === new Date().toDateString()) return time
-  return `${d.toLocaleDateString('en-GH', { weekday: 'short' })} ${time}`
+  if (d.toDateString() === new Date().toDateString()) return clock(iso)
+  return `${d.toLocaleDateString('en-GH', { weekday: 'short' })} ${clock(iso)}`
 }
 
 function errorText(err, fallback) {
@@ -83,26 +88,34 @@ function specLine(row) {
   return parts.join(' · ')
 }
 
+function InfoItem({ label, children }) {
+  return (
+    <span>
+      {label} <span className="font-semibold text-[var(--text)] ml-1">{children}</span>
+    </span>
+  )
+}
+
 function Files({ files }) {
   if (!files?.length) {
-    return <p className="text-xs text-[var(--text-3,#9a9690)]">No file on this job. Ask the coordinator.</p>
+    return <p className="text-xs text-[var(--text-3)]">No file on this job. Ask the coordinator.</p>
   }
   const [first, ...rest] = files
   return (
     <div className="flex flex-col gap-2">
       <a
         href={fileUrl(first.url)} target="_blank" rel="noreferrer"
-        className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border,#e8e5df)] px-3 py-2"
+        className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2.5 hover:bg-[var(--bg)] transition-colors"
       >
         <span className="min-w-0">
-          <span className="block truncate text-sm font-bold">{first.name}</span>
-          <span className="text-xs text-[var(--text-3,#9a9690)]">Print file · {first.type.toLowerCase()}</span>
+          <span className="block truncate text-sm font-semibold text-[var(--text)]">{first.name}</span>
+          <span className="text-xs text-[var(--text-3)]">Print file · {first.type.toLowerCase()}</span>
         </span>
         <span className={BTN_PRIMARY + ' px-3 py-2 text-xs'}>Open file</span>
       </a>
       {rest.map(f => (
         <a key={f.id} href={fileUrl(f.url)} target="_blank" rel="noreferrer"
-           className="truncate text-xs text-[#1a4fcc] underline">
+           className="truncate text-xs underline" style={{ color: TONE.blue.text }}>
           {f.name} ({f.type.toLowerCase()})
         </a>
       ))}
@@ -113,24 +126,24 @@ function Files({ files }) {
 function JobDetail({ row }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs">{row.job_number}</span>
+            <span className="font-mono text-xs text-[var(--text-2)]">{row.job_number}</span>
             {row.is_reprint && <Chip tone="orange">Reprint</Chip>}
           </div>
-          <div className="mt-0.5 text-lg font-bold">{row.title}</div>
-          <div className="text-xs text-[var(--text-2,#555550)]">{specLine(row)}</div>
+          <div className="mt-1 text-lg font-bold text-[var(--text)]">{row.title}</div>
+          <div className="text-xs text-[var(--text-2)]">{specLine(row)}</div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[11px] text-[var(--text-3,#9a9690)]">Ready</div>
-          <div className="mb-1 text-sm font-bold">{readyLabel(row.ready_at)}</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)]">Ready</div>
+          <div className="mb-1 text-sm font-bold text-[var(--text)]">{readyLabel(row.ready_at)}</div>
           <SlackChip minutes={row.slack_minutes} />
         </div>
       </div>
       {row.instructions && (
-        <div className="rounded-lg bg-[var(--bg,#f2f0eb)] px-3 py-2 text-xs text-[var(--text-2,#555550)]">
-          <span className="font-bold text-[var(--text,#1a1a1a)]">Instructions: </span>{row.instructions}
+        <div className="rounded-lg bg-[var(--bg)] px-3 py-2.5 text-xs text-[var(--text-2)]">
+          <span className="font-bold text-[var(--text)]">Instructions: </span>{row.instructions}
         </div>
       )}
       <Files files={row.files} />
@@ -167,24 +180,24 @@ function DoneForm({ row, onCancel, onFinished }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-[var(--bg,#f2f0eb)] p-3">
+    <div className="flex flex-col gap-3 rounded-lg bg-[var(--bg)] p-3">
       <div className="grid grid-cols-2 gap-3">
-        <label className="text-xs text-[var(--text-2,#555550)]">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Made (ordered {row.quantity})
           <input type="number" min="0" step="1" value={made}
                  onChange={e => { setMade(e.target.value); setError('') }}
-                 className="mt-1 w-full rounded-lg border-[1.5px] border-[var(--border,#e8e5df)] bg-white px-3 py-2 text-base" />
+                 className={INPUT + ' mt-1'} />
         </label>
-        <label className="text-xs text-[var(--text-2,#555550)]">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Spoilt
           <input type="number" min="0" step="1" value={spoilt}
                  onChange={e => { setSpoilt(e.target.value); setError('') }}
-                 className="mt-1 w-full rounded-lg border-[1.5px] border-[var(--border,#e8e5df)] bg-white px-3 py-2 text-base" />
+                 className={INPUT + ' mt-1'} />
         </label>
       </div>
       {Number(spoilt) > 0 && (
         <div className="rounded-lg px-3 py-2 text-xs"
-             style={{ background: TONE.amber.bg, border: `1px solid ${TONE.amber.border}`, color: '#633806' }}>
+             style={{ background: TONE.amber.bg, border: `1px solid ${TONE.amber.border}`, color: TONE.amber.text }}>
           The coordinator will confirm the spoilt pieces before a reprint is queued.
         </div>
       )}
@@ -230,18 +243,17 @@ function ProblemPicker({ row, onCancel, onReported }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-sm font-bold">What happened?</div>
+      <div className="text-sm font-bold text-[var(--text)]">What happened?</div>
       {PROBLEMS.map(p => (
         <button key={p.kind} onClick={() => { setKind(p.kind); setError('') }}
                 className={BTN + ' text-left'}
                 style={kind === p.kind ? { borderColor: TONE.red.text, background: TONE.red.bg } : undefined}>
           <span className="block font-bold">{p.label}</span>
-          <span className="text-xs font-normal text-[var(--text-2,#555550)]">{p.hint}</span>
+          <span className="text-xs font-normal text-[var(--text-2)]">{p.hint}</span>
         </button>
       ))}
       <input value={note} onChange={e => setNote(e.target.value)} maxLength={200}
-             placeholder="Add a short note (optional)"
-             className="rounded-lg border-[1.5px] border-[var(--border,#e8e5df)] bg-white px-3 py-2 text-sm" />
+             placeholder="Add a short note (optional)" className={INPUT + ' text-sm'} />
       {error && <p className="text-sm" style={{ color: TONE.red.text }}>{error}</p>}
       <div className="grid grid-cols-[1fr_1.4fr] gap-2">
         <button className={BTN} onClick={onCancel} disabled={report.isPending}>Cancel</button>
@@ -271,12 +283,12 @@ function MachineCard({ machine }) {
 
   if (!machine.available) {
     return (
-      <div className="rounded-xl p-4" style={{ background: TONE.red.bg, border: `1px solid ${TONE.red.border}` }}>
+      <div className="rounded-xl p-5" style={{ background: TONE.red.bg, border: `1px solid ${TONE.red.border}` }}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-base font-bold" style={{ color: TONE.red.text }}>{machine.name} is down</div>
+          <div className="font-display text-base font-bold" style={{ color: TONE.red.text }}>{machine.name} is down</div>
           <Chip tone="red">Waiting for repair</Chip>
         </div>
-        <p className="mt-1 text-sm" style={{ color: '#791f1f' }}>
+        <p className="mt-1 text-sm" style={{ color: TONE.red.text }}>
           {machine.down_reason || 'Reported down.'} The coordinator brings it back when it's fixed.
         </p>
       </div>
@@ -287,16 +299,15 @@ function MachineCard({ machine }) {
   const next = machine.next
 
   return (
-    <div className={PANEL + ' flex flex-col gap-3 p-4'}>
+    <div className={PANEL + ' flex flex-col gap-4 p-5'}>
       <div className="flex items-center justify-between gap-2">
-        <div className="text-base font-bold">
-          {running ? `Running on ${machine.name}` : next ? `Next on ${machine.name}` : machine.name}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)]">
+            {running ? 'Running' : next ? 'Next' : 'Machine'}
+          </div>
+          <div className="font-display text-base font-bold text-[var(--text)]">{machine.name}</div>
         </div>
-        {running?.started_at && (
-          <Chip tone="blue">
-            Started {new Date(running.started_at).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })}
-          </Chip>
-        )}
+        {running?.started_at && <Chip tone="blue">Started {clock(running.started_at)}</Chip>}
       </div>
 
       {message && (
@@ -307,7 +318,7 @@ function MachineCard({ machine }) {
       )}
 
       {!running && !next && (
-        <p className="text-sm text-[var(--text-3,#9a9690)]">Nothing is waiting for this machine.</p>
+        <p className="text-sm text-[var(--text-3)]">Nothing is waiting for this machine.</p>
       )}
 
       {running && (
@@ -348,33 +359,33 @@ function MachineCard({ machine }) {
 
 function QueueList({ rows, firstNumber }) {
   return (
-    <div className={PANEL + ' overflow-hidden'}>
+    <div className={PANEL + ' overflow-hidden self-start'}>
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm font-bold">Queue</span>
-        <span className="text-xs text-[var(--text-3,#9a9690)]">{rows.length} job{rows.length === 1 ? '' : 's'}</span>
+        <span className="font-display text-sm font-bold text-[var(--text)]">Queue</span>
+        <span className="text-xs text-[var(--text-3)]">{rows.length} job{rows.length === 1 ? '' : 's'}</span>
       </div>
       {rows.length === 0 && (
-        <p className="border-t border-[var(--border,#e8e5df)] px-4 py-3 text-xs text-[var(--text-3,#9a9690)]">
+        <p className="border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--text-3)]">
           Nothing else is waiting.
         </p>
       )}
       {rows.map((row, i) => (
-        <div key={row.step} className="flex items-center gap-3 border-t border-[var(--border,#e8e5df)] px-4 py-2.5">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--border,#e8e5df)] bg-[var(--bg,#f2f0eb)] text-[11px] font-bold">
+        <div key={row.step} className="flex items-center gap-3 border-t border-[var(--border)] px-4 py-2.5">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg)] text-[11px] font-bold text-[var(--text-2)]">
             {firstNumber + i}
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="font-mono text-[11.5px]">{row.job_number}</span>
+              <span className="font-mono text-[11px] text-[var(--text-2)]">{row.job_number}</span>
               {row.is_reprint && <Chip tone="orange">Reprint</Chip>}
             </div>
-            <div className="truncate text-[13px] font-medium">{row.title}</div>
-            <div className="text-[11px] text-[var(--text-3,#9a9690)]">{row.quantity} pcs · {row.machine?.name}</div>
+            <div className="truncate text-[13px] font-semibold text-[var(--text)]">{row.title}</div>
+            <div className="text-[11px] text-[var(--text-3)]">{row.quantity} pcs · {row.machine?.name}</div>
           </div>
           <SlackChip minutes={row.slack_minutes} />
         </div>
       ))}
-      <p className="border-t border-[var(--border,#e8e5df)] px-4 py-2.5 text-[11px] text-[var(--text-3,#9a9690)]">
+      <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--text-3)]">
         The queue can't be reordered. A job that falls behind rises on its own.
       </p>
     </div>
@@ -400,18 +411,22 @@ function LockScreen({ name, onUnlocked, onSignOut }) {
   }
 
   return (
-    <div className="flex min-h-[70vh] items-center justify-center p-6">
+    <div className="flex justify-center pt-16">
       <form onSubmit={submit} className={PANEL + ' flex w-full max-w-sm flex-col gap-3 p-6 text-center'}>
-        <div className="text-xl font-bold">Machine locked</div>
-        <div className="text-sm text-[var(--text-2,#555550)]">{name} · enter your password to continue</div>
+        <svg className="mx-auto text-[var(--text)]" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <div className="font-display text-xl font-bold text-[var(--text)]">Machine locked</div>
+        <div className="text-sm text-[var(--text-2)]">{name} · enter your password to continue</div>
         <input type="password" autoFocus value={password}
                onChange={e => { setPassword(e.target.value); setError('') }}
-               className="rounded-lg border-[1.5px] border-[var(--border,#e8e5df)] bg-white px-3 py-3 text-base" />
+               className={INPUT + ' py-3'} />
         {error && <p className="text-sm" style={{ color: TONE.red.text }}>{error}</p>}
         <button type="submit" className={BTN_PRIMARY} disabled={unlock.isPending}>
           {unlock.isPending ? 'Checking…' : 'Unlock'}
         </button>
-        <button type="button" onClick={onSignOut} className="text-xs text-[#1a4fcc] underline">
+        <button type="button" onClick={onSignOut} className="text-xs underline" style={{ color: TONE.blue.text }}>
           Not you? Sign out
         </button>
       </form>
@@ -421,10 +436,10 @@ function LockScreen({ name, onUnlocked, onSignOut }) {
 
 function NotAssigned({ onSignOut }) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center p-6">
+    <div className="flex justify-center pt-16">
       <div className={PANEL + ' max-w-sm p-6 text-center'}>
-        <div className="text-lg font-bold">You're not assigned to a machine</div>
-        <p className="mt-1 text-sm text-[var(--text-2,#555550)]">
+        <div className="font-display text-lg font-bold text-[var(--text)]">You're not assigned to a machine</div>
+        <p className="mt-1 text-sm text-[var(--text-2)]">
           Ask your branch manager to assign you, then sign in again.
         </p>
         <button onClick={onSignOut} className={BTN + ' mt-4'}>Sign out</button>
@@ -447,7 +462,8 @@ export default function OperatorPortal() {
     retry: (count, err) => err?.response?.status !== 403 && count < 1,
   })
 
-  const anyRunning = !!board?.machines?.some(m => m.running)
+  const machines = board?.machines || []
+  const anyRunning = machines.some(m => m.running)
 
   const lock = () => { localStorage.setItem(LOCK_KEY, '1'); setLocked(true) }
   const unlock = () => { localStorage.removeItem(LOCK_KEY); lastActive.current = Date.now(); setLocked(false) }
@@ -469,58 +485,63 @@ export default function OperatorPortal() {
   }, [locked, anyRunning])
 
   const notAssigned = error?.response?.status === 403
-  const nextCount = board?.machines?.filter(m => m.next && !m.running).length || 0
-  const machineNames = board?.machines?.map(m => m.name).join(' + ') || ''
+  const nextCount = machines.filter(m => m.next && !m.running).length
+  const waiting = nextCount + (board?.queue?.length || 0)
+  const down = machines.filter(m => !m.available).length
+  const running = machines.filter(m => m.running).map(m => m.running.job_number)
+  const today = new Date().toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="min-h-screen bg-[var(--bg,#f2f0eb)] text-[var(--text,#1a1a1a)]">
-      <header className="flex h-14 items-center justify-between border-b border-[var(--border,#e8e5df)] bg-[var(--panel,#ffffff)] px-4">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-extrabold tracking-tight">Octos</span>
-          <span className="h-6 w-px bg-[var(--border,#e8e5df)]" />
-          <div className="leading-tight">
-            <div className="text-[10px] font-bold tracking-wide">OPERATOR</div>
-            <div className="text-[11px] text-[var(--text-2,#555550)]">
-              {board ? `${board.branch} · ${machineNames}` : ''}
+    <div className="min-h-screen bg-[var(--bg)]">
+      <OperatorTopbar
+        user={user}
+        machines={machines.map(m => m.name).join(' + ')}
+        onLock={!locked && !notAssigned ? lock : null}
+        onLogout={signOut}
+      />
+
+      {/* Info strip: what an operator needs at a glance, which is not money. */}
+      <div className="bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-6 py-2.5
+          flex items-center gap-5 flex-wrap text-[11px] text-[var(--text-3)]">
+          <InfoItem label={machines.length > 1 ? 'MACHINES' : 'MACHINE'}>
+            {machines.map(m => m.name).join(' + ') || '—'}
+          </InfoItem>
+          <InfoItem label="STATUS">
+            {!board ? '—' : down === 0 ? (machines.length > 1 ? 'All up' : 'Up') : `${down} down`}
+          </InfoItem>
+          <InfoItem label="ON THE MACHINE">{running.length ? running.join(', ') : '—'}</InfoItem>
+          <InfoItem label="WAITING">{board ? waiting : '—'}</InfoItem>
+          <InfoItem label="DATE">{today}</InfoItem>
+        </div>
+      </div>
+
+      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-5">
+        {notAssigned && <NotAssigned onSignOut={signOut} />}
+
+        {!notAssigned && locked && (
+          <LockScreen name={user?.full_name || user?.email} onUnlocked={unlock} onSignOut={signOut} />
+        )}
+
+        {!notAssigned && !locked && isLoading && !board && (
+          <div className="pt-16 text-center text-sm text-[var(--text-3)]">Loading your machines…</div>
+        )}
+
+        {!notAssigned && !locked && error && !board && (
+          <div className="pt-16 text-center text-sm" style={{ color: TONE.red.text }}>
+            {errorText(error, "Couldn't load your machines. Check the connection.")}
+          </div>
+        )}
+
+        {!notAssigned && !locked && board && (
+          <main className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="flex flex-col gap-4">
+              {machines.map(m => <MachineCard key={m.id} machine={m} />)}
             </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a4fcc] text-[11px] font-bold text-white">
-            {board?.operator?.initials || '–'}
-          </span>
-          <span className="hidden text-sm font-medium sm:inline">{board?.operator?.name || user?.email}</span>
-          {!locked && !notAssigned && (
-            <button className={BTN + ' px-3 py-1.5 text-xs'} onClick={lock}>Lock</button>
-          )}
-          <button className={BTN + ' px-3 py-1.5 text-xs'} onClick={signOut}>Sign out</button>
-        </div>
-      </header>
-
-      {notAssigned && <NotAssigned onSignOut={signOut} />}
-
-      {!notAssigned && locked && (
-        <LockScreen name={board?.operator?.name || user?.email} onUnlocked={unlock} onSignOut={signOut} />
-      )}
-
-      {!notAssigned && !locked && isLoading && !board && (
-        <div className="p-8 text-center text-sm text-[var(--text-3,#9a9690)]">Loading your machines…</div>
-      )}
-
-      {!notAssigned && !locked && error && !board && (
-        <div className="p-8 text-center text-sm" style={{ color: TONE.red.text }}>
-          {errorText(error, "Couldn't load your machines. Check the connection.")}
-        </div>
-      )}
-
-      {!notAssigned && !locked && board && (
-        <main className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="flex flex-col gap-4">
-            {board.machines.map(m => <MachineCard key={m.id} machine={m} />)}
-          </div>
-          <QueueList rows={board.queue} firstNumber={nextCount + 1} />
-        </main>
-      )}
+            <QueueList rows={board.queue} firstNumber={nextCount + 1} />
+          </main>
+        )}
+      </div>
     </div>
   )
 }
