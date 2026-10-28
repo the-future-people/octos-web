@@ -25,6 +25,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     if (role === 'BRANCH_MANAGER')    return <Navigate to="/bm" replace />
     if (role === 'ATTENDANT')         return <Navigate to="/attendant" replace />
     if (role === 'FLOW_COORDINATOR')  return <Navigate to="/coordinator" replace />
+    if (role === 'OPERATOR')          return <Navigate to="/operator" replace />
     return <Navigate to="/login" replace />
   }
 

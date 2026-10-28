@@ -41,6 +41,7 @@ export default function LoginPage() {
       else if (role === 'BRANCH_MANAGER')   navigate('/bm')
       else if (role === 'ATTENDANT')        navigate('/attendant')
       else if (role === 'FLOW_COORDINATOR') navigate('/coordinator')
+      else if (role === 'OPERATOR')         navigate('/operator')
       else navigate('/')
 
     } catch (err) {
