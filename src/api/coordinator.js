@@ -67,8 +67,8 @@ export const getFloor = () =>
   client.get('/api/v1/jobs/coordinator/floor/')
 
 // The job on a machine is finished there; the next one moves up.
-export const markStepDone = (stepId) =>
-  client.post(`/api/v1/jobs/steps/${stepId}/done/`)
+export const markStepDone = (stepId, override) =>
+  client.post(`/api/v1/jobs/steps/${stepId}/done/`, override ? { override } : {})
 
 // Put a step on another machine of the same work that is up and fits.
 export const moveStep = (stepId, machineId) =>

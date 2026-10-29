@@ -149,7 +149,10 @@ function OnTheMachine({ row, machine, onDone, onCheck, busy }) {
             ? (machine.is_available ? 'Halted — resume it to carry on' : 'Waiting for this machine')
             : row.running_over ? 'Taking a little longer than usual' : `~${row.minutes_until_done} min left`}
         </span>
-        {!halted && (
+        {!halted && machine.operators?.length > 0 && !row.is_last && (
+          <StaffedNote row={row} operators={machine.operators} busy={busy} onDone={onDone} />
+        )}
+        {!halted && !(machine.operators?.length > 0 && !row.is_last) && (
           <button onClick={() => (row.is_last ? onCheck(row) : onDone(row))} disabled={busy}
             className="inline-flex items-center gap-1.5 min-h-[40px] px-4 text-sm font-bold
               bg-emerald-600 text-white rounded-xl hover:opacity-90 disabled:opacity-40">
@@ -157,6 +160,56 @@ function OnTheMachine({ row, machine, onDone, onCheck, busy }) {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * On a staffed machine, Done is the operator's: the board shows who and
+ * when instead of the button. Override closes it for them, but only with a
+ * reason, which is kept on the step and signed by whoever gave it.
+ */
+function StaffedNote({ row, operators, busy, onDone }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+
+  const name = row.started_by || operators.join(' and ')
+  const first = (name || 'the operator').split(' ')[0]
+  const started = row.started_at
+    ? new Date(row.started_at).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
+    : null
+
+  const submit = () => {
+    if (!reason.trim()) { setError('Give a reason first.'); return }
+    setError('')
+    onDone(row, reason.trim())
+  }
+
+  return (
+    <div className="text-right">
+      <div className="text-xs font-semibold text-[var(--text)]">
+        {name}{started ? ` · started ${started}` : ' · on the machine'}
+      </div>
+      <div className="text-[11px] text-[var(--text-3)]">
+        Done is {first}'s ·{' '}
+        <button onClick={() => setOpen(o => !o)} className="underline text-[var(--text-2)]">Override</button>
+      </div>
+      {open && (
+        <div className="mt-2 flex flex-col items-end gap-1.5">
+          <input
+            value={reason} maxLength={200} autoFocus
+            onChange={e => { setReason(e.target.value); setError('') }}
+            placeholder={`Why are you closing ${first}'s job?`}
+            className="w-64 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs text-[var(--text)]"
+          />
+          {error && <span className="text-[11px] text-red-600">{error}</span>}
+          <button onClick={submit} disabled={busy}
+            className="px-3 py-1.5 text-xs font-bold rounded-lg border border-[var(--border)] disabled:opacity-40">
+            {busy ? 'Saving…' : 'Close as done'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

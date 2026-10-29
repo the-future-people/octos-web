@@ -260,10 +260,10 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
     onError:    (e) => setError(detail(e, 'Could not stop that job.')),
   })
 
-  const stepDone = async (row) => {
+  const stepDone = async (row, override) => {
     setBusyStep(row.step)
     try {
-      await markStepDone(row.step)
+      await markStepDone(row.step, override)
       setError('')
       refresh()
     } catch (e) {
