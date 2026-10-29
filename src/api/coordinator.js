@@ -10,6 +10,10 @@ export const getProductionBoard = () =>
 export const verifyJob = (id, payload) =>
   client.post(`/api/v1/jobs/${id}/verify/`, payload)
 
+// Ordered vs file for every piece, and the checks a person signs.
+export const getIntakeCheck = (id) =>
+  client.get(`/api/v1/jobs/${id}/intake-check/`)
+
 export const rejectVerification = (id, payload) =>
   client.post(`/api/v1/jobs/${id}/verify/reject/`, payload)
 
