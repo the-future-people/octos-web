@@ -405,6 +405,7 @@ export default function ProductionBoard({ openJobId, setOpenJobId }) {
           onClose={close}
           onClear={(payload) => clear({ id: openJobId, ...payload })}
           clearing={clearing}
+          serverError={error}
           onSuspend={(outcome, note) => suspend({ id: openJobId, outcome, note })}
           suspending={suspending}
         />

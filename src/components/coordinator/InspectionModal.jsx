@@ -230,7 +230,7 @@ const SIGN_LABELS = { TEXT: 'Text read', EDGES: 'Edges checked' }
  * onSuspend:   (outcome, note) => hold the job
  */
 export default function InspectionModal({
-  job, row, onHeartbeat, onClose, onClear, clearing, onSuspend, suspending,
+  job, row, onHeartbeat, onClose, onClear, clearing, onSuspend, suspending, serverError,
 }) {
   const { user } = useAuth()
   const jobId = job?.id ?? row?.job
@@ -379,7 +379,7 @@ export default function InspectionModal({
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3">
-          <p className="m-0 text-[13px]" style={{ color: TONE.red.text }}>{error}</p>
+          <p className="m-0 text-[13px]" style={{ color: TONE.red.text }}>{error || serverError}</p>
           <div className="ml-auto flex gap-2">
             <button className={BTN} onClick={() => setHolding(true)} disabled={!job}>Hold and contact</button>
             <button onClick={clear} disabled={clearing || !data}
