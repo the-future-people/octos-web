@@ -329,12 +329,17 @@ export default function InspectionModal({
 
           {data && pieces.length > 1 && (
             <div className="mb-3 flex flex-wrap gap-1.5">
-              {pieces.map((p, i) => (
-                <button key={p.line} onClick={() => setActive(i)}
-                        className={`${BTN_SMALL} ${i === active ? '!bg-[var(--text)] !text-[var(--panel)]' : ''}`}>
-                  {p.product}
-                </button>
-              ))}
+              {pieces.map((p, i) => {
+                const size = p.rows.find(r => r.key === 'SIZE')?.ordered
+                const open = p.rows.some(r => (r.status === 'warn' || r.status === 'none') && !settled[`${p.line}:${r.key}`])
+                return (
+                  <button key={p.line} onClick={() => setActive(i)}
+                          className={`${BTN_SMALL} inline-flex items-center gap-1.5 ${i === active ? '!bg-[var(--text)] !text-[var(--panel)]' : ''}`}>
+                    {open && <span className="h-2 w-2 rounded-full" style={{ background: TONE.amber.border }} aria-label="Needs attention" />}
+                    {p.product}{size && size !== '—' ? ` · ${size}` : ''}
+                  </button>
+                )
+              })}
             </div>
           )}
 
