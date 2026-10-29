@@ -77,7 +77,8 @@ function errorText(err, fallback) {
 }
 
 function specLine(row) {
-  const parts = [`${row.quantity} pcs`]
+  const parts = [`${row.quantity} ${row.quantity === 1 ? 'pc' : 'pcs'}`]
+  if (row.size) parts.push(row.size)
   if (row.pages > 1) parts.push(`${row.pages} pages`)
   if (row.paper_size) parts.push(row.paper_size)
   if (row.is_color === true) parts.push('Colour')
@@ -142,8 +143,8 @@ function JobDetail({ row }) {
         </div>
       </div>
       {row.instructions && (
-        <div className="rounded-lg bg-[var(--bg)] px-3 py-2.5 text-xs text-[var(--text-2)]">
-          <span className="font-bold text-[var(--text)]">Instructions: </span>{row.instructions}
+        <div className="rounded-lg bg-[var(--bg)] px-3 py-2.5 text-xs text-[var(--text-2)] whitespace-pre-line">
+          <span className="font-bold text-[var(--text)]">Notes: </span>{row.instructions}
         </div>
       )}
       <Files files={row.files} />
@@ -380,7 +381,9 @@ function QueueList({ rows, firstNumber }) {
               {row.is_reprint && <Chip tone="orange">Reprint</Chip>}
             </div>
             <div className="truncate text-[13px] font-semibold text-[var(--text)]">{row.title}</div>
-            <div className="text-[11px] text-[var(--text-3)]">{row.quantity} pcs · {row.machine?.name}</div>
+            <div className="text-[11px] text-[var(--text-3)]">
+              {row.quantity} {row.quantity === 1 ? 'pc' : 'pcs'}{row.size ? ` · ${row.size}` : ''} · {row.machine?.name}
+            </div>
           </div>
           <SlackChip minutes={row.slack_minutes} />
         </div>
