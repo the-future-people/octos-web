@@ -12,6 +12,7 @@ import BMPortal        from './pages/bm/BMPortal'
 import AttendantPortal from './pages/attendant/AttendantPortal'
 import CoordinatorPortal from './pages/coordinator/CoordinatorPortal'
 import OperatorPortal from './pages/operator/OperatorPortal'
+import EyePortal from './pages/eye/EyePortal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,16 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <OperatorPortal />
+                </ProtectedRoute>
+              }
+            />
+            {/* The Eye of Agamotto. Any signed-in person reaches the page;
+                the server lets in only the business owner. */}
+            <Route
+              path="/eye"
+              element={
+                <ProtectedRoute>
+                  <EyePortal />
                 </ProtectedRoute>
               }
             />

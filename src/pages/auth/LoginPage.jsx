@@ -37,7 +37,9 @@ export default function LoginPage() {
 
       // Step 5 — redirect based on role
       const role = user.role_name
-      if (role === 'CASHIER')               navigate('/cashier')
+      // The owner goes straight to the Eye, whatever role they also hold.
+      if (user.is_business_owner)           navigate('/eye')
+      else if (role === 'CASHIER')          navigate('/cashier')
       else if (role === 'BRANCH_MANAGER')   navigate('/bm')
       else if (role === 'ATTENDANT')        navigate('/attendant')
       else if (role === 'FLOW_COORDINATOR') navigate('/coordinator')
