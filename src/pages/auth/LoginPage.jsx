@@ -38,7 +38,9 @@ export default function LoginPage() {
       // Step 5 — redirect based on role
       const role = user.role_name
       // The owner goes straight to the Eye, whatever role they also hold.
-      if (user.is_business_owner)           navigate('/eye')
+      // The user payload carries the owner flag as can_generate_branch_statement
+      // (the serializer returns obj.is_business_owner under that name).
+      if (user.is_business_owner || user.can_generate_branch_statement) navigate('/eye')
       else if (role === 'CASHIER')          navigate('/cashier')
       else if (role === 'BRANCH_MANAGER')   navigate('/bm')
       else if (role === 'ATTENDANT')        navigate('/attendant')
