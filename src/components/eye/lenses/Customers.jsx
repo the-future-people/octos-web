@@ -42,6 +42,7 @@ function Crowd({ nav }) {
         <Pane title={`THIS ${d.period === 'today' ? 'DAY' : d.period.toUpperCase()}`}>
           <Row label="New customers" value={d.new} /><Row label="Came back" value={d.returning} />
           <Row label="People · businesses" value={`${d.people} · ${d.businesses}`} />
+          {d.not_tied_to_a_branch != null && <Row label="Not tied to a branch yet" value={d.not_tied_to_a_branch} />}
         </Pane>
         <Pane title="TOP BY SPEND">{d.customers.slice(0, 5).map(c => <Row key={c.id} label={c.name} value={cedis(c.spend)} onClick={() => nav.open(c.id)} />)}</Pane>
         <Pane title="CREDIT CUSTOMERS">
