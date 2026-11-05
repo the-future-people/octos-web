@@ -1,422 +1,546 @@
 // src/components/bm/Inbox.jsx
-import { useState } from 'react'
+//
+// The inbox: conversations on the left, the open one on the right.
+// Colour carries who is speaking: mint is Octos, soft red is a person,
+// solid red is "needs you". Built from the Octos Inbox canvas (Nov 2026).
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { createPortal } from 'react-dom'
 import client from '../../api/client'
 
-const getConversations = (channel) =>
-  client.get('/api/v1/communications/', {
-    params: channel && channel !== 'ALL' ? { channel } : {}
-  }).then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.results || []) })
-
-const getConversation = (id) =>
-  client.get(`/api/v1/communications/${id}/`).then(r => r.data)
-
-function timeAgo(iso) {
-  if (!iso) return '—'
-  const diff = Math.floor((Date.now() - new Date(iso)) / 60000)
-  if (diff < 1)     return 'Just now'
-  if (diff < 60)    return `${diff}m ago`
-  if (diff < 1440)  return `${Math.floor(diff / 60)}h ago`
-  if (diff < 10080) return `${Math.floor(diff / 1440)}d ago`
-  return new Date(iso).toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
+const C = {
+  red: '#D0342C', redText: '#B42318', redDeep: '#8E2A22', redSoft: '#FDF0EF', redBorder: '#F3C6C2',
+  mint: '#E4F3EB', mintText: '#12241A', mintMeta: '#2C5B42', mintStrip: '#F2F8F4', mintBorder: '#D3EADD', mintIcon: '#1E6B47',
+  staff: '#FBE7E5', staffText: '#2A1412', staffMeta: '#7A3A33',
+  note: '#FFF8E6', noteBorder: '#E8C66A', noteText: '#3A2D05', noteMeta: '#7A5A06',
+  bubble: '#F1F2F4', amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
 }
 
-// Octos handed this conversation to a person and said why.
+const getConversations = () =>
+  client.get('/api/v1/communications/').then(r => {
+    const d = r.data
+    return Array.isArray(d) ? d : (d?.results || [])
+  })
+const getConversation = id => client.get(`/api/v1/communications/${id}/`).then(r => r.data)
+
 const needsYou = c => c?.handled_by === 'STAFF' && !!c?.handoff_reason
+const withPerson = c => c?.handled_by === 'STAFF' && !c?.handoff_reason
+const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
-function toTitleCase(str) {
-  if (!str) return str
-  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+function titleCase(s) {
+  return s ? s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : s
+}
+function nameOf(c) {
+  return titleCase(c?.display_name || c?.contact_name) || c?.contact_phone || 'Unknown'
+}
+function clock(iso) {
+  return new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
+    .toLowerCase().replace(/\s/g, '')
+}
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+function dayLabel(iso) {
+  const d = new Date(iso), now = new Date(), yesterday = new Date(now.getTime() - 86400000)
+  if (sameDay(d, now)) return 'Today'
+  if (sameDay(d, yesterday)) return 'Yesterday'
+  return d.toLocaleDateString('en-GH', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+function ago(iso) {
+  if (!iso) return ''
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  if (mins < 1440) return `${Math.floor(mins / 60)}h`
+  return dayLabel(iso)
+}
+function until(iso) {
+  const d = new Date(iso), now = new Date(), tomorrow = new Date(now.getTime() + 86400000)
+  if (sameDay(d, now)) return clock(iso)
+  if (sameDay(d, tomorrow)) return `${clock(iso)} tomorrow`
+  return `${dayLabel(iso)}, ${clock(iso)}`
+}
+// Who said it: the customer, a file they sent, Octos, a person, a staff-only
+// note, or an event (took over, handed back, resolved), which is one quiet line.
+function kindOf(m) {
+  if (m.is_internal_note) return m.channel === 'SYSTEM' ? 'event' : 'note'
+  if (m.direction === 'INBOUND') {
+    return (m.media_id || m.media_file || MEDIA.includes(m.message_type)) ? 'file' : 'customer'
+  }
+  return m.sent_by ? 'staff' : 'octos'
 }
 
-const CHANNEL_CONFIG = {
-  WHATSAPP: { label: 'WhatsApp', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-emerald-600">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-    </svg> },
-  EMAIL: { label: 'Email', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-600">
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-    </svg> },
-  SMS: { label: 'SMS', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg> },
-  TELEGRAM: { label: 'Telegram', color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-sky-500">
-      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-    </svg> },
+// ── Icons ───────────────────────────────────────────────────────────────
+const Svg = ({ size = 18, children, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>{children}</svg>
+)
+const WhatsAppIcon = p => <Svg {...p}><path d="M3.5 20.5 5 16a8.5 8.5 0 1 1 3.2 3.2Z" /><path d="M9 9.5c.3 2.3 2.2 4.3 4.5 4.8l1.2-1.2 1.8.8-.4 1.6c-3.6.3-7.4-3.4-7.2-7.1l1.6-.4.8 1.8Z" /></Svg>
+const MailIcon = p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></Svg>
+const SmsIcon = p => <Svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Svg>
+const PersonIcon = p => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Svg>
+const FolderIcon = p => <Svg {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></Svg>
+const SearchIcon = p => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>
+const CheckIcon = p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>
+const SendIcon = p => <Svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></Svg>
+const BackIcon = p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>
+const Spark = ({ size = 12, color = C.mintIcon }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+    <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4Z" />
+  </svg>
+)
+
+const CHANNEL = {
+  WHATSAPP: { label: 'WhatsApp', Icon: WhatsAppIcon, tile: '#E9F6EE', ink: '#1E7A4C' },
+  EMAIL: { label: 'Email', Icon: MailIcon, tile: '#EAF1FB', ink: '#2563A8' },
+  SMS: { label: 'SMS', Icon: SmsIcon, tile: '#FFF4E5', ink: '#A15C07' },
+}
+const channelOf = c => CHANNEL[c?.channel] || CHANNEL.SMS
+
+function ChannelTile({ channel, size = 40 }) {
+  const ch = CHANNEL[channel] || CHANNEL.SMS
+  return (
+    <span className="flex items-center justify-center shrink-0 rounded-xl"
+      style={{ width: size, height: size, background: ch.tile, color: ch.ink }}>
+      <ch.Icon size={size / 2} />
+    </span>
+  )
 }
 
-const STATUS_CONFIG = {
-  OPEN:     { label: 'Open',     bg: 'bg-amber-100',   text: 'text-amber-700'   },
-  RESOLVED: { label: 'Resolved', bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  ASSIGNED: { label: 'Assigned', bg: 'bg-blue-100',    text: 'text-blue-700'    },
-}
-
-// WhatsApp's own ticks, which staff already read without thinking. Only on
-// outbound WhatsApp messages; a failed one names Meta's reason on hover.
+// WhatsApp's own ticks; a failed message names Meta's reason on hover.
 function Ticks({ msg }) {
   const marks = {
-    QUEUED:    { text: '🕓', title: 'Sending' },
-    SENT:      { text: '✓',  title: 'Sent' },
+    QUEUED: { text: '🕓', title: 'Sending' },
+    SENT: { text: '✓', title: 'Sent' },
     DELIVERED: { text: '✓✓', title: 'Delivered' },
-    READ:      { text: '✓✓', title: 'Read', style: { color: '#53bdeb' } },
-    FAILED:    { text: 'Not delivered', title: msg.error || 'Not delivered',
-                 style: { color: '#ff8a8a', fontWeight: 700 } },
+    READ: { text: '✓✓', title: 'Read', style: { color: C.read } },
+    FAILED: { text: 'Not delivered', title: msg.error || 'Not delivered', style: { color: C.redText, fontWeight: 700 } },
   }
   const mark = marks[msg.status]
-  if (!mark) return null
-  return <span title={mark.title} style={{ marginLeft: 4, ...mark.style }}>{mark.text}</span>
+  if (!mark || msg.channel !== 'WHATSAPP') return null
+  return <span title={mark.title} style={{ letterSpacing: mark.text === '✓✓' ? -2 : 0, ...mark.style }}>{mark.text}</span>
 }
 
-// ── Conversation Detail Modal ─────────────────────────────────────────────────
-function ConversationModal({ convId, onClose }) {
+// ── The list ────────────────────────────────────────────────────────────
+function Row({ c, selected, onOpen }) {
+  const asked = needsYou(c)
+  return (
+    <button type="button" onClick={() => onOpen(c.id)}
+      className="flex gap-3 w-full text-left px-4 py-3.5 border-b border-[var(--border)] transition-colors"
+      style={{ background: selected ? C.redSoft : 'var(--panel)' }}>
+      <ChannelTile channel={c.channel} />
+      <span className="flex-1 min-w-0 flex flex-col gap-1">
+        <span className="flex justify-between gap-2 items-baseline">
+          <span className="font-bold text-[15px] truncate text-[var(--text)]">{nameOf(c)}</span>
+          <span className="text-xs text-[var(--text-3)] shrink-0">{ago(c.last_message_at)}</span>
+        </span>
+        <span className="text-[13px] truncate"
+          style={asked ? { color: C.redText, fontWeight: 600 } : { color: 'var(--text-2)' }}>
+          {asked ? `Needs you: ${c.handoff_reason}` : (c.last_message_preview || 'No messages yet')}
+        </span>
+        <span className="flex gap-1.5 items-center flex-wrap mt-0.5">
+          {asked ? (
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: C.red }}>Needs you</span>
+          ) : withPerson(c) ? (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.staff, color: C.redDeep }}>
+              {c.assigned_to_name || 'Staff'}
+            </span>
+          ) : c.channel === 'WHATSAPP' ? (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.mint, color: C.mintIcon }}>Octos</span>
+          ) : null}
+          {c.job && (
+            <span className="text-xs px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-2)] inline-flex items-center gap-1 max-w-[220px]">
+              <FolderIcon size={12} /><span className="truncate">Job {c.job.ref}, {c.job.what}</span>
+            </span>
+          )}
+          {c.unread_count > 0 && (
+            <span className="ml-auto w-2.5 h-2.5 rounded-full" style={{ background: C.red }} aria-label="Unread" />
+          )}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+// ── The open conversation ───────────────────────────────────────────────
+function StatusStrip({ conv }) {
+  if (needsYou(conv)) {
+    return (
+      <div className="mx-5 mt-4 px-4 py-3.5 rounded-2xl flex gap-3 items-start"
+        style={{ background: C.redSoft, border: `1px solid ${C.redBorder}` }}>
+        <span style={{ color: C.redText }} className="mt-0.5"><PersonIcon size={20} /></span>
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="font-bold" style={{ color: C.redDeep }}>
+            Octos asked for a person{conv.handled_since ? ` at ${clock(conv.handled_since)}` : ''}
+          </span>
+          <span className="leading-relaxed" style={{ color: '#3B2321' }}>{conv.handoff_reason}</span>
+          <span className="text-[13px]" style={{ color: '#6B4743' }}>Octos keeps answering until someone takes over.</span>
+        </div>
+      </div>
+    )
+  }
+  if (withPerson(conv)) {
+    return (
+      <div className="mx-5 mt-4 px-4 py-3 rounded-2xl flex gap-2.5 items-center"
+        style={{ background: C.staff, border: `1px solid ${C.redBorder}`, color: '#5C1F1A' }}>
+        <PersonIcon size={18} />
+        <span>
+          {conv.assigned_to_name || 'A person'} is handling this
+          {conv.handled_since ? ` since ${clock(conv.handled_since)}` : ''}. Octos is quiet until you hand it back.
+        </span>
+      </div>
+    )
+  }
+  if (conv.channel !== 'WHATSAPP') return null
+  return (
+    <div className="mx-5 mt-4 px-4 py-3 rounded-2xl flex gap-2.5 items-center"
+      style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
+      <Spark size={16} />
+      <span>Octos is answering. Take over, or just reply, to step in.</span>
+    </div>
+  )
+}
+
+function JobCard({ job }) {
+  if (!job) return null
+  const done = job.ready_to_collect ? 'Ready to collect' : job.out_for_delivery ? 'Out for delivery' : job.stage
+  const parts = [
+    job.what,
+    job.promised_ready && `Promised ${job.promised_ready}`,
+    job.paid_in_full ? 'Paid in full' : job.balance_due && `${job.balance_due} to pay`,
+  ].filter(Boolean)
+  return (
+    <div className="mx-5 mt-3 px-4 py-3.5 rounded-2xl border border-[var(--border)] flex gap-3 items-center">
+      <span className="text-[var(--text-2)]"><FolderIcon size={22} /></span>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-[var(--text)]">Job {job.ref}</span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: C.amberSoft, color: C.amberText }}>{done}</span>
+          {job.branch && <span className="text-xs text-[var(--text-3)]">{job.branch}</span>}
+        </span>
+        <span className="text-[13px] text-[var(--text-2)]">{parts.join('. ')}</span>
+      </div>
+    </div>
+  )
+}
+
+function Bubble({ m }) {
+  const kind = kindOf(m)
+  if (kind === 'event') {
+    return (
+      <div className="flex items-center justify-center gap-2 text-xs text-[var(--text-3)] py-1 px-6 text-center">
+        <PersonIcon size={14} /><span>{m.body}, {clock(m.created_at)}</span>
+      </div>
+    )
+  }
+  if (kind === 'note') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[75%] rounded-xl px-3.5 py-2.5 flex flex-col gap-1"
+          style={{ background: C.note, border: `1px dashed ${C.noteBorder}` }}>
+          <span className="text-xs font-bold" style={{ color: C.noteMeta }}>Note, only staff see this</span>
+          <span className="leading-relaxed whitespace-pre-wrap" style={{ color: C.noteText }}>{m.body}</span>
+          <span className="text-[11px] self-end" style={{ color: C.noteMeta }}>{m.sent_by_name || 'Staff'}, {clock(m.created_at)}</span>
+        </div>
+      </div>
+    )
+  }
+  if (kind === 'customer' || kind === 'file') {
+    return (
+      <div className="flex">
+        <div className="max-w-[75%] flex flex-col gap-1 px-3.5 py-2.5"
+          style={{ background: C.bubble, borderRadius: '16px 16px 16px 6px' }}>
+          {kind === 'file' && (
+            <span className="flex items-center gap-3 py-1">
+              <span className="w-10 h-12 rounded-lg flex items-center justify-center text-[11px] font-bold"
+                style={{ background: C.redSoft, color: C.redText }}>{(m.message_type || 'FILE').slice(0, 3)}</span>
+              <span className="flex flex-col">
+                <span className="font-semibold text-[var(--text)]">{titleCase(m.message_type) || 'File'}</span>
+                <span className="text-xs text-[var(--text-3)]">
+                  {m.media_file ? 'Saved' : 'Sent on WhatsApp, not saved yet'}
+                </span>
+              </span>
+            </span>
+          )}
+          {m.body && <span className="leading-relaxed whitespace-pre-wrap text-[var(--text)]">{m.body}</span>}
+          <span className="text-[11px] text-[var(--text-3)] self-end">{clock(m.created_at)}</span>
+        </div>
+      </div>
+    )
+  }
+  const octos = kind === 'octos'
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[75%] flex flex-col gap-1 px-3.5 py-2.5"
+        style={{ background: octos ? C.mint : C.staff, borderRadius: '16px 16px 6px 16px' }}>
+        <span className="leading-relaxed whitespace-pre-wrap" style={{ color: octos ? C.mintText : C.staffText }}>{m.body}</span>
+        <span className="text-[11px] self-end flex items-center gap-1.5" style={{ color: octos ? C.mintMeta : C.staffMeta }}>
+          {octos && <Spark />}
+          {octos ? 'Octos' : (m.sent_by_name || 'Staff')}, {clock(m.created_at)}
+          <Ticks msg={m} />
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function Thread({ convId, onBack }) {
   const queryClient = useQueryClient()
   const [reply, setReply] = useState('')
+  const [asNote, setAsNote] = useState(false)
   const [error, setError] = useState('')
+  const scroller = useRef(null)
 
   const { data: conv, isLoading } = useQuery({
     queryKey: ['conversation', convId],
-    queryFn:  () => getConversation(convId),
-    staleTime: 10_000,
-    // While open, refresh every 15s: ticks move on (sent, delivered, read)
-    // and new customer messages appear without closing the drawer.
-    refetchInterval: 15_000,
+    queryFn: () => getConversation(convId),
+    staleTime: 2_000,
+    // While open, every 3 seconds: new messages and ticks appear on their own.
+    refetchInterval: 3_000,
   })
+  const messages = conv?.messages || []
 
-  const replyMut = useMutation({
-    mutationFn: () => client.post(`/api/v1/communications/${convId}/reply/`, { body: reply }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
-      queryClient.invalidateQueries({ queryKey: ['conversations'] })
-      setReply('')
-      setError('')
-    },
-    // The server says why (a closed WhatsApp window, say). Show it, and keep
-    // the typed text so nothing is lost.
-    onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
-  })
+  useEffect(() => {
+    if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight
+  }, [messages.length, convId])
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
     queryClient.invalidateQueries({ queryKey: ['conversations'] })
   }
-  const takeOverMut = useMutation({
-    mutationFn: () => client.post(`/api/v1/communications/${convId}/take-over/`),
-    onSuccess: refresh,
-  })
-  const handBackMut = useMutation({
-    mutationFn: () => client.post(`/api/v1/communications/${convId}/hand-back/`),
-    onSuccess: refresh,
-  })
-
-  const resolveMut = useMutation({
-    mutationFn: () => client.post(`/api/v1/communications/${convId}/resolve/`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
-      queryClient.invalidateQueries({ queryKey: ['conversations'] })
-    },
+  const act = path => ({ mutationFn: () => client.post(`/api/v1/communications/${convId}/${path}/`), onSuccess: refresh })
+  const takeOver = useMutation(act('take-over'))
+  const handBack = useMutation(act('hand-back'))
+  const resolve = useMutation(act('resolve'))
+  const send = useMutation({
+    mutationFn: () => client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote }),
+    onSuccess: () => { setReply(''); setError(''); setAsNote(false); refresh() },
+    // The server says why (a closed WhatsApp window, say); the typed text stays.
+    onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
 
-  const cfg    = conv ? (CHANNEL_CONFIG[conv.channel] || CHANNEL_CONFIG.SMS) : null
-  const status = conv ? (STATUS_CONFIG[conv.status] || STATUS_CONFIG.OPEN) : null
-  const messages = conv?.messages || []
+  if (isLoading || !conv) {
+    return <div className="flex-1 p-6 space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-12 bg-[var(--bg)] rounded-xl animate-pulse" />)}</div>
+  }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-end bg-black/50"
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-[var(--panel)] w-full max-w-lg h-full flex flex-col shadow-2xl">
+  const ch = channelOf(conv)
+  const closes = conv.window_closes_at
+  const windowLine = conv.channel !== 'WHATSAPP' || !closes ? ''
+    : new Date(closes) > new Date() ? `Free replies open until ${until(closes)}`
+    : 'Free replies closed until the customer writes again'
+  const sub = [ch.label, conv.contact_phone || conv.contact_email, windowLine].filter(Boolean).join('. ')
+  const resolved = conv.status === 'RESOLVED'
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)] shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-9 h-9 rounded-full ${cfg?.bg} border ${cfg?.border}
-              flex items-center justify-center shrink-0`}>
-              {cfg?.icon}
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-sm text-[var(--text)] truncate">
-                {toTitleCase(conv?.contact_name) || conv?.contact_phone || '—'}
-              </div>
-              <div className="text-[10px] text-[var(--text-3)]">
-                {conv?.contact_phone || conv?.contact_email}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {conv && conv.status !== 'RESOLVED' && (conv.handled_by === 'STAFF' ? (
-              <button onClick={() => handBackMut.mutate()} disabled={handBackMut.isPending}
-                className="px-3 py-1.5 text-xs font-bold bg-zinc-100 text-zinc-700
-                  border border-zinc-200 rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-40">
-                Hand back to Octos
-              </button>
-            ) : (
-              <button onClick={() => takeOverMut.mutate()} disabled={takeOverMut.isPending}
-                className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-700
-                  border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-40">
-                Take over
-              </button>
-            ))}
-            {conv?.status === 'OPEN' && (
-              <button onClick={() => resolveMut.mutate()} disabled={resolveMut.isPending}
-                className="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700
-                  border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40">
-                Resolve
-              </button>
-            )}
-            <button onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full
-                hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
-          </div>
+  const submit = () => { if (reply.trim() && !send.isPending) send.mutate() }
+  const onKey = e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
+  }
+
+  let lastDay = ''
+  return (
+    <div className="flex flex-col min-h-0 h-full">
+      <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-[var(--border)]">
+        <button type="button" onClick={onBack} aria-label="All conversations"
+          className="lg:hidden w-11 h-11 -ml-2 flex items-center justify-center rounded-xl text-[var(--text)]"><BackIcon size={20} /></button>
+        <ChannelTile channel={conv.channel} size={44} />
+        <div className="flex-1 min-w-[180px] flex flex-col gap-0.5">
+          <h2 className="m-0 text-lg font-bold text-[var(--text)]">{nameOf(conv)}</h2>
+          <span className="text-[13px] text-[var(--text-3)]">{sub}</span>
         </div>
-
-        {conv && (
-          <div className={`px-5 py-2 text-xs border-b border-[var(--border)] shrink-0
-            ${needsYou(conv) ? 'bg-red-50 text-red-700'
-              : conv.handled_by === 'STAFF' ? 'bg-blue-50 text-blue-700'
-              : 'bg-[var(--bg)] text-[var(--text-3)]'}`}>
-            {needsYou(conv) ? `Octos asked for a person: ${conv.handoff_reason}`
-              : conv.handled_by === 'STAFF' ? `${conv.assigned_to_name || 'Staff'} is handling this. Octos is quiet.`
-              : 'Octos is handling this. Reply or take over to step in.'}
-          </div>
+        {!resolved && conv.channel === 'WHATSAPP' && (withPerson(conv) ? (
+          <button type="button" onClick={() => handBack.mutate()} disabled={handBack.isPending}
+            className="h-11 px-4 rounded-xl font-bold text-sm flex items-center gap-2 disabled:opacity-40"
+            style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
+            <Spark size={14} />Hand back to Octos
+          </button>
+        ) : (
+          <button type="button" onClick={() => takeOver.mutate()} disabled={takeOver.isPending}
+            className="h-11 px-5 rounded-xl font-bold text-sm text-white bg-[var(--text)] disabled:opacity-40">
+            Take over
+          </button>
+        ))}
+        {!resolved && (
+          <button type="button" onClick={() => resolve.mutate()} disabled={resolve.isPending}
+            className="h-11 px-4 rounded-xl font-semibold text-sm flex items-center gap-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
+            <CheckIcon size={16} />Resolve
+          </button>
         )}
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-12 bg-[var(--bg)] rounded-xl animate-pulse" />)}
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>
-          ) : (
-            messages.map(msg => {
-              const isOutbound = msg.direction === 'OUTBOUND'
-              const isNote     = msg.is_internal_note
-              return (
-                <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] px-3.5 py-2.5 rounded-2xl text-sm
-                    ${isNote
-                      ? 'bg-amber-50 border border-amber-200 text-amber-800 w-full max-w-full'
-                      : isOutbound
-                        ? 'bg-[var(--text)] text-white rounded-br-sm'
-                        : 'bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] rounded-bl-sm'
-                    }`}>
-                    {isNote && <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider mb-1">Internal Note</div>}
-                    <div className="leading-relaxed">{msg.body}</div>
-                    <div className={`text-[10px] mt-1 ${isOutbound ? 'text-white/60' : 'text-[var(--text-3)]'} text-right`}>
-                      {/* An outbound message with no staff member on it was sent by Octos. */}
-                      {isOutbound && !isNote && `${msg.sent_by_name || 'Octos'} · `}
-                      {timeAgo(msg.created_at)}
-                      {isOutbound && !isNote && msg.channel === 'WHATSAPP' && <Ticks msg={msg} />}
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-
-        {/* Reply box */}
-        {conv?.status !== 'RESOLVED' && (
-          <div className="px-5 py-4 border-t border-[var(--border)] shrink-0">
-            <div className="flex gap-2">
-              <textarea
-                rows={2}
-                value={reply}
-                onChange={e => { setReply(e.target.value); setError('') }}
-                placeholder={conv?.handled_by === 'OCTOS'
-                  ? 'Replying takes this over from Octos…'
-                  : `Reply via ${cfg?.label || 'message'}…`}
-                className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
-                  rounded-xl outline-none focus:border-[var(--border-dark)] transition-colors resize-none"
-              />
-              <button
-                onClick={() => reply.trim() && replyMut.mutate()}
-                disabled={!reply.trim() || replyMut.isPending}
-                className="px-4 py-2 bg-[var(--text)] text-white text-sm font-bold
-                  rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0 self-end">
-                {replyMut.isPending ? '…' : 'Send'}
-              </button>
-            </div>
-            {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-          </div>
-        )}
-
       </div>
-    </div>,
-    document.body
+
+      {!resolved && <StatusStrip conv={conv} />}
+      <JobCard job={conv.job_card} />
+
+      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-2.5">
+        {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
+        {messages.map(m => {
+          const day = dayLabel(m.created_at)
+          const separator = day !== lastDay
+          lastDay = day
+          return (
+            <div key={m.id} className="flex flex-col gap-2.5">
+              {separator && (
+                <div className="flex items-center gap-3 text-xs text-[var(--text-3)] py-1">
+                  <span className="flex-1 h-px bg-[var(--border)]" /><span>{day}</span><span className="flex-1 h-px bg-[var(--border)]" />
+                </div>
+              )}
+              <Bubble m={m} />
+            </div>
+          )
+        })}
+      </div>
+
+      {!resolved && (
+        <div className="border-t border-[var(--border)] px-5 pt-3.5 pb-4 flex flex-col gap-2">
+          <div className="flex gap-2.5 items-end">
+            <label htmlFor="reply" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
+            <textarea id="reply" rows={1} value={reply}
+              onChange={e => { setReply(e.target.value); setError('') }} onKeyDown={onKey}
+              placeholder={asNote ? 'Write a note only staff see' : `Reply to ${nameOf(conv)}`}
+              className="flex-1 min-h-[44px] max-h-40 px-3.5 py-2.5 text-sm rounded-xl outline-none resize-none text-[var(--text)]"
+              style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: 'var(--panel)', border: '1px solid var(--border)' }} />
+            <button type="button" onClick={submit} disabled={!reply.trim() || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
+              className="w-12 h-11 shrink-0 rounded-xl flex items-center justify-center text-white disabled:opacity-40"
+              style={{ background: asNote ? C.noteMeta : C.red }}>
+              {asNote ? <CheckIcon size={20} /> : <SendIcon size={20} />}
+            </button>
+          </div>
+          {error && <p className="text-xs m-0" style={{ color: C.redText }}>{error}</p>}
+          <div className="flex gap-4 flex-wrap text-xs text-[var(--text-3)]">
+            <span>
+              {asNote ? 'Only staff see notes.' : conv.handled_by === 'OCTOS' || needsYou(conv) ? 'Sending takes this conversation over from Octos.' : ''}
+              {' '}Enter sends, Shift+Enter adds a line.
+            </span>
+            <button type="button" onClick={() => setAsNote(n => !n)} className="underline text-[var(--text-2)]">
+              {asNote ? 'Write a reply instead' : 'Write a note only staff see'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
-// ── Main Inbox ─────────────────────────────────────────────────────────────────
-const CHANNELS = [
-  { key: 'ALL',      label: 'All'      },
-  { key: 'WHATSAPP', label: 'WhatsApp' },
-  { key: 'EMAIL',    label: 'Email'    },
-  { key: 'SMS',      label: 'SMS'      },
-  { key: 'TELEGRAM', label: 'Telegram' },
+// ── The page ────────────────────────────────────────────────────────────
+const TABS = [{ key: 'ALL', label: 'All' }, { key: 'WHATSAPP' }, { key: 'EMAIL' }, { key: 'SMS' }]
+const FILTERS = [
+  { key: 'needs', label: 'Needs you', test: needsYou },
+  { key: 'octos', label: 'Octos', test: c => c.handled_by === 'OCTOS' && c.channel === 'WHATSAPP' },
+  { key: 'people', label: 'People', test: withPerson },
 ]
 
 export default function Inbox() {
-  const [channel,    setChannel]    = useState('ALL')
+  const [channel, setChannel] = useState('ALL')
+  const [filter, setFilter] = useState(null)
+  const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
 
   const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ['conversations', channel],
-    queryFn:  () => getConversations(channel),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    queryKey: ['conversations'],
+    queryFn: getConversations,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
     placeholderData: prev => prev,
   })
 
-  const totalUnread = conversations.reduce((s, c) => s + (c.unread_count || 0), 0)
+  const unreadIn = key => conversations.filter(c => (key === 'ALL' || c.channel === key) && c.unread_count > 0).length
+  const needsCount = conversations.filter(needsYou).length
 
-  // Needs you first, then the newest.
-  const sorted = [...conversations].sort((a, b) =>
-    (needsYou(b) - needsYou(a)) ||
-    (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const f = FILTERS.find(x => x.key === filter)
+    return conversations
+      .filter(c => channel === 'ALL' || c.channel === channel)
+      .filter(c => !f || f.test(c))
+      .filter(c => !q || [nameOf(c), c.last_message_preview, c.job?.ref, c.job?.what]
+        .some(v => (v || '').toLowerCase().includes(q)))
+      // Needs you first, then the newest.
+      .sort((a, b) => (needsYou(b) - needsYou(a)) ||
+        (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
+  }, [conversations, channel, filter, query])
+
+  // On a wide screen, open the first conversation; on a phone, start with the list.
+  useEffect(() => {
+    if (!selectedId && shown.length && window.matchMedia('(min-width: 1024px)').matches) setSelectedId(shown[0].id)
+  }, [shown, selectedId])
 
   return (
-    <div className="p-5 sm:p-6 space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-[var(--text)]">Inbox</h2>
-          <p className="text-xs text-[var(--text-3)] mt-0.5">
-            {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
-            {totalUnread > 0 && <span className="text-amber-600 font-bold ml-1">· {totalUnread} unread</span>}
-          </p>
+    <div className="p-5 sm:p-6 flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex-1 min-w-[240px] flex flex-col gap-1">
+          <h2 className="m-0 text-2xl font-bold tracking-tight text-[var(--text)]">Inbox</h2>
+          <span className="text-sm text-[var(--text-2)]">
+            {needsCount > 0 && <span className="font-semibold" style={{ color: C.redText }}>{needsCount} need you, </span>}
+            {unreadIn('ALL')} unread. Octos is answering the rest.
+          </span>
+        </div>
+        <div className="relative flex-[0_1_420px] min-w-[220px]">
+          <label htmlFor="inbox-search" className="sr-only">Search conversations</label>
+          <span className="absolute left-3.5 top-3 text-[var(--text-3)]"><SearchIcon size={18} /></span>
+          <input id="inbox-search" type="search" value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search names, messages or jobs"
+            className="w-full h-11 pl-10 pr-3 text-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] outline-none focus:border-[var(--border-dark)]" />
         </div>
       </div>
 
-      {/* Channel tabs */}
-      <div className="flex gap-1 bg-black/5 p-1 rounded-xl overflow-x-auto">
-        {CHANNELS.map(c => {
-          const cfg = CHANNEL_CONFIG[c.key]
-          const channelConvs = c.key === 'ALL'
-            ? conversations
-            : conversations.filter(cv => cv.channel === c.key)
-          const channelUnread = channelConvs.reduce((s, cv) => s + (cv.unread_count || 0), 0)
-
+      <div role="tablist" aria-label="Channel" className="flex gap-2 flex-wrap">
+        {TABS.map(t => {
+          const active = channel === t.key
+          const count = unreadIn(t.key)
+          const ch = CHANNEL[t.key]
           return (
-            <button key={c.key} onClick={() => setChannel(c.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg
-                transition-colors whitespace-nowrap flex-shrink-0
-                ${channel === c.key
-                  ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
-                  : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-                }`}>
-              {cfg && <span>{cfg.icon}</span>}
-              {c.label}
-              {channelUnread > 0 && (
-                <span className="px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-black rounded-full">
-                  {channelUnread}
-                </span>
-              )}
-              {/* Telegram placeholder badge */}
-              {c.key === 'TELEGRAM' && (
-                <span className="px-1.5 py-0.5 bg-zinc-200 text-zinc-500 text-[9px] font-bold rounded-full">
-                  Soon
-                </span>
+            <button key={t.key} type="button" role="tab" aria-selected={active} onClick={() => setChannel(t.key)}
+              className="h-10 px-3.5 rounded-xl text-sm flex items-center gap-2 transition-colors"
+              style={active ? { background: C.red, color: '#FFFFFF', fontWeight: 700 }
+                : { background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text)', fontWeight: 600 }}>
+              {ch && <span style={{ color: active ? '#FFFFFF' : ch.ink }}><ch.Icon size={18} /></span>}
+              {t.label || ch.label}
+              {count > 0 && (
+                <span className="min-w-5 h-5 px-1 rounded-full text-xs flex items-center justify-center"
+                  style={active ? { background: '#FFFFFF', color: C.redText } : { background: C.red, color: '#FFFFFF' }}>{count}</span>
               )}
             </button>
           )
         })}
       </div>
 
-      {/* Conversation list */}
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-16 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />
-          ))}
-        </div>
-      ) : conversations.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          flex flex-col items-center justify-center py-16">
-          <div className="text-3xl mb-3">💬</div>
-          <p className="text-sm font-semibold text-[var(--text-2)]">No conversations</p>
-          <p className="text-xs text-[var(--text-3)] mt-1">
-            {channel === 'TELEGRAM'
-              ? 'Telegram integration coming soon'
-              : 'Messages from customers will appear here'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          {sorted.map(conv => {
-            const cfg    = CHANNEL_CONFIG[conv.channel] || CHANNEL_CONFIG.SMS
-            const status = STATUS_CONFIG[conv.status]   || STATUS_CONFIG.OPEN
-            const hasUnread = (conv.unread_count || 0) > 0
-            const asked     = needsYou(conv)
-
-            return (
-              <div key={conv.id}
-                onClick={() => setSelectedId(conv.id)}
-                className={`bg-[var(--panel)] border rounded-xl px-4 py-3.5 cursor-pointer
-                  hover:border-[var(--border-dark)] transition-colors
-                  ${asked ? 'border-red-300' : hasUnread ? 'border-amber-200' : 'border-[var(--border)]'}`}>
-                <div className="flex items-center gap-3">
-
-                  {/* Channel icon */}
-                  <div className={`w-9 h-9 rounded-full ${cfg.bg} border ${cfg.border}
-                    flex items-center justify-center shrink-0`}>
-                    {cfg.icon}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-sm font-bold truncate
-                          ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--text-2)]'}`}>
-                          {toTitleCase(conv.contact_name) || conv.contact_phone || conv.contact_email || 'Unknown'}
-                        </span>
-                        {hasUnread && (
-                          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full shrink-0" />
-                        )}
-                      </div>
-                      <span className="text-[10px] text-[var(--text-3)] shrink-0">
-                        {timeAgo(conv.last_message_at)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`text-xs truncate flex-1 ${asked ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
-                        {asked ? `Needs you: ${conv.handoff_reason}` : (conv.last_message_preview || 'No messages yet')}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
-                          ${conv.handled_by === 'STAFF' ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-600'}`}>
-                          {conv.handled_by === 'STAFF' ? (conv.assigned_to_name || 'Staff') : 'Octos'}
-                        </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
-                          ${status.bg} ${status.text}`}>
-                          {status.label}
-                        </span>
-                        {conv.unread_count > 0 && (
-                          <span className="w-5 h-5 bg-amber-500 text-white text-[9px] font-black
-                            rounded-full flex items-center justify-center">
-                            {conv.unread_count}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+      <div className="flex gap-4 items-stretch" style={{ height: 'calc(100vh - 290px)', minHeight: 520 }}>
+        <section aria-label="Conversations"
+          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[380px] shrink-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
+          <div className="flex gap-2 flex-wrap p-3.5 border-b border-[var(--border)]">
+            {FILTERS.map(f => {
+              const on = filter === f.key
+              const red = f.key === 'needs'
+              return (
+                <button key={f.key} type="button" aria-pressed={on} onClick={() => setFilter(on ? null : f.key)}
+                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold"
+                  style={on ? { background: red ? C.red : 'var(--text)', color: '#FFFFFF', border: '1px solid transparent' }
+                    : red ? { background: C.redSoft, color: C.redText, border: `1px solid ${C.redBorder}` }
+                    : { background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }}>
+                  {f.label}{red && needsCount ? `, ${needsCount}` : ''}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              [1, 2, 3].map(i => <div key={i} className="h-20 m-3 bg-[var(--bg)] rounded-xl animate-pulse" />)
+            ) : shown.length === 0 ? (
+              <div className="p-8 text-center text-sm text-[var(--text-3)]">
+                {query || filter ? 'Nothing matches. Clear the search or filter to see everything.' : 'Messages from customers will appear here.'}
               </div>
-            )
-          })}
-        </div>
-      )}
+            ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
+          </div>
+        </section>
 
-      {selectedId && (
-        <ConversationModal convId={selectedId} onClose={() => setSelectedId(null)} />
-      )}
+        <section aria-label="Conversation"
+          className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-1 min-w-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
+          {selectedId ? (
+            <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-3)]">Choose a conversation to read it.</div>
+          )}
+        </section>
+      </div>
     </div>
   )
 }
