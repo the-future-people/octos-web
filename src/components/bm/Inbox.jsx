@@ -52,15 +52,35 @@ const STATUS_CONFIG = {
   ASSIGNED: { label: 'Assigned', bg: 'bg-blue-100',    text: 'text-blue-700'    },
 }
 
+// WhatsApp's own ticks, which staff already read without thinking. Only on
+// outbound WhatsApp messages; a failed one names Meta's reason on hover.
+function Ticks({ msg }) {
+  const marks = {
+    QUEUED:    { text: '🕓', title: 'Sending' },
+    SENT:      { text: '✓',  title: 'Sent' },
+    DELIVERED: { text: '✓✓', title: 'Delivered' },
+    READ:      { text: '✓✓', title: 'Read', style: { color: '#53bdeb' } },
+    FAILED:    { text: 'Not delivered', title: msg.error || 'Not delivered',
+                 style: { color: '#ff8a8a', fontWeight: 700 } },
+  }
+  const mark = marks[msg.status]
+  if (!mark) return null
+  return <span title={mark.title} style={{ marginLeft: 4, ...mark.style }}>{mark.text}</span>
+}
+
 // ── Conversation Detail Modal ─────────────────────────────────────────────────
 function ConversationModal({ convId, onClose }) {
   const queryClient = useQueryClient()
   const [reply, setReply] = useState('')
+  const [error, setError] = useState('')
 
   const { data: conv, isLoading } = useQuery({
     queryKey: ['conversation', convId],
     queryFn:  () => getConversation(convId),
     staleTime: 10_000,
+    // While open, refresh every 15s: ticks move on (sent, delivered, read)
+    // and new customer messages appear without closing the drawer.
+    refetchInterval: 15_000,
   })
 
   const replyMut = useMutation({
@@ -69,7 +89,11 @@ function ConversationModal({ convId, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
       setReply('')
+      setError('')
     },
+    // The server says why (a closed WhatsApp window, say). Show it, and keep
+    // the typed text so nothing is lost.
+    onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
 
   const resolveMut = useMutation({
@@ -144,7 +168,10 @@ function ConversationModal({ convId, onClose }) {
                     {isNote && <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider mb-1">Internal Note</div>}
                     <div className="leading-relaxed">{msg.body}</div>
                     <div className={`text-[10px] mt-1 ${isOutbound ? 'text-white/60' : 'text-[var(--text-3)]'} text-right`}>
+                      {/* An outbound message with no staff member on it was sent by Octos. */}
+                      {isOutbound && !isNote && `${msg.sent_by_name || 'Octos'} · `}
                       {timeAgo(msg.created_at)}
+                      {isOutbound && !isNote && msg.channel === 'WHATSAPP' && <Ticks msg={msg} />}
                     </div>
                   </div>
                 </div>
@@ -160,7 +187,7 @@ function ConversationModal({ convId, onClose }) {
               <textarea
                 rows={2}
                 value={reply}
-                onChange={e => setReply(e.target.value)}
+                onChange={e => { setReply(e.target.value); setError('') }}
                 placeholder={`Reply via ${cfg?.label || 'message'}…`}
                 className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
                   rounded-xl outline-none focus:border-[var(--border-dark)] transition-colors resize-none"
@@ -173,6 +200,7 @@ function ConversationModal({ convId, onClose }) {
                 {replyMut.isPending ? '…' : 'Send'}
               </button>
             </div>
+            {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
           </div>
         )}
 
