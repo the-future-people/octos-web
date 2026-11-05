@@ -125,15 +125,15 @@ function Row({ c, selected, onOpen }) {
   const asked = needsYou(c)
   return (
     <button type="button" onClick={() => onOpen(c.id)}
-      className="flex gap-3 w-full text-left px-4 py-3.5 border-b border-[var(--border)] transition-colors"
+      className="flex gap-2.5 w-full text-left px-3.5 py-3 border-b border-[var(--border)] transition-colors"
       style={{ background: selected ? C.redSoft : 'var(--panel)' }}>
-      <ChannelTile channel={c.channel} />
+      <ChannelTile channel={c.channel} size={34} />
       <span className="flex-1 min-w-0 flex flex-col gap-1">
         <span className="flex justify-between gap-2 items-baseline">
-          <span className="font-bold text-[15px] truncate text-[var(--text)]">{nameOf(c)}</span>
+          <span className="font-semibold text-sm truncate text-[var(--text)]">{nameOf(c)}</span>
           <span className="text-xs text-[var(--text-3)] shrink-0">{ago(c.last_message_at)}</span>
         </span>
-        <span className="text-[13px] truncate"
+        <span className="text-[12.5px] truncate"
           style={asked ? { color: C.redText, fontWeight: 600 } : { color: 'var(--text-2)' }}>
           {asked ? `Needs you: ${c.handoff_reason}` : (c.last_message_preview || 'No messages yet')}
         </span>
@@ -165,9 +165,9 @@ function Row({ c, selected, onOpen }) {
 function StatusStrip({ conv }) {
   if (needsYou(conv)) {
     return (
-      <div className="mx-5 mt-4 px-4 py-3.5 rounded-2xl flex gap-3 items-start"
+      <div className="mx-4 mt-3 px-3.5 py-2.5 rounded-xl flex gap-2.5 items-start text-[13px]"
         style={{ background: C.redSoft, border: `1px solid ${C.redBorder}` }}>
-        <span style={{ color: C.redText }} className="mt-0.5"><PersonIcon size={20} /></span>
+        <span style={{ color: C.redText }} className="mt-0.5"><PersonIcon size={17} /></span>
         <div className="flex flex-col gap-1 min-w-0">
           <span className="font-bold" style={{ color: C.redDeep }}>
             Octos asked for a person{conv.handled_since ? ` at ${clock(conv.handled_since)}` : ''}
@@ -180,7 +180,7 @@ function StatusStrip({ conv }) {
   }
   if (withPerson(conv)) {
     return (
-      <div className="mx-5 mt-4 px-4 py-3 rounded-2xl flex gap-2.5 items-center"
+      <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
         style={{ background: C.staff, border: `1px solid ${C.redBorder}`, color: '#5C1F1A' }}>
         <PersonIcon size={18} />
         <span>
@@ -192,7 +192,7 @@ function StatusStrip({ conv }) {
   }
   if (conv.channel !== 'WHATSAPP') return null
   return (
-    <div className="mx-5 mt-4 px-4 py-3 rounded-2xl flex gap-2.5 items-center"
+    <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
       style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
       <Spark size={16} />
       <span>Octos is answering. Take over, or just reply, to step in.</span>
@@ -209,8 +209,8 @@ function JobCard({ job }) {
     job.paid_in_full ? 'Paid in full' : job.balance_due && `${job.balance_due} to pay`,
   ].filter(Boolean)
   return (
-    <div className="mx-5 mt-3 px-4 py-3.5 rounded-2xl border border-[var(--border)] flex gap-3 items-center">
-      <span className="text-[var(--text-2)]"><FolderIcon size={22} /></span>
+    <div className="mx-4 mt-2.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] flex gap-3 items-center">
+      <span className="text-[var(--text-2)]"><FolderIcon size={18} /></span>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-[var(--text)]">Job {job.ref}</span>
@@ -236,7 +236,7 @@ function Bubble({ m }) {
   if (kind === 'note') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-xl px-3.5 py-2.5 flex flex-col gap-1"
+        <div className="max-w-[75%] rounded-lg px-3 py-2 flex flex-col gap-1"
           style={{ background: C.note, border: `1px dashed ${C.noteBorder}` }}>
           <span className="text-xs font-bold" style={{ color: C.noteMeta }}>Note, only staff see this</span>
           <span className="leading-relaxed whitespace-pre-wrap" style={{ color: C.noteText }}>{m.body}</span>
@@ -248,11 +248,11 @@ function Bubble({ m }) {
   if (kind === 'customer' || kind === 'file') {
     return (
       <div className="flex">
-        <div className="max-w-[75%] flex flex-col gap-1 px-3.5 py-2.5"
+        <div className="max-w-[75%] flex flex-col gap-0.5 px-3 py-2"
           style={{ background: C.bubble, borderRadius: '16px 16px 16px 6px' }}>
           {kind === 'file' && (
             <span className="flex items-center gap-3 py-1">
-              <span className="w-10 h-12 rounded-lg flex items-center justify-center text-[11px] font-bold"
+              <span className="w-9 h-11 rounded-lg flex items-center justify-center text-[11px] font-bold"
                 style={{ background: C.redSoft, color: C.redText }}>{(m.message_type || 'FILE').slice(0, 3)}</span>
               <span className="flex flex-col">
                 <span className="font-semibold text-[var(--text)]">{titleCase(m.message_type) || 'File'}</span>
@@ -271,7 +271,7 @@ function Bubble({ m }) {
   const octos = kind === 'octos'
   return (
     <div className="flex justify-end">
-      <div className="max-w-[75%] flex flex-col gap-1 px-3.5 py-2.5"
+      <div className="max-w-[75%] flex flex-col gap-0.5 px-3 py-2"
         style={{ background: octos ? C.mint : C.staff, borderRadius: '16px 16px 6px 16px' }}>
         <span className="leading-relaxed whitespace-pre-wrap" style={{ color: octos ? C.mintText : C.staffText }}>{m.body}</span>
         <span className="text-[11px] self-end flex items-center gap-1.5" style={{ color: octos ? C.mintMeta : C.staffMeta }}>
@@ -339,29 +339,29 @@ function Thread({ convId, onBack }) {
   let lastDay = ''
   return (
     <div className="flex flex-col min-h-0 h-full">
-      <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-[var(--border)]">
+      <div className="flex flex-wrap items-center gap-2.5 px-4 py-3 border-b border-[var(--border)]">
         <button type="button" onClick={onBack} aria-label="All conversations"
-          className="lg:hidden w-11 h-11 -ml-2 flex items-center justify-center rounded-xl text-[var(--text)]"><BackIcon size={20} /></button>
-        <ChannelTile channel={conv.channel} size={44} />
+          className="lg:hidden w-9 h-9 -ml-1 flex items-center justify-center rounded-xl text-[var(--text)]"><BackIcon size={20} /></button>
+        <ChannelTile channel={conv.channel} size={36} />
         <div className="flex-1 min-w-[180px] flex flex-col gap-0.5">
-          <h2 className="m-0 text-lg font-bold text-[var(--text)]">{nameOf(conv)}</h2>
-          <span className="text-[13px] text-[var(--text-3)]">{sub}</span>
+          <h2 className="m-0 text-[15px] font-bold text-[var(--text)]">{nameOf(conv)}</h2>
+          <span className="text-xs text-[var(--text-3)]">{sub}</span>
         </div>
         {!resolved && conv.channel === 'WHATSAPP' && (withPerson(conv) ? (
           <button type="button" onClick={() => handBack.mutate()} disabled={handBack.isPending}
-            className="h-11 px-4 rounded-xl font-bold text-sm flex items-center gap-2 disabled:opacity-40"
+            className="h-9 px-3 rounded-lg font-semibold text-[13px] flex items-center gap-2 disabled:opacity-40"
             style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
             <Spark size={14} />Hand back to Octos
           </button>
         ) : (
           <button type="button" onClick={() => takeOver.mutate()} disabled={takeOver.isPending}
-            className="h-11 px-5 rounded-xl font-bold text-sm text-white bg-[var(--text)] disabled:opacity-40">
+            className="h-9 px-4 rounded-lg font-semibold text-[13px] text-white bg-[var(--text)] disabled:opacity-40">
             Take over
           </button>
         ))}
         {!resolved && (
           <button type="button" onClick={() => resolve.mutate()} disabled={resolve.isPending}
-            className="h-11 px-4 rounded-xl font-semibold text-sm flex items-center gap-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
+            className="h-9 px-3 rounded-lg font-semibold text-[13px] flex items-center gap-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
             <CheckIcon size={16} />Resolve
           </button>
         )}
@@ -370,7 +370,7 @@ function Thread({ convId, onBack }) {
       {!resolved && <StatusStrip conv={conv} />}
       <JobCard job={conv.job_card} />
 
-      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-2.5">
+      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2">
         {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
         {messages.map(m => {
           const day = dayLabel(m.created_at)
@@ -390,18 +390,18 @@ function Thread({ convId, onBack }) {
       </div>
 
       {!resolved && (
-        <div className="border-t border-[var(--border)] px-5 pt-3.5 pb-4 flex flex-col gap-2">
+        <div className="border-t border-[var(--border)] px-4 pt-3 pb-3 flex flex-col gap-2">
           <div className="flex gap-2.5 items-end">
             <label htmlFor="reply" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
             <textarea id="reply" rows={1} value={reply}
               onChange={e => { setReply(e.target.value); setError('') }} onKeyDown={onKey}
               placeholder={asNote ? 'Write a note only staff see' : `Reply to ${nameOf(conv)}`}
-              className="flex-1 min-h-[44px] max-h-40 px-3.5 py-2.5 text-sm rounded-xl outline-none resize-none text-[var(--text)]"
+              className="flex-1 min-h-[36px] max-h-40 px-3 py-2 text-sm rounded-lg outline-none resize-none text-[var(--text)]"
               style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: 'var(--panel)', border: '1px solid var(--border)' }} />
             <button type="button" onClick={submit} disabled={!reply.trim() || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
-              className="w-12 h-11 shrink-0 rounded-xl flex items-center justify-center text-white disabled:opacity-40"
+              className="w-10 h-9 shrink-0 rounded-lg flex items-center justify-center text-white disabled:opacity-40"
               style={{ background: asNote ? C.noteMeta : C.red }}>
-              {asNote ? <CheckIcon size={20} /> : <SendIcon size={20} />}
+              {asNote ? <CheckIcon size={18} /> : <SendIcon size={18} />}
             </button>
           </div>
           {error && <p className="text-xs m-0" style={{ color: C.redText }}>{error}</p>}
@@ -464,21 +464,21 @@ export default function Inbox() {
   }, [shown, selectedId])
 
   return (
-    <div className="p-5 sm:p-6 flex flex-col gap-4">
+    <div className="p-5 sm:p-6 flex flex-col gap-3 text-sm">
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex-1 min-w-[240px] flex flex-col gap-1">
-          <h2 className="m-0 text-2xl font-bold tracking-tight text-[var(--text)]">Inbox</h2>
-          <span className="text-sm text-[var(--text-2)]">
+          <h2 className="m-0 text-lg font-bold text-[var(--text)]">Inbox</h2>
+          <span className="text-[13px] text-[var(--text-2)]">
             {needsCount > 0 && <span className="font-semibold" style={{ color: C.redText }}>{needsCount} need you, </span>}
             {unreadIn('ALL')} unread. Octos is answering the rest.
           </span>
         </div>
         <div className="relative flex-[0_1_420px] min-w-[220px]">
           <label htmlFor="inbox-search" className="sr-only">Search conversations</label>
-          <span className="absolute left-3.5 top-3 text-[var(--text-3)]"><SearchIcon size={18} /></span>
+          <span className="absolute left-3 top-2.5 text-[var(--text-3)]"><SearchIcon size={16} /></span>
           <input id="inbox-search" type="search" value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Search names, messages or jobs"
-            className="w-full h-11 pl-10 pr-3 text-sm rounded-xl border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] outline-none focus:border-[var(--border-dark)]" />
+            className="w-full h-9 pl-9 pr-3 text-[13px] rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] outline-none focus:border-[var(--border-dark)]" />
         </div>
       </div>
 
@@ -489,13 +489,13 @@ export default function Inbox() {
           const ch = CHANNEL[t.key]
           return (
             <button key={t.key} type="button" role="tab" aria-selected={active} onClick={() => setChannel(t.key)}
-              className="h-10 px-3.5 rounded-xl text-sm flex items-center gap-2 transition-colors"
+              className="h-8 px-3 rounded-lg text-[13px] flex items-center gap-1.5 transition-colors"
               style={active ? { background: C.red, color: '#FFFFFF', fontWeight: 700 }
                 : { background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text)', fontWeight: 600 }}>
-              {ch && <span style={{ color: active ? '#FFFFFF' : ch.ink }}><ch.Icon size={18} /></span>}
+              {ch && <span style={{ color: active ? '#FFFFFF' : ch.ink }}><ch.Icon size={15} /></span>}
               {t.label || ch.label}
               {count > 0 && (
-                <span className="min-w-5 h-5 px-1 rounded-full text-xs flex items-center justify-center"
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[11px] flex items-center justify-center"
                   style={active ? { background: '#FFFFFF', color: C.redText } : { background: C.red, color: '#FFFFFF' }}>{count}</span>
               )}
             </button>
@@ -503,16 +503,16 @@ export default function Inbox() {
         })}
       </div>
 
-      <div className="flex gap-4 items-stretch" style={{ height: 'calc(100vh - 290px)', minHeight: 520 }}>
+      <div className="flex gap-4 items-stretch" style={{ height: 'calc(100vh - 240px)', minHeight: 520 }}>
         <section aria-label="Conversations"
-          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[380px] shrink-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
-          <div className="flex gap-2 flex-wrap p-3.5 border-b border-[var(--border)]">
+          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[340px] shrink-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
+          <div className="flex gap-1.5 flex-wrap p-3 border-b border-[var(--border)]">
             {FILTERS.map(f => {
               const on = filter === f.key
               const red = f.key === 'needs'
               return (
                 <button key={f.key} type="button" aria-pressed={on} onClick={() => setFilter(on ? null : f.key)}
-                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold"
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold"
                   style={on ? { background: red ? C.red : 'var(--text)', color: '#FFFFFF', border: '1px solid transparent' }
                     : red ? { background: C.redSoft, color: C.redText, border: `1px solid ${C.redBorder}` }
                     : { background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }}>
