@@ -69,6 +69,19 @@ function kindOf(m) {
   return m.sent_by ? 'staff' : 'octos'
 }
 
+// A file's badge (its extension, else its type) and its details line.
+function fileBadge(m) {
+  const ext = (m.media_name || '').includes('.') ? m.media_name.split('.').pop() : ''
+  return (ext && ext.length <= 4 ? ext : (m.message_type || 'FILE').slice(0, 3)).toUpperCase()
+}
+function fileDetail(m) {
+  if (!m.media_file) return 'Not saved yet'
+  const parts = []
+  if (m.media_pages) parts.push(`${m.media_pages} page${m.media_pages === 1 ? '' : 's'}`)
+  if (m.media_size) parts.push(m.media_size >= 1048576
+    ? `${(m.media_size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(m.media_size / 1024))} KB`)
+  return parts.join(', ') || 'Saved'
+}
 // ── Icons ───────────────────────────────────────────────────────────────
 const Svg = ({ size = 18, children, ...p }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -253,16 +266,16 @@ function Bubble({ m }) {
           {kind === 'file' && (
             <span className="flex items-center gap-3 py-1">
               <span className="w-9 h-11 rounded-lg flex items-center justify-center text-[11px] font-bold"
-                style={{ background: C.redSoft, color: C.redText }}>{(m.message_type || 'FILE').slice(0, 3)}</span>
+                style={{ background: C.redSoft, color: C.redText }}>{fileBadge(m)}</span>
               <span className="flex flex-col">
-                <span className="font-semibold text-[var(--text)]">{titleCase(m.message_type) || 'File'}</span>
+                <span className="font-semibold text-[var(--text)]">{m.media_file ? <a href={m.media_file} target="_blank" rel="noreferrer" className="underline">{m.media_name || titleCase(m.message_type) || 'File'}</a> : (m.media_name || titleCase(m.message_type) || 'File')}</span>
                 <span className="text-xs text-[var(--text-3)]">
-                  {m.media_file ? 'Saved' : 'Sent on WhatsApp, not saved yet'}
+                  {fileDetail(m)}
                 </span>
               </span>
             </span>
           )}
-          {m.body && <span className="leading-relaxed whitespace-pre-wrap text-[var(--text)]">{m.body}</span>}
+          {m.body && m.body !== m.media_name && <span className="leading-relaxed whitespace-pre-wrap text-[var(--text)]">{m.body}</span>}
           <span className="text-[11px] text-[var(--text-3)] self-end">{clock(m.created_at)}</span>
         </div>
       </div>
