@@ -22,6 +22,9 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
 }
 
+// Octos handed this conversation to a person and said why.
+const needsYou = c => c?.handled_by === 'STAFF' && !!c?.handoff_reason
+
 function toTitleCase(str) {
   if (!str) return str
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
@@ -96,6 +99,19 @@ function ConversationModal({ convId, onClose }) {
     onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
 
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
+    queryClient.invalidateQueries({ queryKey: ['conversations'] })
+  }
+  const takeOverMut = useMutation({
+    mutationFn: () => client.post(`/api/v1/communications/${convId}/take-over/`),
+    onSuccess: refresh,
+  })
+  const handBackMut = useMutation({
+    mutationFn: () => client.post(`/api/v1/communications/${convId}/hand-back/`),
+    onSuccess: refresh,
+  })
+
   const resolveMut = useMutation({
     mutationFn: () => client.post(`/api/v1/communications/${convId}/resolve/`),
     onSuccess: () => {
@@ -131,6 +147,19 @@ function ConversationModal({ convId, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {conv && conv.status !== 'RESOLVED' && (conv.handled_by === 'STAFF' ? (
+              <button onClick={() => handBackMut.mutate()} disabled={handBackMut.isPending}
+                className="px-3 py-1.5 text-xs font-bold bg-zinc-100 text-zinc-700
+                  border border-zinc-200 rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-40">
+                Hand back to Octos
+              </button>
+            ) : (
+              <button onClick={() => takeOverMut.mutate()} disabled={takeOverMut.isPending}
+                className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-700
+                  border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-40">
+                Take over
+              </button>
+            ))}
             {conv?.status === 'OPEN' && (
               <button onClick={() => resolveMut.mutate()} disabled={resolveMut.isPending}
                 className="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700
@@ -143,6 +172,17 @@ function ConversationModal({ convId, onClose }) {
                 hover:bg-[var(--bg)] text-[var(--text-3)] transition-colors">✕</button>
           </div>
         </div>
+
+        {conv && (
+          <div className={`px-5 py-2 text-xs border-b border-[var(--border)] shrink-0
+            ${needsYou(conv) ? 'bg-red-50 text-red-700'
+              : conv.handled_by === 'STAFF' ? 'bg-blue-50 text-blue-700'
+              : 'bg-[var(--bg)] text-[var(--text-3)]'}`}>
+            {needsYou(conv) ? `Octos asked for a person: ${conv.handoff_reason}`
+              : conv.handled_by === 'STAFF' ? `${conv.assigned_to_name || 'Staff'} is handling this. Octos is quiet.`
+              : 'Octos is handling this. Reply or take over to step in.'}
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -188,7 +228,9 @@ function ConversationModal({ convId, onClose }) {
                 rows={2}
                 value={reply}
                 onChange={e => { setReply(e.target.value); setError('') }}
-                placeholder={`Reply via ${cfg?.label || 'message'}…`}
+                placeholder={conv?.handled_by === 'OCTOS'
+                  ? 'Replying takes this over from Octos…'
+                  : `Reply via ${cfg?.label || 'message'}…`}
                 className="flex-1 px-3 py-2 text-sm bg-[var(--bg)] border border-[var(--border)]
                   rounded-xl outline-none focus:border-[var(--border-dark)] transition-colors resize-none"
               />
@@ -232,6 +274,11 @@ export default function Inbox() {
   })
 
   const totalUnread = conversations.reduce((s, c) => s + (c.unread_count || 0), 0)
+
+  // Needs you first, then the newest.
+  const sorted = [...conversations].sort((a, b) =>
+    (needsYou(b) - needsYou(a)) ||
+    (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
 
   return (
     <div className="p-5 sm:p-6 space-y-5">
@@ -302,17 +349,18 @@ export default function Inbox() {
         </div>
       ) : (
         <div className="space-y-1.5">
-          {conversations.map(conv => {
+          {sorted.map(conv => {
             const cfg    = CHANNEL_CONFIG[conv.channel] || CHANNEL_CONFIG.SMS
             const status = STATUS_CONFIG[conv.status]   || STATUS_CONFIG.OPEN
             const hasUnread = (conv.unread_count || 0) > 0
+            const asked     = needsYou(conv)
 
             return (
               <div key={conv.id}
                 onClick={() => setSelectedId(conv.id)}
                 className={`bg-[var(--panel)] border rounded-xl px-4 py-3.5 cursor-pointer
                   hover:border-[var(--border-dark)] transition-colors
-                  ${hasUnread ? 'border-amber-200' : 'border-[var(--border)]'}`}>
+                  ${asked ? 'border-red-300' : hasUnread ? 'border-amber-200' : 'border-[var(--border)]'}`}>
                 <div className="flex items-center gap-3">
 
                   {/* Channel icon */}
@@ -338,10 +386,14 @@ export default function Inbox() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-[var(--text-3)] truncate flex-1">
-                        {conv.last_message_preview || 'No messages yet'}
+                      <span className={`text-xs truncate flex-1 ${asked ? 'text-red-600 font-semibold' : 'text-[var(--text-3)]'}`}>
+                        {asked ? `Needs you: ${conv.handoff_reason}` : (conv.last_message_preview || 'No messages yet')}
                       </span>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                          ${conv.handled_by === 'STAFF' ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-600'}`}>
+                          {conv.handled_by === 'STAFF' ? (conv.assigned_to_name || 'Staff') : 'Octos'}
+                        </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
                           ${status.bg} ${status.text}`}>
                           {status.label}
