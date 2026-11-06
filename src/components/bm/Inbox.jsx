@@ -286,6 +286,7 @@ function Bubble({ m }) {
     <div className="flex justify-end">
       <div className="max-w-[75%] flex flex-col gap-0.5 px-3 py-2"
         style={{ background: octos ? C.mint : C.staff, borderRadius: '16px 16px 6px 16px' }}>
+        {m.message_type === 'IMAGE' && m.media_file && (<a href={m.media_file} target="_blank" rel="noreferrer"><img src={m.media_file} alt="Card sent to the customer" className="rounded-lg max-w-full mb-1" style={{ maxHeight: 360 }} /></a>)}
         <span className="leading-relaxed whitespace-pre-wrap" style={{ color: octos ? C.mintText : C.staffText }}>{m.body}</span>
         <span className="text-[11px] self-end flex items-center gap-1.5" style={{ color: octos ? C.mintMeta : C.staffMeta }}>
           {octos && <Spark />}
