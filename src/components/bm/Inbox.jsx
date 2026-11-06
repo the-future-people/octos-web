@@ -24,6 +24,7 @@ const getConversation = id => client.get(`/api/v1/communications/${id}/`).then(r
 
 const needsYou = c => c?.handled_by === 'STAFF' && !!c?.handoff_reason
 const withPerson = c => c?.handled_by === 'STAFF' && !c?.handoff_reason
+const inVisit = c => !!c?.counter_until && new Date(c.counter_until) > new Date()
 const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
 function titleCase(s) {
@@ -176,6 +177,15 @@ function Row({ c, selected, onOpen }) {
 
 // ── The open conversation ───────────────────────────────────────────────
 function StatusStrip({ conv }) {
+  if (inVisit(conv)) {
+    return (
+      <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
+        style={{ background: C.amberSoft, border: `1px solid ${C.noteBorder}`, color: C.amberText }}>
+        <PersonIcon size={17} />
+        <span>At the counter. Octos is quiet until {clock(conv.counter_until)}.</span>
+      </div>
+    )
+  }
   if (needsYou(conv)) {
     return (
       <div className="mx-4 mt-3 px-3.5 py-2.5 rounded-xl flex gap-2.5 items-start text-[13px]"
@@ -325,6 +335,7 @@ function Thread({ convId, onBack }) {
   const act = path => ({ mutationFn: () => client.post(`/api/v1/communications/${convId}/${path}/`), onSuccess: refresh })
   const takeOver = useMutation(act('take-over'))
   const handBack = useMutation(act('hand-back'))
+  const atCounter = useMutation(act('at-counter'))
   const resolve = useMutation(act('resolve'))
   const send = useMutation({
     mutationFn: () => client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote }),
@@ -373,6 +384,13 @@ function Thread({ convId, onBack }) {
             Take over
           </button>
         ))}
+        {!resolved && conv.channel === 'WHATSAPP' && !inVisit(conv) && (
+          <button type="button" onClick={() => atCounter.mutate()} disabled={atCounter.isPending}
+            title="The customer is here. Octos stays quiet for this visit."
+            className="h-9 px-3 rounded-lg font-semibold text-[13px] border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
+            At the counter
+          </button>
+        )}
         {!resolved && (
           <button type="button" onClick={() => resolve.mutate()} disabled={resolve.isPending}
             className="h-9 px-3 rounded-lg font-semibold text-[13px] flex items-center gap-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
