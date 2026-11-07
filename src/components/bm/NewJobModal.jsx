@@ -30,6 +30,9 @@ const BADGE = { INSTANT: 'Instant job', PRODUCTION: 'Production job', DESIGN: 'D
 const UNIT = { PER_SQFT: 'per sq ft', PER_SQCM: 'per sq cm', PER_COPY: 'per copy', PER_PAGE: 'per page',
                PER_SHEET: 'per sheet', PER_PIECE: 'per piece', PER_JOB: 'per job' }
 const ROLE = { REP: 'Rep', STAFF: 'Staff', OWNER: 'Owner', MEMBER: 'Member' }
+// The shop's rings and how many 80 gsm sheets each holds: the same chart the
+// server uses to choose a ring for printed work (jobs/services/availability.py).
+const RING_HOLDS = { 8: 45, 10: 65, 12: 95, 14: 120, 16: 145, 19: 165, 22: 200, 25: 240, 28: 270, 32: 300, 38: 340, 45: 425, 51: 500 }
 const FIELD = `w-full px-3 h-9 text-[13px] bg-white border border-black/15 rounded-xl outline-none
                focus:border-zinc-900 transition-colors disabled:bg-black/[0.03] disabled:text-[var(--text-2)]`
 const LABEL = 'block text-[11px] font-semibold text-[var(--text-2)] mb-1'
@@ -105,9 +108,14 @@ function readyLabel(iso) {
   return `${at.toLocaleDateString('en-GB', { weekday: 'long' })} ${time}`
 }
 
-const initials = c => ((c?.customer_type !== 'INDIVIDUAL' && c?.company_name)
-  ? c.company_name.slice(0, 2)
-  : `${c?.first_name?.[0] || ''}${c?.last_name?.[0] || ''}`).toUpperCase() || '?'
+const initials = c => {
+  if (c?.customer_type !== 'INDIVIDUAL' && c?.company_name) return c.company_name.slice(0, 2).toUpperCase()
+  const fromParts = `${c?.first_name?.[0] || ''}${c?.last_name?.[0] || ''}`
+  // Some records hold only a full name ("Mr Joe Costy"): its words, a title aside.
+  const words = (c?.full_name || '').replace(/^(mr|mrs|ms|miss|dr|prof|rev|madam)\.?\s+/i, '').split(/\s+/).filter(Boolean)
+  const fromFull = words.length ? words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '') : ''
+  return (fromParts || fromFull || '?').toUpperCase()
+}
 const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.full_name) : c?.full_name)
 
 // A number typed straight in. Raw while typing (clamping each keystroke
@@ -589,6 +597,37 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     )
   }
 
+  // Binding's ring sizes, laid out to click (7 Nov 2026 mock): each with the
+  // sheets it holds, so the ring is matched to the document, not guessed.
+  const ringPicker = field => {
+    const chosen = parseInt(specValues[field.key]) || null
+    const sets = parseInt(selQty) || 0
+    const each = selPrice && sets ? parseFloat(selPrice.total) / sets : null
+    return (
+      <fieldset className="flex flex-col items-center">
+        <legend className="text-[13px] font-bold mb-1.5 mx-auto text-center">Ring size</legend>
+        <div className="grid grid-cols-[repeat(7,66px)] gap-1.5">
+          {(field.options || []).map(mm => {
+            const on = parseInt(mm) === chosen
+            return (
+              <button key={mm} type="button" aria-pressed={on} onClick={() => setSpecValues(v => ({ ...v, [field.key]: mm }))}
+                      className={`h-[42px] rounded-lg flex flex-col items-center justify-center leading-tight transition-colors
+                                  ${on ? 'bg-zinc-900 text-white border-2 border-zinc-900' : 'bg-white border border-black/20 hover:border-black/40'}`}>
+                <span className="text-[13px] font-bold">{mm} mm</span>
+                {RING_HOLDS[mm] && <span className={`text-[10px] ${on ? 'text-white/85' : 'text-[var(--text-3)]'}`}>up to {RING_HOLDS[mm]}</span>}
+              </button>
+            )
+          })}
+        </div>
+        {chosen && (
+          <p className="mt-2 text-[11px] text-[var(--text-3)] text-center">
+            {chosen} mm holds up to {RING_HOLDS[chosen] ?? 'an unknown number of'} sheets.{each ? ` GHS ${each.toFixed(2)} a set.` : ''}
+          </p>
+        )}
+      </fieldset>
+    )
+  }
+
   const sideCard = on => `flex items-center gap-2.5 min-h-[44px] px-3 py-1.5 rounded-lg border-2 text-left transition-colors
                           ${on ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-black/15 text-[var(--text)] hover:border-black/30'}`
 
@@ -662,7 +701,13 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           : [{ key: 'pages', label: 'Pages per copy', min: 1 }, { key: 'quantity', label: 'Number of copies', min: 1 }]
         const keys = fields.map(f => f.key)
         if (!(keys.includes('pages') && keys.includes('quantity'))) {
-          return <div className="flex flex-wrap justify-center gap-2.5">{fields.map(specField)}</div>
+          const ring = fields.find(f => f.key === 'ring_size')
+          return (
+            <div className="flex flex-col items-center gap-3.5">
+              <div className="flex flex-wrap justify-center gap-2.5">{fields.filter(f => f !== ring).map(specField)}</div>
+              {ring && ringPicker(ring)}
+            </div>
+          )
         }
         const pages = parseInt(selPages) || 0
         const copies = parseInt(selQty) || 0
@@ -861,9 +906,20 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     </div>
   )
 
+  // The whole window drawn 10% smaller (Khofi, 7 Nov). Its height is set in
+  // pixels, which zoom scales in every browser, so it still fills 94% of the screen.
+  const [screenH, setScreenH] = useState(() => window.innerHeight)
+  useEffect(() => {
+    const onResize = () => setScreenH(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const SCALE = 0.9
+
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-6xl h-[94vh]">
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1280px]"
+           style={{ zoom: SCALE, height: `${Math.round(screenH * 0.94 / SCALE)}px` }}>
 
         <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
