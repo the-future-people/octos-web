@@ -2,9 +2,9 @@
 //
 // Recording a job at the counter.
 //
-// Instant work (a photocopy, a quick print) keeps a compact window: it is
-// done there and then. Production and design open the window out, because
-// they carry more: the customer and who the job is for, each item's sizes,
+// One window for every kind of job (7 Nov 2026): what to make on the left,
+// the item being set up in the middle, the cart on the right. Production
+// and design carry more: the customer and who the job is for, each item's sizes,
 // finishing and file, and a promise. Three columns: what to make, the item
 // being set up, and the cart with everything the customer is told (total,
 // deposit, ready time) above the button that creates the job.
@@ -139,7 +139,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   function toggleAddon(a) {
     setSelAddons(list => (list.some(x => (x.service ?? x) === a.id)
       ? list.filter(x => (x.service ?? x) !== a.id)
-      : [...list, a.packing ? { service: a.id, per_copy: (selQty || 1) > 1 } : a.id]))
+      : [...list, a.packing ? { service: a.id, per_copy: false } : a.id]))
   }
   function setPerCopy(id, perCopy) {
     setSelAddons(list => list.map(x => ((x.service ?? x) === id ? { service: id, per_copy: perCopy } : x)))
@@ -170,7 +170,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
-      .filter(s => s.is_active && s.category === jobType)
+      .filter(s => s.is_active && s.category === jobType && !s.variant_of)
       .filter(s => matchesSearch(s.name, search))
       .forEach(s => {
         const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
@@ -179,6 +179,21 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     return groups
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servicesRaw, jobType, search])
+
+  // Each product once in the list; its other-sides version is a choice in
+  // the middle (one side / both sides), with the same pages and copies.
+  const versionsOf = useMemo(() => {
+    const map = {}
+    servicesRaw.filter(s => s.is_active).forEach(s => {
+      const base = s.variant_of || s.id
+      ;(map[base] = map[base] || []).push(s)
+    })
+    Object.values(map).forEach(list => list.sort((a, b) => (a.variant_of ? 1 : 0) - (b.variant_of ? 1 : 0)))
+    return map
+  }, [servicesRaw])
+  const familyOf = s => (s ? (versionsOf[s.variant_of || s.id] || [s])[0] : null)
+  const plainName = s => (s?.name || '').replace(/\s*\((one side|both sides)\)$/i, '')
+  const bothSides = s => s?.smart_defaults?.sides === 'DOUBLE'
 
   const { data: custResults = [] } = useQuery({
     queryKey: ['custLookup', custSearch],
@@ -210,6 +225,14 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         .filter(f => f.key !== 'quantity' && f.key !== 'pages')
         .map(f => [f.key, f.default ?? '']),
     ))
+  }
+
+  // The other-sides version of the same product: the same pages and copies.
+  const switchVersion = v => {
+    if (v.id === selected?.id) return
+    const offered = new Set((v.addons || []).map(a => a.id))
+    setSelected(v)
+    setSelAddons(list => list.filter(x => offered.has(x.service ?? x)))
   }
 
   const needsFile = wantsFile && !!selected?.requires_file_upload
@@ -350,7 +373,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       {TYPES.map(([v, label]) => (
         <button key={v} onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
                 className={`px-4 py-1.5 rounded-[9px] text-[13px] font-bold transition-colors
-                            ${jobType === v ? 'bg-blue-600 text-white shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+                            ${jobType === v ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
           {label}
         </button>
       ))}
@@ -424,8 +447,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             {items.map(s => (
               <button key={s.id} onClick={() => selectService(s)}
                       className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors
-                                  ${selected?.id === s.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-[var(--text-2)] hover:bg-black/[0.03]'}`}>
-                {s.name}
+                                  ${familyOf(selected)?.id === s.id ? 'bg-zinc-900 text-white font-bold' : 'text-[var(--text-2)] hover:bg-black/[0.04]'}`}>
+                {plainName(s)}
               </button>
             ))}
           </div>
@@ -476,9 +499,26 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   ) : (
     <div>
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-lg font-black">{selected.name}</span>
+        <span className="text-lg font-black">{plainName(selected)}</span>
         {UNIT[selected.unit] && <span className="text-xs text-[var(--text-3)]">priced {UNIT[selected.unit]}</span>}
       </div>
+      {selected.description && <p className="mt-1 text-xs text-[var(--text-3)] max-w-[60ch]">{selected.description}</p>}
+
+      {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
+        <div className="mt-4">
+          <div className={`${H} mb-1`}>Sides</div>
+          <div className="grid grid-cols-2 gap-2 max-w-md">
+            {versionsOf[selected.variant_of || selected.id].map(v => (
+              <button key={v.id} type="button" onClick={() => switchVersion(v)}
+                      className={`text-left px-3 py-2.5 rounded-xl border text-sm transition-colors
+                                  ${selected.id === v.id ? 'border-zinc-900 ring-1 ring-zinc-900 bg-white font-bold' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
+                {bothSides(v) ? 'Both sides' : 'One side'}
+                {v.base_price && <span className="block text-[11px] font-normal text-[var(--text-3)]">GHS {v.base_price} a sheet</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isPassport(selected) && (
         <div className="mt-4">
@@ -486,7 +526,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           <div className="flex gap-1.5">
             {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + digital'], ['DIGITAL', 'Digital only']].map(([v, t]) => (
               <button key={v} onClick={() => setSelOutputMode(v)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl border ${selOutputMode === v ? 'bg-blue-600 text-white border-transparent' : 'bg-white border-black/10'}`}>
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/10'}`}>
                 {t}
               </button>
             ))}
@@ -499,7 +539,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           <div className="flex flex-wrap gap-1">
             {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
               <button key={size} onClick={() => setSelRingSize(size)}
-                      className={`px-2 py-1 text-[11px] font-bold rounded-lg border ${selRingSize === size ? 'bg-blue-600 text-white border-transparent' : 'bg-white border-black/10'}`}>
+                      className={`px-2 py-1 text-[11px] font-bold rounded-lg border ${selRingSize === size ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/10'}`}>
                 {size}
               </button>
             ))}
@@ -511,12 +551,17 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {(selected.spec_template || []).length > 0
           ? selected.spec_template.map(specField)
           : [
-            { key: 'pages', label: 'Sheets', min: 1 },
-            { key: 'quantity', label: 'Copies', min: 1 },
+            { key: 'pages', label: 'Pages per copy', min: 1 },
+            { key: 'quantity', label: 'Number of copies', min: 1 },
           ].map(specField)}
       </div>
+      {bothSides(selected) && (parseInt(selPages) || 0) > 0 && (
+        <p className="mt-2 text-xs text-[var(--text-3)]">
+          {selPages} page{selPages == 1 ? '' : 's'} on both sides is {Math.ceil(selPages / 2)} sheet{Math.ceil(selPages / 2) === 1 ? '' : 's'} a copy.
+        </p>
+      )}
 
-      {roomy && (selected.addons || []).length > 0 && (
+      {(selected.addons || []).length > 0 && (
         <div className="mt-5">
           <div className={`${H} mb-1.5`}>Finishing</div>
           <div className="flex flex-wrap gap-2">
@@ -526,9 +571,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
               return (
                 <button key={a.id} type="button" onClick={() => toggleAddon(a)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[13px] font-semibold transition-colors
-                                    ${on ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
+                                    ${on ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
                   <span className={`w-4 h-4 rounded grid place-items-center text-[10px] text-white
-                                    ${on ? 'bg-blue-600' : 'border-[1.5px] border-black/20'}`}>{on ? '✓' : ''}</span>
+                                    ${on ? 'bg-white/20' : 'border-[1.5px] border-black/20'}`}>{on ? '✓' : ''}</span>
                   {a.name}
                   {on && priced && (
                     <span className="font-normal text-[var(--text-3)]">
@@ -569,12 +614,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             sizeLabel={sizeLabel}
             onResult={r => {
               setSelArtwork(r)
-              // A document's pages come from the file: front and back puts
-              // two on a sheet. The server counts again from the file.
-              if (r?.page_count) {
-                const perSheet = /2[- ]?sided|front and back|double/i.test(selected.name) ? 2 : 1
-                setSelPages(Math.max(1, Math.ceil(r.page_count / perSheet)))
-              }
+              // A document's pages come from the file, as they are: the
+              // server halves them for both sides, and counts again.
+              if (r?.page_count) setSelPages(r.page_count)
             }}
           />
         </div>
@@ -591,7 +633,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           )}
         </div>
         <button onClick={addToCart} disabled={!canAdd}
-                className="ml-auto px-5 py-3 rounded-xl bg-blue-600 text-white text-sm font-black disabled:bg-black/10 disabled:text-[var(--text-3)]">
+                className="ml-auto px-5 py-3 rounded-xl bg-zinc-900 text-white text-sm font-black disabled:bg-black/10 disabled:text-[var(--text-3)]">
           Add to cart ↵
         </button>
       </div>
@@ -658,7 +700,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {lateBox}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
-                className="mt-3 w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-black disabled:opacity-40">
+                className="mt-3 w-full py-3 rounded-xl bg-zinc-900 text-white text-sm font-black disabled:opacity-40">
           {isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
         <button onClick={onClose} className="mt-1.5 w-full py-2 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
@@ -667,179 +709,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   )
 
 
-  // ── Instant: the compact window, as it has always been ─────────
-  const THEME = { accent: 'bg-zinc-900', tab: 'bg-zinc-900', tint: 'bg-zinc-50' }
-  const instantModal = (
-    <div className={`rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] flex flex-col overflow-hidden animate-slideUp ${THEME.tint}`}>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 shrink-0">
-        <div>
-          <div className="font-bold text-lg text-[var(--text)]">New Job</div>
-          <div className="text-xs text-[var(--text-3)] mt-0.5">Record a new job for this branch</div>
-        </div>
-        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/10 text-[var(--text-3)] text-lg">✕</button>
-      </div>
-      {lateNote}
-
-      <div className="px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-3 gap-1 bg-black/10 p-1 rounded-xl">
-          {TYPES.map(([v, label]) => (
-            <button key={v} onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
-                    className={`py-2 text-sm font-bold rounded-lg transition-colors
-                                ${jobType === v ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-6 pt-4 shrink-0">
-        <div className="relative">
-          <input type="text"
-                 value={customer ? nameOf(customer) : custSearch}
-                 onChange={e => { setCustSearch(e.target.value); setCustomer(null); setOrderFor(null) }}
-                 placeholder="Whose job is this? (leave blank for walk-in)"
-                 className={`w-full px-3 py-2.5 text-sm border rounded-xl outline-none transition-colors
-                             ${customer ? 'bg-green-50 border-green-300 text-green-800 font-semibold'
-                                        : 'bg-red-100 border-red-300 text-red-600 placeholder-red-400 focus:border-red-400'}`} />
-          {(custSearch || customer) && (
-            <button onClick={() => { setCustSearch(''); setCustomer(null); setOrderFor(null) }}
-                    className="absolute right-3 top-2.5 text-black/30 hover:text-black/50 text-sm">✕</button>
-          )}
-          {custResults.length > 0 && !customer && (
-            <div className="absolute top-11 left-0 right-0 bg-[var(--panel)] border border-[var(--border)] rounded-xl shadow-lg z-20 overflow-hidden">
-              {custResults.slice(0, 5).map(c => (
-                <button key={c.id} onClick={() => chooseCustomer(c)}
-                        className="w-full px-4 py-2.5 text-left hover:bg-[var(--bg)] border-b border-[var(--border)] last:border-0">
-                  <div className="text-sm font-medium text-[var(--text)]">{nameOf(c)}</div>
-                  <div className="text-xs text-[var(--text-3)]">
-                    {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Rep: ${c.full_name} · ` : ''}{c.phone}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden mt-4">
-        <div className="flex-1 flex flex-col overflow-hidden px-6 border-r border-black/10">
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setSelected(null) }}
-                 placeholder="Search services..."
-                 className="w-full px-3 py-2 text-sm bg-white/60 border border-black/10 rounded-lg outline-none focus:border-black/20 mb-3 shrink-0" />
-          <div className="flex-1 overflow-y-auto space-y-3 pb-2">
-            {Object.keys(grouped).length === 0 ? (
-              <div className="text-sm text-[var(--text-3)] text-center py-8">No services found</div>
-            ) : Object.entries(grouped).map(([grp, items]) => (
-              <div key={grp}>
-                <div className="text-[9px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-1.5">{grp}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {items.map(s => (
-                    <button key={s.id} onClick={() => selectService(s)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
-                                        ${selected?.id === s.id ? 'bg-zinc-900 text-white border-transparent'
-                                                                : 'bg-white/60 border-black/10 text-[var(--text-2)] hover:border-black/20'}`}>
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {selected && (
-            <div className="shrink-0 border-t border-black/10 pt-3 pb-1">
-              <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-2">{selected.name}</div>
-              {isPassport(selected) && (
-                <div className="mb-2 flex gap-1.5">
-                  {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + Digital'], ['DIGITAL', 'Digital Only']].map(([v, t]) => (
-                    <button key={v} onClick={() => setSelOutputMode(v)}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white/60 border-black/10 text-[var(--text-2)]'}`}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {isBinding(selected) && (
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
-                    <button key={size} onClick={() => setSelRingSize(size)}
-                            className={`px-2 py-1 text-[10px] font-bold rounded border ${selRingSize === size ? 'bg-zinc-900 text-white border-transparent' : 'bg-white/60 border-black/10 text-[var(--text-2)]'}`}>
-                      {size}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                {(selected.spec_template || []).length > 0
-                  ? selected.spec_template.map(specField)
-                  : [{ key: 'pages', label: 'Sheets', min: 1 }, { key: 'quantity', label: 'Copies', min: 1 }].map(specField)}
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-                  <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Total</span>
-                  <span className="font-mono font-black text-sm text-green-700" style={{ opacity: priceLoading ? 0.45 : 1 }}>
-                    {selPrice ? fmt(selPrice.total) : '...'}
-                  </span>
-                </div>
-                <button onClick={addToCart} disabled={!canAdd}
-                        className="px-4 py-2 text-white text-sm font-bold rounded-lg bg-zinc-900 disabled:opacity-40 whitespace-nowrap">
-                  + Add to Cart
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="w-60 flex flex-col px-4 shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-[var(--text)] uppercase tracking-wider">Cart</span>
-            <span className="text-xs text-[var(--text-3)]">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
-          </div>
-          {cart.length === 0 ? (
-            <div className="flex-1 grid place-items-center text-center">
-              <div><p className="text-xs text-[var(--text-3)]">No items yet</p><p className="text-[10px] text-[var(--text-3)] mt-1">Select a service to begin</p></div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto space-y-1.5 pb-2">
-              {cart.map(item => (
-                <div key={item._id} className="flex items-start justify-between gap-2 px-3 py-2 bg-white/60 border border-black/10 rounded-lg">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-semibold text-[var(--text)] truncate">{item.service.name}</div>
-                    <div className="text-[10px] text-[var(--text-3)] mt-0.5">{item.quantity} × {item.pages}pp</div>
-                  </div>
-                  <span className="font-mono text-xs font-bold">{fmt(item._price)}</span>
-                  <button onClick={() => removeFromCart(item._id)} className="text-black/25 hover:text-red-500 text-xs">✕</button>
-                </div>
-              ))}
-            </div>
-          )}
-          {cart.length > 0 && (
-            <div className="shrink-0 pt-3 border-t border-black/10 flex items-center justify-between">
-              <span className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">Total</span>
-              <span className="font-mono font-black text-base text-[var(--text)]">{fmt(cartTotal)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {late && <div className="px-6 shrink-0">{lateBox}</div>}
-      {error && <div className="mx-6 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 shrink-0">{error}</div>}
-
-      <div className="flex px-6 py-4 items-center justify-end gap-3 shrink-0 border-t border-black/10">
-        <button onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]">Cancel</button>
-        <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
-                className="px-5 py-2.5 text-white text-sm font-bold rounded-xl bg-zinc-900 disabled:opacity-40">
-          {isPending ? 'Creating...' : late ? 'Record late job' : 'Create Job'}
-        </button>
-      </div>
-    </div>
-  )
-
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
-      {!roomy ? instantModal : (
-      <div className={`bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp
-                       transition-[max-width] duration-300 max-w-6xl h-[94vh]`}>
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-6xl h-[94vh]">
 
         <div className="flex items-center gap-4 px-6 py-3.5 border-b border-black/[0.06] shrink-0">
           <span className="text-[17px] font-black">New job</span>
@@ -852,13 +724,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {lateNote}
         <div className="shrink-0">{customerBar}</div>
 
-        <div className={`flex-1 min-h-0 grid grid-cols-[220px_1fr_300px]`}>
+        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[240px_1fr_300px] animate-unfold">
           <div className="p-4 border-r border-black/[0.06] min-h-0 flex flex-col">{serviceList}</div>
           <div className="p-5 overflow-y-auto min-h-0">{editor}</div>
           <div className="p-4 bg-black/[0.015] border-l border-black/[0.06] min-h-0">{cartPanel}</div>
         </div>
       </div>
-      )}
     </div>,
     document.body,
   )
