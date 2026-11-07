@@ -110,26 +110,19 @@ const initials = c => ((c?.customer_type !== 'INDIVIDUAL' && c?.company_name)
   : `${c?.first_name?.[0] || ''}${c?.last_name?.[0] || ''}`).toUpperCase() || '?'
 const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.full_name) : c?.full_name)
 
-// A number with − and +, that can still be typed straight into. Raw while
-// typing (clamping each keystroke turned 168 into 6), settled on leaving.
-function Stepper({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter }) {
-  const n = parseInt(value) || 0
-  const btn = 'w-9 grid place-items-center bg-black/[0.04] hover:bg-black/[0.08] text-[var(--text)] disabled:opacity-35 transition-colors'
+// A number typed straight in. Raw while typing (clamping each keystroke
+// turned 168 into 6), settled on leaving.
+function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter }) {
   return (
-    <div>
+    <div className="flex flex-col items-center">
       <label htmlFor={id} className={LABEL}>{label}</label>
-      <div className={`flex items-stretch h-9 w-[128px] rounded-lg border border-black/15 overflow-hidden bg-white ${disabled ? 'opacity-60' : ''}`}>
-        <button type="button" aria-label={`Fewer: ${label}`} disabled={disabled || n <= min}
-                onClick={() => onCommit(Math.max(min, n - 1))} className={btn}><Icon kind="minus" size={14} /></button>
-        <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
-               onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
-               onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
-               onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
-               className="flex-1 min-w-0 text-center text-sm font-semibold outline-none bg-transparent
-                          [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-        <button type="button" aria-label={`More: ${label}`} disabled={disabled || (max != null && n >= max)}
-                onClick={() => onCommit(n + 1)} className={btn}><Icon kind="plus" size={14} /></button>
-      </div>
+      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
+             onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+             onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
+             onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
+             className="w-[110px] h-9 rounded-lg border border-black/20 bg-white text-center text-sm font-semibold outline-none
+                        focus:border-zinc-900 disabled:bg-black/[0.03] disabled:text-[var(--text-2)]
+                        [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
     </div>
   )
 }
@@ -573,7 +566,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const specField = field => {
     if (field.type === 'select') {
       return (
-        <div key={field.key} className="min-w-[160px]">
+        <div key={field.key} className="min-w-[160px] flex flex-col items-center">
           <label htmlFor={`spec-${field.key}`} className={LABEL}>{field.label}{field.unit ? ` (${field.unit})` : ''}</label>
           <select id={`spec-${field.key}`} value={specValues[field.key] ?? ''}
                   onChange={e => setSpecValues(v => ({ ...v, [field.key]: e.target.value }))} className={FIELD}>
@@ -590,7 +583,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       else setSpecValues(v => ({ ...v, [field.key]: n }))
     }
     return (
-      <Stepper key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
+      <NumberField key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
                label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`} disabled={locked}
                onChange={put} onCommit={put} onEnter={addToCart} />
     )
@@ -622,10 +615,11 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </span>
       </div>
 
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 py-2">
       {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
-        <fieldset>
-          <legend className="text-[13px] font-bold mb-1.5">One side or both sides?</legend>
-          <div className="grid grid-cols-2 gap-2 max-w-[400px]">
+        <fieldset className="flex flex-col items-center">
+          <legend className="text-[13px] font-bold mb-1.5 mx-auto text-center">One side or both sides?</legend>
+          <div className="grid grid-cols-[repeat(2,190px)] gap-2">
             {versionsOf[selected.variant_of || selected.id].map(v => {
               const on = selected.id === v.id
               return (
@@ -647,9 +641,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       )}
 
       {isPassport(selected) && (
-        <fieldset>
-          <legend className={LABEL}>Output</legend>
-          <div className="flex gap-2 max-w-[640px]">
+        <fieldset className="flex flex-col items-center">
+          <legend className={`${LABEL} mx-auto text-center`}>Output</legend>
+          <div className="flex gap-2 w-[388px]">
             {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + digital'], ['DIGITAL', 'Digital only']].map(([v, t]) => (
               <button key={v} type="button" onClick={() => setSelOutputMode(v)}
                       className={`flex-1 h-8 text-xs font-bold rounded-lg border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
@@ -660,26 +654,52 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </fieldset>
       )}
 
-      <div>
-        <div className="flex flex-wrap gap-2.5">
-          {(selected.spec_template || []).length > 0
-            ? selected.spec_template.map(specField)
-            : [
-              { key: 'pages', label: 'Pages per copy', min: 1 },
-              { key: 'quantity', label: 'Number of copies', min: 1 },
-            ].map(specField)}
-        </div>
-        {bothSides(selected) && (parseInt(selPages) || 0) > 0 && (
-          <p className="mt-1.5 text-[11px] text-[var(--text-3)]">
-            {selPages} page{selPages == 1 ? '' : 's'} on both sides is {Math.ceil(selPages / 2)} sheet{Math.ceil(selPages / 2) === 1 ? '' : 's'} a copy.
-          </p>
-        )}
-      </div>
+      {(() => {
+        // Pages × copies = sheets, worked out beside the numbers typed (7 Nov
+        // 2026 mock). Both sides puts two pages on a sheet; the server prices
+        // the same count, so the sum and the total always agree.
+        const fields = (selected.spec_template || []).length > 0 ? selected.spec_template
+          : [{ key: 'pages', label: 'Pages per copy', min: 1 }, { key: 'quantity', label: 'Number of copies', min: 1 }]
+        const keys = fields.map(f => f.key)
+        if (!(keys.includes('pages') && keys.includes('quantity'))) {
+          return <div className="flex flex-wrap justify-center gap-2.5">{fields.map(specField)}</div>
+        }
+        const pages = parseInt(selPages) || 0
+        const copies = parseInt(selQty) || 0
+        const perCopy = bothSides(selected) ? Math.ceil(pages / 2) : pages
+        const sign = 'h-9 inline-flex items-center text-[15px] text-[var(--text-3)]'
+        const field = k => specField(fields.find(f => f.key === k))
+        return (
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex flex-wrap items-end justify-center gap-2.5">
+              {fields.filter(f => f.key !== 'pages' && f.key !== 'quantity').map(specField)}
+              {field('pages')}
+              <span aria-hidden="true" className={sign}>×</span>
+              {field('quantity')}
+              <span aria-hidden="true" className={sign}>=</span>
+              <div className="flex flex-col items-center">
+                <span className={LABEL}>Sheets</span>
+                <output aria-live="polite"
+                        className="min-w-[110px] h-9 px-3 rounded-lg bg-zinc-900 text-white grid place-items-center text-[15px] font-bold tabular-nums">
+                  {perCopy * copies || '—'}
+                </output>
+              </div>
+            </div>
+            {pages > 0 && copies > 0 && (
+              <p className="text-[11px] text-[var(--text-3)] text-center">
+                {bothSides(selected)
+                  ? `${pages} page${pages === 1 ? '' : 's'} on both sides is ${perCopy} sheet${perCopy === 1 ? '' : 's'} a copy, ${perCopy * copies} in all.`
+                  : `${perCopy} sheet${perCopy === 1 ? '' : 's'} a copy, ${perCopy * copies} in all.`}
+              </p>
+            )}
+          </div>
+        )
+      })()}
 
       {(selected.addons || []).length > 0 && (
-        <fieldset>
-          <legend className={LABEL}>Add-ons</legend>
-          <div className="flex flex-wrap gap-2">
+        <fieldset className="flex flex-col items-center">
+          <legend className={`${LABEL} mx-auto text-center`}>Add-ons</legend>
+          <div className="flex flex-wrap justify-center gap-2">
             {selected.addons.map(a => {
               const on = selAddons.some(x => (x.service ?? x) === a.id)
               const priced = addonsPriced.find(x => x.service === a.id)
@@ -714,6 +734,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           {addonError && <p className="mt-1.5 text-sm text-red-700">{addonError.response?.data?.detail || 'That finishing couldn’t be priced.'}</p>}
         </fieldset>
       )}
+
+      </div>
 
       {wantsFile && (
         <div>
