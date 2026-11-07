@@ -1,49 +1,47 @@
 // src/components/bm/Inbox.jsx
 //
-// The inbox: conversations on the left, the open one on the right.
-// Colour carries who is speaking: mint is Octos, soft red is a person,
-// solid red is "needs you". Built from the Octos Inbox canvas (Nov 2026).
+// The inbox, for the Branch Manager and the attendants alike (rebuilt from
+// Khofi's mock, 7 Nov 2026): the chats on the left; the chat itself at full
+// height in the middle; on the right, a panel with everything that used to
+// crowd it (what Octos is doing, the actions, the customer, their job, every
+// file in the chat). Who said what is labelled on every group of messages:
+// mint is Octos, soft red is a person, dashed yellow is a note only staff
+// see. Photos are shown, documents are cards with what Octos read from them,
+// and replies can carry files (paperclip, drag, or paste a screenshot).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 
 const C = {
   red: '#D0342C', redText: '#B42318', redDeep: '#8E2A22', redSoft: '#FDF0EF', redBorder: '#F3C6C2',
-  mint: '#E4F3EB', mintText: '#12241A', mintMeta: '#2C5B42', mintStrip: '#F2F8F4', mintBorder: '#D3EADD', mintIcon: '#1E6B47',
-  staff: '#FBE7E5', staffText: '#2A1412', staffMeta: '#7A3A33',
+  mint: '#E4F3EB', mintText: '#12241A', mintIcon: '#1E6B47', mintStrip: '#F2F8F4', mintBorder: '#D3EADD',
+  staff: '#FBE7E5', staffText: '#2A1412',
   note: '#FFF8E6', noteBorder: '#E8C66A', noteText: '#3A2D05', noteMeta: '#7A5A06',
-  bubble: '#F1F2F4', amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
+  amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
 }
+const MAX_FILE = 16 * 1024 * 1024
+const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
 const getConversations = () =>
-  client.get('/api/v1/communications/').then(r => {
-    const d = r.data
-    return Array.isArray(d) ? d : (d?.results || [])
-  })
+  client.get('/api/v1/communications/').then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])))
 const getConversation = id => client.get(`/api/v1/communications/${id}/`).then(r => r.data)
 
 const needsYou = c => c?.handled_by === 'STAFF' && !!c?.handoff_reason
 const withPerson = c => c?.handled_by === 'STAFF' && !c?.handoff_reason
 const inVisit = c => !!c?.counter_until && new Date(c.counter_until) > new Date()
-const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
-function titleCase(s) {
-  return s ? s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : s
+const titleCase = s => (s ? s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : s)
+const nameOf = c => titleCase(c?.display_name || c?.contact_name) || c?.contact_phone || 'Unknown'
+const initialsOf = c => {
+  const words = (nameOf(c) || '').replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean)
+  return ((words[0]?.[0] || '#') + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase()
 }
-function nameOf(c) {
-  return titleCase(c?.display_name || c?.contact_name) || c?.contact_phone || 'Unknown'
-}
-function clock(iso) {
-  return new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
-    .toLowerCase().replace(/\s/g, '')
-}
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
+const clock = iso => new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(/\s/g, '')
+const sameDay = (a, b) => a.toDateString() === b.toDateString()
 function dayLabel(iso) {
-  const d = new Date(iso), now = new Date(), yesterday = new Date(now.getTime() - 86400000)
+  const d = new Date(iso), now = new Date()
   if (sameDay(d, now)) return 'Today'
-  if (sameDay(d, yesterday)) return 'Yesterday'
+  if (sameDay(d, new Date(now.getTime() - 86400000))) return 'Yesterday'
   return d.toLocaleDateString('en-GH', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 function ago(iso) {
@@ -55,278 +53,312 @@ function ago(iso) {
   return dayLabel(iso)
 }
 function until(iso) {
-  const d = new Date(iso), now = new Date(), tomorrow = new Date(now.getTime() + 86400000)
+  const d = new Date(iso), now = new Date()
   if (sameDay(d, now)) return clock(iso)
-  if (sameDay(d, tomorrow)) return `${clock(iso)} tomorrow`
+  if (sameDay(d, new Date(now.getTime() + 86400000))) return `${clock(iso)} tomorrow`
   return `${dayLabel(iso)}, ${clock(iso)}`
 }
-// Who said it: the customer, a file they sent, Octos, a person, a staff-only
-// note, or an event (took over, handed back, resolved), which is one quiet line.
+const size = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+
 function kindOf(m) {
-  if (m.is_internal_note) return m.channel === 'SYSTEM' ? 'event' : 'note'
-  if (m.direction === 'INBOUND') {
-    return (m.media_id || m.media_file || MEDIA.includes(m.message_type)) ? 'file' : 'customer'
-  }
+  if (m.is_internal_note) return m.channel === 'SYSTEM' && !m.media_file && !m.sent_by ? 'event' : 'note'
+  if (m.direction === 'INBOUND') return 'customer'
   return m.sent_by ? 'staff' : 'octos'
 }
-
-// A file's badge (its extension, else its type) and its details line.
-function fileBadge(m) {
-  const ext = (m.media_name || '').includes('.') ? m.media_name.split('.').pop() : ''
-  return (ext && ext.length <= 4 ? ext : (m.message_type || 'FILE').slice(0, 3)).toUpperCase()
+const hasFile = m => !!(m.media_file || m.media_id || MEDIA.includes(m.message_type))
+const isPhoto = m => (m.media_mime || '').startsWith('image/') || m.message_type === 'IMAGE'
+function badge(name, mime, type) {
+  const ext = (name || '').includes('.') ? name.split('.').pop() : ''
+  if (ext && ext.length <= 4) return ext.toUpperCase()
+  if ((mime || '').includes('pdf')) return 'PDF'
+  return (type || 'FILE').slice(0, 3).toUpperCase()
 }
-function fileDetail(m) {
+const badgeColour = b => (b === 'PDF' ? C.red : ['DOC', 'DOCX', 'ODT', 'RTF'].includes(b) ? '#2B579A' : '#5B6B80')
+// What Octos read from a file: "1 page, A5, colour, 240 KB".
+function fileInfo(m) {
   if (!m.media_file) return 'Not saved yet'
+  const i = m.media_info || {}
   const parts = []
   if (m.media_pages) parts.push(`${m.media_pages} page${m.media_pages === 1 ? '' : 's'}`)
-  if (m.media_size) parts.push(m.media_size >= 1048576
-    ? `${(m.media_size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(m.media_size / 1024))} KB`)
+  if (i.paper) parts.push(i.paper)
+  if (i.colour_mode) parts.push(/^(L|1|GRAY|GREY)/i.test(i.colour_mode) ? 'black and white' : 'colour')
+  if (i.word) parts.push('Word, kept as sent')
+  if (m.media_size) parts.push(size(m.media_size))
   return parts.join(', ') || 'Saved'
 }
+
 // ── Icons ───────────────────────────────────────────────────────────────
-const Svg = ({ size = 18, children, ...p }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+const Svg = ({ size: s = 18, children, ...p }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>{children}</svg>
 )
-const WhatsAppIcon = p => <Svg {...p}><path d="M3.5 20.5 5 16a8.5 8.5 0 1 1 3.2 3.2Z" /><path d="M9 9.5c.3 2.3 2.2 4.3 4.5 4.8l1.2-1.2 1.8.8-.4 1.6c-3.6.3-7.4-3.4-7.2-7.1l1.6-.4.8 1.8Z" /></Svg>
-const MailIcon = p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></Svg>
-const SmsIcon = p => <Svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Svg>
-const PersonIcon = p => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Svg>
-const FolderIcon = p => <Svg {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></Svg>
-const SearchIcon = p => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>
-const CheckIcon = p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>
-const SendIcon = p => <Svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></Svg>
-const BackIcon = p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>
-const Spark = ({ size = 12, color = C.mintIcon }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-    <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4Z" />
-  </svg>
-)
-
+const I = {
+  search: p => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>,
+  plus: p => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>,
+  send: p => <Svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></Svg>,
+  clip: p => <Svg {...p}><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" /></Svg>,
+  photo: p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 8" /></Svg>,
+  panel: p => <Svg {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Svg>,
+  back: p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>,
+  check: p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>,
+  close: p => <Svg {...p}><path d="M6 6l12 12M18 6 6 18" /></Svg>,
+}
 const CHANNEL = {
-  WHATSAPP: { label: 'WhatsApp', Icon: WhatsAppIcon, tile: '#E9F6EE', ink: '#1E7A4C' },
-  EMAIL: { label: 'Email', Icon: MailIcon, tile: '#EAF1FB', ink: '#2563A8' },
-  SMS: { label: 'SMS', Icon: SmsIcon, tile: '#FFF4E5', ink: '#A15C07' },
+  WHATSAPP: { label: 'WhatsApp', colour: '#1E7A4C' },
+  SMS: { label: 'SMS', colour: '#A15C07' },
+  EMAIL: { label: 'Email', colour: '#2563A8' },
 }
 const channelOf = c => CHANNEL[c?.channel] || CHANNEL.SMS
 
-function ChannelTile({ channel, size = 40 }) {
-  const ch = CHANNEL[channel] || CHANNEL.SMS
+function Avatar({ c, s = 36 }) {
   return (
-    <span className="flex items-center justify-center shrink-0 rounded-xl"
-      style={{ width: size, height: size, background: ch.tile, color: ch.ink }}>
-      <ch.Icon size={size / 2} />
-    </span>
+    <span className="shrink-0 rounded-full grid place-items-center font-bold text-white"
+      style={{ width: s, height: s, fontSize: s / 2.8, background: channelOf(c).colour }}>{initialsOf(c)}</span>
   )
 }
 
-// WhatsApp's own ticks; a failed message names Meta's reason on hover.
 function Ticks({ msg }) {
   const marks = {
-    QUEUED: { text: '🕓', title: 'Sending' },
-    SENT: { text: '✓', title: 'Sent' },
-    DELIVERED: { text: '✓✓', title: 'Delivered' },
-    READ: { text: '✓✓', title: 'Read', style: { color: C.read } },
-    FAILED: { text: 'Not delivered', title: msg.error || 'Not delivered', style: { color: C.redText, fontWeight: 700 } },
+    QUEUED: ['🕓', 'Sending'], SENT: ['✓', 'Sent'], DELIVERED: ['✓✓', 'Delivered'], READ: ['✓✓', 'Read'],
+    FAILED: ['Not delivered', msg.error || 'Not delivered'],
   }
   const mark = marks[msg.status]
   if (!mark || msg.channel !== 'WHATSAPP') return null
-  return <span title={mark.title} style={{ letterSpacing: mark.text === '✓✓' ? -2 : 0, ...mark.style }}>{mark.text}</span>
+  const style = msg.status === 'READ' ? { color: C.read } : msg.status === 'FAILED' ? { color: C.redText, fontWeight: 700 } : {}
+  return <span title={mark[1]} style={{ letterSpacing: mark[0] === '✓✓' ? -2 : 0, ...style }}>{mark[0]}</span>
 }
 
 // ── The list ────────────────────────────────────────────────────────────
 function Row({ c, selected, onOpen }) {
   const asked = needsYou(c)
+  const tag = asked ? ['Needs you', { background: C.red, color: '#fff' }]
+    : withPerson(c) ? [c.assigned_to_name || 'Staff', { background: C.staff, color: C.redDeep }]
+    : c.channel === 'WHATSAPP' ? ['Octos', { background: C.mint, color: C.mintIcon }] : null
   return (
     <button type="button" onClick={() => onOpen(c.id)}
-      className="flex gap-2.5 w-full text-left px-3.5 py-3 border-b border-[var(--border)] transition-colors"
-      style={{ background: selected ? C.redSoft : 'var(--panel)' }}>
-      <ChannelTile channel={c.channel} size={34} />
-      <span className="flex-1 min-w-0 flex flex-col gap-1">
+      className="flex gap-2.5 w-full text-left px-3 py-2.5 border-b border-[var(--border)] transition-colors hover:bg-black/[0.02]"
+      style={selected ? { background: C.redSoft, boxShadow: `inset 3px 0 0 ${C.red}` } : {}}>
+      <Avatar c={c} />
+      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="flex justify-between gap-2 items-baseline">
-          <span className="font-semibold text-sm truncate text-[var(--text)]">{nameOf(c)}</span>
-          <span className="text-xs text-[var(--text-3)] shrink-0">{ago(c.last_message_at)}</span>
+          <span className="font-bold text-[13px] truncate text-[var(--text)]">{nameOf(c)}</span>
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">{ago(c.last_message_at)}</span>
         </span>
-        <span className="text-[12.5px] truncate"
-          style={asked ? { color: C.redText, fontWeight: 600 } : { color: 'var(--text-2)' }}>
+        <span className="text-xs truncate" style={asked ? { color: C.redText, fontWeight: 600 } : { color: 'var(--text-2)' }}>
           {asked ? `Needs you: ${c.handoff_reason}` : (c.last_message_preview || 'No messages yet')}
         </span>
-        <span className="flex gap-1.5 items-center flex-wrap mt-0.5">
-          {asked ? (
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: C.red }}>Needs you</span>
-          ) : withPerson(c) ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.staff, color: C.redDeep }}>
-              {c.assigned_to_name || 'Staff'}
-            </span>
-          ) : c.channel === 'WHATSAPP' ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: C.mint, color: C.mintIcon }}>Octos</span>
-          ) : null}
-          {c.job && (
-            <span className="text-xs px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-2)] inline-flex items-center gap-1 max-w-[220px]">
-              <FolderIcon size={12} /><span className="truncate">Job {c.job.ref}, {c.job.what}</span>
-            </span>
-          )}
-          {c.unread_count > 0 && (
-            <span className="ml-auto w-2.5 h-2.5 rounded-full" style={{ background: C.red }} aria-label="Unread" />
-          )}
+        <span className="flex gap-1.5 items-center">
+          {tag && <span className="text-[10.5px] font-bold px-2 py-px rounded-full" style={tag[1]}>{tag[0]}</span>}
+          {c.job && <span className="text-[10.5px] text-[var(--text-3)] truncate">Job {c.job.ref}</span>}
+          <span className="text-[10.5px] font-semibold" style={{ color: channelOf(c).colour }}>{channelOf(c).label}</span>
+          {c.unread_count > 0 && !selected && <span className="ml-auto w-2 h-2 rounded-full" style={{ background: C.red }} aria-label="Unread" />}
         </span>
       </span>
     </button>
   )
 }
 
-// ── The open conversation ───────────────────────────────────────────────
-function StatusStrip({ conv }) {
-  if (inVisit(conv)) {
-    return (
-      <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
-        style={{ background: C.amberSoft, border: `1px solid ${C.noteBorder}`, color: C.amberText }}>
-        <PersonIcon size={17} />
-        <span>At the counter. Octos is quiet until {clock(conv.counter_until)}.</span>
-      </div>
-    )
-  }
-  if (needsYou(conv)) {
-    return (
-      <div className="mx-4 mt-3 px-3.5 py-2.5 rounded-xl flex gap-2.5 items-start text-[13px]"
-        style={{ background: C.redSoft, border: `1px solid ${C.redBorder}` }}>
-        <span style={{ color: C.redText }} className="mt-0.5"><PersonIcon size={17} /></span>
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className="font-bold" style={{ color: C.redDeep }}>
-            Octos asked for a person{conv.handled_since ? ` at ${clock(conv.handled_since)}` : ''}
-          </span>
-          <span className="leading-relaxed" style={{ color: '#3B2321' }}>{conv.handoff_reason}</span>
-          <span className="text-[13px]" style={{ color: '#6B4743' }}>Octos keeps answering until someone takes over.</span>
-        </div>
-      </div>
-    )
-  }
-  if (withPerson(conv)) {
-    return (
-      <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
-        style={{ background: C.staff, border: `1px solid ${C.redBorder}`, color: '#5C1F1A' }}>
-        <PersonIcon size={18} />
-        <span>
-          {conv.assigned_to_name || 'A person'} is handling this
-          {conv.handled_since ? ` since ${clock(conv.handled_since)}` : ''}. Octos is quiet until you hand it back.
-        </span>
-      </div>
-    )
-  }
-  if (conv.channel !== 'WHATSAPP') return null
+// ── Starting a chat: approved messages only, until the customer replies ──
+function NewMessage({ onClose, onStarted }) {
+  const [phone, setPhone] = useState('')
+  const [name, setName] = useState('')
+  const [pick, setPick] = useState(null)
+  const [params, setParams] = useState([])
+  const [error, setError] = useState('')
+  const { data } = useQuery({
+    queryKey: ['startTemplates'],
+    queryFn: () => client.get('/api/v1/communications/start/').then(r => r.data.templates),
+    staleTime: 600_000,
+  })
+  const templates = data || []
+  const chosen = templates.find(t => t.name === pick)
+  useEffect(() => { if (chosen) setParams(p => Array.from({ length: chosen.params }, (_, i) => p[i] || (i === 0 ? name.split(' ')[0] : ''))) }, [pick]) // eslint-disable-line
+  const start = useMutation({
+    mutationFn: () => client.post('/api/v1/communications/start/', { phone, name, template: pick, params }),
+    onSuccess: r => onStarted(r.data.conversation),
+    onError: e => setError(e?.response?.data?.detail || 'That message could not be sent.'),
+  })
+  const preview = chosen ? params.reduce((t, v, i) => t.replace(`{${i + 1}}`, v || '…'), chosen.text) : ''
+  const field = 'w-full h-9 px-2.5 text-[13px] rounded-lg border border-black/15 bg-white outline-none focus:border-zinc-900'
   return (
-    <div className="mx-4 mt-3 px-3.5 py-2 rounded-xl flex gap-2 items-center text-[13px]"
-      style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
-      <Spark size={16} />
-      <span>Octos is answering. Take over, or just reply, to step in.</span>
+    <div className="absolute inset-0 z-20 bg-[var(--panel)] p-3.5 flex flex-col gap-3 overflow-y-auto">
+      <div className="flex justify-between items-center">
+        <span className="font-bold text-sm">New message</span>
+        <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 grid place-items-center rounded-lg hover:bg-black/5"><I.close size={16} /></button>
+      </div>
+      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-2)]">Customer’s name
+        <input value={name} onChange={e => setName(e.target.value)} className={field} placeholder="e.g. Ama Owusu" />
+      </label>
+      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-2)]">Phone number
+        <input value={phone} onChange={e => setPhone(e.target.value)} className={field} placeholder="e.g. 024 400 0776" inputMode="tel" />
+      </label>
+      <div className="text-[11px] font-semibold text-[var(--text-2)]">Start with an approved message</div>
+      {templates.map(t => (
+        <button key={t.name} type="button" onClick={() => setPick(t.name)}
+          className={`text-left px-3 py-2 rounded-lg bg-white text-xs leading-snug ${pick === t.name ? 'border-2 border-zinc-900' : 'border border-black/10'}`}>
+          {t.text.replace(/\{1\}/, 'name').replace(/\{2\}/, 'reference')}
+        </button>
+      ))}
+      {chosen && Array.from({ length: chosen.params }, (_, i) => (
+        <label key={i} className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-2)]">{i === 0 ? 'Their name, as greeted' : 'The job or proforma number'}
+          <input value={params[i] || ''} onChange={e => setParams(p => p.map((v, j) => (j === i ? e.target.value : v)))} className={field} />
+        </label>
+      ))}
+      {chosen && <div className="px-3 py-2 rounded-lg text-xs leading-relaxed" style={{ background: C.staff }}>{preview}</div>}
+      <p className="m-0 text-[11px] leading-snug text-[var(--text-3)]">WhatsApp allows only approved messages to someone who hasn’t written in 24 hours. Once they reply, you can write freely.</p>
+      {error && <p className="m-0 text-xs" style={{ color: C.redText }}>{error}</p>}
+      <button type="button" disabled={!chosen || !phone.trim() || params.some(p => !p?.trim()) || start.isPending}
+        onClick={() => { setError(''); start.mutate() }}
+        className="h-9 rounded-lg bg-zinc-900 text-white text-[13px] font-semibold disabled:bg-black/20">{start.isPending ? 'Sending…' : 'Send'}</button>
     </div>
   )
 }
 
-function JobCard({ job }) {
-  if (!job) return null
-  const done = job.ready_to_collect ? 'Ready to collect' : job.out_for_delivery ? 'Out for delivery' : job.stage
-  const parts = [
-    job.what,
-    job.promised_ready && `Promised ${job.promised_ready}`,
-    job.paid_in_full ? 'Paid in full' : job.balance_due && `${job.balance_due} to pay`,
-  ].filter(Boolean)
+// ── One message ─────────────────────────────────────────────────────────
+function FileCard({ m, tint }) {
+  const b = badge(m.media_name, m.media_mime, m.message_type)
   return (
-    <div className="mx-4 mt-2.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] flex gap-3 items-center">
-      <span className="text-[var(--text-2)]"><FolderIcon size={18} /></span>
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="flex items-center gap-2 flex-wrap">
-          <span className="font-bold text-[var(--text)]">Job {job.ref}</span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: C.amberSoft, color: C.amberText }}>{done}</span>
-          {job.branch && <span className="text-xs text-[var(--text-3)]">{job.branch}</span>}
+    <div className="flex items-center gap-2.5 w-[400px] max-w-full p-2 rounded-lg border border-black/5" style={{ background: tint }}>
+      <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
+      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
+        <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
+      </span>
+      {m.media_file && (
+        <span className="flex gap-1.5 shrink-0">
+          <a href={m.media_file} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</a>
+          <a href={m.media_file} download={m.media_name || true} className="px-2.5 py-1 rounded-md border border-black/15 bg-white text-[11.5px] font-semibold">Download</a>
         </span>
-        <span className="text-[13px] text-[var(--text-2)]">{parts.join('. ')}</span>
-      </div>
+      )}
     </div>
   )
 }
 
-function Bubble({ m }) {
+function Bubble({ m, who, first }) {
   const kind = kindOf(m)
   if (kind === 'event') {
-    return (
-      <div className="flex items-center justify-center gap-2 text-xs text-[var(--text-3)] py-1 px-6 text-center">
-        <PersonIcon size={14} /><span>{m.body}, {clock(m.created_at)}</span>
-      </div>
-    )
+    return <div className="self-center text-[11.5px] text-[var(--text-3)] py-1.5 text-center">{m.body}, {clock(m.created_at)}</div>
   }
-  if (kind === 'note') {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-lg px-3 py-2 flex flex-col gap-1"
-          style={{ background: C.note, border: `1px dashed ${C.noteBorder}` }}>
-          <span className="text-xs font-bold" style={{ color: C.noteMeta }}>Note, only staff see this</span>
-          <span className="leading-relaxed whitespace-pre-wrap" style={{ color: C.noteText }}>{m.body}</span>
-          <span className="text-[11px] self-end" style={{ color: C.noteMeta }}>{m.sent_by_name || 'Staff'}, {clock(m.created_at)}</span>
-        </div>
-      </div>
-    )
-  }
-  if (kind === 'customer' || kind === 'file') {
-    return (
-      <div className="flex">
-        <div className="max-w-[75%] flex flex-col gap-0.5 px-3 py-2"
-          style={{ background: C.bubble, borderRadius: '16px 16px 16px 6px' }}>
-          {kind === 'file' && (
-            <span className="flex items-center gap-3 py-1">
-              <span className="w-9 h-11 rounded-lg flex items-center justify-center text-[11px] font-bold"
-                style={{ background: C.redSoft, color: C.redText }}>{fileBadge(m)}</span>
-              <span className="flex flex-col">
-                <span className="font-semibold text-[var(--text)]">{m.media_file ? <a href={m.media_file} target="_blank" rel="noreferrer" className="underline">{m.media_name || titleCase(m.message_type) || 'File'}</a> : (m.media_name || titleCase(m.message_type) || 'File')}</span>
-                <span className="text-xs text-[var(--text-3)]">
-                  {fileDetail(m)}
-                </span>
-              </span>
-            </span>
-          )}
-          {m.body && m.body !== m.media_name && <span className="leading-relaxed whitespace-pre-wrap text-[var(--text)]">{m.body}</span>}
-          <span className="text-[11px] text-[var(--text-3)] self-end">{clock(m.created_at)}</span>
-        </div>
-      </div>
-    )
-  }
-  const octos = kind === 'octos'
+  const mine = kind !== 'customer'
+  const look = {
+    octos: { bg: C.mint, label: C.mintIcon },
+    staff: { bg: C.staff, label: C.redDeep },
+    note: { bg: C.note, label: C.noteMeta, border: `1px dashed ${C.noteBorder}` },
+    customer: { bg: '#FFFFFF', label: 'var(--text-3)', border: '1px solid #ECECEA' },
+  }[kind]
+  const file = hasFile(m)
+  const photo = file && isPhoto(m) && m.media_file
+  const text = m.body && m.body !== m.media_name ? m.body : ''
   return (
-    <div className="flex justify-end">
-      <div className="max-w-[75%] flex flex-col gap-0.5 px-3 py-2"
-        style={{ background: octos ? C.mint : C.staff, borderRadius: '16px 16px 6px 16px' }}>
-        {m.message_type === 'IMAGE' && m.media_file && (<a href={m.media_file} target="_blank" rel="noreferrer"><img src={m.media_file} alt="Card sent to the customer" className="rounded-lg max-w-full mb-1" style={{ maxHeight: 360 }} /></a>)}
-        <span className="leading-relaxed whitespace-pre-wrap" style={{ color: octos ? C.mintText : C.staffText }}>{m.body}</span>
-        <span className="text-[11px] self-end flex items-center gap-1.5" style={{ color: octos ? C.mintMeta : C.staffMeta }}>
-          {octos && <Spark />}
-          {octos ? 'Octos' : (m.sent_by_name || 'Staff')}, {clock(m.created_at)}
-          <Ticks msg={m} />
+    <div className={`flex flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'} ${first ? 'mt-2.5' : ''}`}>
+      {first && <span className="text-[11px] font-bold px-1" style={{ color: look.label }}>{who}</span>}
+      <div className={`max-w-[66%] flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
+        style={{ background: look.bg, border: look.border || 0, borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px' }}>
+        {photo && (
+          <a href={m.media_file} target="_blank" rel="noreferrer">
+            <img src={m.media_file} alt={m.media_name || 'Photo'} className="block rounded-lg max-w-full" style={{ maxHeight: 340, minWidth: 160 }} />
+          </a>
+        )}
+        {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
+        {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
+        <span className={`self-end text-[10.5px] text-[var(--text-3)] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`}>
+          {clock(m.created_at)} <Ticks msg={m} />
         </span>
       </div>
     </div>
   )
 }
 
-function Thread({ convId, onBack }) {
+// ── The side panel ──────────────────────────────────────────────────────
+function Panel({ conv, actions, files }) {
+  const whatsapp = conv.channel === 'WHATSAPP'
+  const state = inVisit(conv)
+    ? ['At the counter', `Octos is quiet until ${clock(conv.counter_until)}.`, C.amberSoft, C.noteBorder, C.amberText]
+    : needsYou(conv)
+    ? [`Octos asked for a person${conv.handled_since ? ` at ${clock(conv.handled_since)}` : ''}`, `${conv.handoff_reason} Octos keeps answering until someone takes over.`, C.redSoft, C.redBorder, C.redDeep]
+    : withPerson(conv)
+    ? [`${conv.assigned_to_name || 'A person'} is handling this`, 'Octos is quiet until it is handed back.', C.staff, C.redBorder, C.redDeep]
+    : whatsapp ? ['Octos is answering', 'Take over, or just reply, to step in.', C.mintStrip, C.mintBorder, C.mintIcon]
+    : ['No assistant on this channel', 'Replies here are written by staff.', '#F6F6F4', '#E7E7E4', 'var(--text-2)']
+  const job = conv.job_card
+  const resolved = conv.status === 'RESOLVED'
+  const small = 'flex-1 h-8 rounded-lg border border-black/15 bg-white text-xs font-semibold disabled:opacity-40'
+  return (
+    <aside aria-label="Details" className="w-[290px] shrink-0 bg-[var(--panel)] border-l border-[var(--border)] p-3.5 flex flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-col gap-1.5 p-3 rounded-xl" style={{ background: state[2], border: `1px solid ${state[3]}` }}>
+        <span className="font-bold text-[13px]" style={{ color: state[4] }}>{resolved ? 'Resolved' : state[0]}</span>
+        {!resolved && <span className="text-[12.5px] leading-snug text-[var(--text)]">{state[1]}</span>}
+        {!resolved && whatsapp && actions.main}
+        {!resolved && (
+          <div className="flex gap-1.5">
+            {whatsapp && !inVisit(conv) && <button type="button" onClick={actions.atCounter} className={small}>At the counter</button>}
+            <button type="button" onClick={actions.resolve} className={small}>✓ Resolve</button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">CUSTOMER</span>
+        <span className="font-bold text-sm">{nameOf(conv)}</span>
+        <span className="text-[12.5px] text-[var(--text-2)]">{conv.contact_phone || conv.contact_email}</span>
+        <span className="text-xs text-[var(--text-3)]">{conv.customer ? 'Registered customer' : 'Not registered yet'}</span>
+      </div>
+
+      {job && (
+        <div className="flex flex-col gap-1 p-2.5 rounded-xl border border-[var(--border)]">
+          <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">JOB</span>
+          <span className="flex items-center gap-1.5 flex-wrap">
+            <b className="text-[13px]">{job.ref}</b>
+            <span className="text-[11px] font-semibold px-2 py-px rounded-full" style={{ background: C.amberSoft, color: C.amberText }}>
+              {job.ready_to_collect ? 'Ready to collect' : job.out_for_delivery ? 'Out for delivery' : job.stage}
+            </span>
+          </span>
+          {job.what && <span className="text-[12.5px] text-[var(--text-2)]">{job.what}</span>}
+          {job.promised_ready && <span className="text-xs text-[var(--text-3)]">Promised {job.promised_ready}</span>}
+          <span className="text-xs text-[var(--text-3)]">{job.paid_in_full ? 'Paid in full' : job.balance_due ? `${job.balance_due} to pay` : ''}</span>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">FILES IN THIS CHAT</span>
+        {files.length === 0 && <span className="text-xs text-[var(--text-3)]">None yet</span>}
+        {files.map(m => {
+          const b = badge(m.media_name, m.media_mime, m.message_type)
+          return (
+            <a key={m.id} href={m.media_file || undefined} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[12.5px] hover:bg-black/[0.03] rounded-md p-0.5">
+              <span className="w-7 h-9 shrink-0 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
+              <span className="flex-1 min-w-0 flex flex-col">
+                <span className="font-semibold truncate">{m.media_name || (isPhoto(m) ? 'Photo' : 'File')}</span>
+                <span className="text-[11px] text-[var(--text-3)] truncate">{kindOf(m) === 'customer' ? 'From the customer' : kindOf(m) === 'octos' ? 'From Octos' : 'From staff'}, {clock(m.created_at)}</span>
+              </span>
+            </a>
+          )
+        })}
+      </div>
+    </aside>
+  )
+}
+
+// ── The open chat ───────────────────────────────────────────────────────
+function Thread({ convId, onBack, panel, setPanel }) {
   const queryClient = useQueryClient()
   const [reply, setReply] = useState('')
   const [asNote, setAsNote] = useState(false)
+  const [chips, setChips] = useState([])
   const [error, setError] = useState('')
+  const [dragging, setDragging] = useState(false)
   const scroller = useRef(null)
+  const filePick = useRef(null)
+  const photoPick = useRef(null)
 
   const { data: conv, isLoading } = useQuery({
     queryKey: ['conversation', convId],
     queryFn: () => getConversation(convId),
     staleTime: 2_000,
-    // While open, every 3 seconds: new messages and ticks appear on their own.
-    refetchInterval: 3_000,
+    refetchInterval: 3_000,   // new messages and ticks appear on their own
   })
   const messages = conv?.messages || []
-
-  useEffect(() => {
-    if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight
-  }, [messages.length, convId])
+  useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [messages.length, convId])
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['conversation', convId] })
@@ -338,114 +370,153 @@ function Thread({ convId, onBack }) {
   const atCounter = useMutation(act('at-counter'))
   const resolve = useMutation(act('resolve'))
   const send = useMutation({
-    mutationFn: () => client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote }),
-    onSuccess: () => { setReply(''); setError(''); setAsNote(false); refresh() },
-    // The server says why (a closed WhatsApp window, say); the typed text stays.
+    mutationFn: () => {
+      if (!chips.length) return client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote })
+      const form = new FormData()
+      chips.forEach(f => form.append('attachments', f))
+      form.append('body', reply)
+      form.append('is_internal_note', asNote ? 'true' : 'false')
+      return client.post(`/api/v1/communications/${convId}/reply/`, form)
+    },
+    onSuccess: () => { setReply(''); setChips([]); setError(''); setAsNote(false); refresh() },
+    // The server says why (a closed window, a file too big); what was typed stays.
     onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
+
+  const addFiles = list => {
+    const files = Array.from(list || [])
+    const big = files.filter(f => f.size > MAX_FILE)
+    if (big.length) setError(`${big.map(f => f.name).join(', ')} is over 16 MB.`)
+    setChips(c => [...c, ...files.filter(f => f.size <= MAX_FILE)])
+  }
 
   if (isLoading || !conv) {
     return <div className="flex-1 p-6 space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-12 bg-[var(--bg)] rounded-xl animate-pulse" />)}</div>
   }
 
-  const ch = channelOf(conv)
-  const closes = conv.window_closes_at
-  const windowLine = conv.channel !== 'WHATSAPP' || !closes ? ''
-    : new Date(closes) > new Date() ? `Free replies open until ${until(closes)}`
-    : 'Free replies closed until the customer writes again'
-  const sub = [ch.label, conv.contact_phone || conv.contact_email, windowLine].filter(Boolean).join('. ')
+  const whatsapp = conv.channel === 'WHATSAPP'
   const resolved = conv.status === 'RESOLVED'
+  const closes = conv.window_closes_at
+  const windowOpen = whatsapp && closes && new Date(closes) > new Date()
+  const windowLine = !whatsapp ? `${channelOf(conv).label}: text only.`
+    : windowOpen ? `Free replies open until ${until(closes)}.` : 'Free replies closed until the customer writes again. Use New message.'
+  const taken = withPerson(conv)
+  const mainButton = (
+    <button type="button" onClick={() => (taken ? handBack : takeOver).mutate()} disabled={takeOver.isPending || handBack.isPending}
+      className="w-full h-[34px] px-3.5 rounded-lg text-[12.5px] font-semibold disabled:opacity-40"
+      style={taken ? { background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: C.mintIcon } : { background: '#16181D', color: '#fff' }}>
+      {taken ? 'Hand back to Octos' : 'Take over'}
+    </button>
+  )
+  const files = messages.filter(m => hasFile(m) && m.media_file)
+  const submit = () => { if ((reply.trim() || chips.length) && !send.isPending) send.mutate() }
 
-  const submit = () => { if (reply.trim() && !send.isPending) send.mutate() }
-  const onKey = e => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
-  }
-
-  let lastDay = ''
+  let lastWho = '', lastDay = ''
   return (
-    <div className="flex flex-col min-h-0 h-full">
-      <div className="flex flex-wrap items-center gap-2.5 px-4 py-3 border-b border-[var(--border)]">
-        <button type="button" onClick={onBack} aria-label="All conversations"
-          className="lg:hidden w-9 h-9 -ml-1 flex items-center justify-center rounded-xl text-[var(--text)]"><BackIcon size={20} /></button>
-        <ChannelTile channel={conv.channel} size={36} />
-        <div className="flex-1 min-w-[180px] flex flex-col gap-0.5">
-          <h2 className="m-0 text-[15px] font-bold text-[var(--text)]">{nameOf(conv)}</h2>
-          <span className="text-xs text-[var(--text-3)]">{sub}</span>
+    <div className="flex-1 min-w-0 flex">
+      <section aria-label="Conversation" className="flex-1 min-w-0 flex flex-col bg-[#FBFBFA]"
+        onDragOver={e => { e.preventDefault(); if (!resolved) setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); if (!resolved) addFiles(e.dataTransfer.files) }}>
+        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
+          <button type="button" onClick={onBack} aria-label="All conversations" className="lg:hidden w-8 h-8 -ml-1 grid place-items-center rounded-lg"><I.back size={18} /></button>
+          <Avatar c={conv} s={38} />
+          <div className="flex-1 min-w-0 flex flex-col">
+            <h2 className="m-0 text-[14.5px] font-bold truncate">{nameOf(conv)}</h2>
+            <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email}</span>
+          </div>
+          {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
+          <button type="button" onClick={() => setPanel(p => !p)} aria-label="Details" title="Details" aria-pressed={panel}
+            className="w-[34px] h-[34px] rounded-lg grid place-items-center"
+            style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
         </div>
-        {!resolved && conv.channel === 'WHATSAPP' && (withPerson(conv) ? (
-          <button type="button" onClick={() => handBack.mutate()} disabled={handBack.isPending}
-            className="h-9 px-3 rounded-lg font-semibold text-[13px] flex items-center gap-2 disabled:opacity-40"
-            style={{ background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: '#1D4630' }}>
-            <Spark size={14} />Hand back to Octos
-          </button>
-        ) : (
-          <button type="button" onClick={() => takeOver.mutate()} disabled={takeOver.isPending}
-            className="h-9 px-4 rounded-lg font-semibold text-[13px] text-white bg-[var(--text)] disabled:opacity-40">
-            Take over
-          </button>
-        ))}
-        {!resolved && conv.channel === 'WHATSAPP' && !inVisit(conv) && (
-          <button type="button" onClick={() => atCounter.mutate()} disabled={atCounter.isPending}
-            title="The customer is here. Octos stays quiet for this visit."
-            className="h-9 px-3 rounded-lg font-semibold text-[13px] border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
-            At the counter
-          </button>
-        )}
+
+        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-5 py-3 flex flex-col gap-1 relative">
+          {dragging && <div className="absolute inset-2 z-10 rounded-xl border-2 border-dashed border-zinc-900 bg-white/80 grid place-items-center text-sm font-semibold">Drop to attach</div>}
+          {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
+          {messages.map(m => {
+            const kind = kindOf(m)
+            const who = kind === 'octos' ? 'Octos' : kind === 'staff' ? `${m.sent_by_name || 'Staff'}, staff`
+              : kind === 'note' ? `Note by ${m.sent_by_name || 'staff'}, staff only` : kind === 'customer' ? nameOf(conv) : ''
+            const day = dayLabel(m.created_at)
+            const newDay = day !== lastDay
+            const first = newDay || who !== lastWho
+            lastDay = day
+            lastWho = who
+            return (
+              <div key={m.id} className="flex flex-col">
+                {newDay && (
+                  <div className="flex items-center gap-3 text-[11px] text-[var(--text-3)] py-2">
+                    <span className="flex-1 h-px bg-[var(--border)]" /><span>{day}</span><span className="flex-1 h-px bg-[var(--border)]" />
+                  </div>
+                )}
+                <Bubble m={m} who={who} first={first && kind !== 'event'} />
+              </div>
+            )
+          })}
+        </div>
+
         {!resolved && (
-          <button type="button" onClick={() => resolve.mutate()} disabled={resolve.isPending}
-            className="h-9 px-3 rounded-lg font-semibold text-[13px] flex items-center gap-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40">
-            <CheckIcon size={16} />Resolve
-          </button>
-        )}
-      </div>
-
-      {!resolved && <StatusStrip conv={conv} />}
-      <JobCard job={conv.job_card} />
-
-      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-        {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
-        {messages.map(m => {
-          const day = dayLabel(m.created_at)
-          const separator = day !== lastDay
-          lastDay = day
-          return (
-            <div key={m.id} className="flex flex-col gap-2.5">
-              {separator && (
-                <div className="flex items-center gap-3 text-xs text-[var(--text-3)] py-1">
-                  <span className="flex-1 h-px bg-[var(--border)]" /><span>{day}</span><span className="flex-1 h-px bg-[var(--border)]" />
-                </div>
-              )}
-              <Bubble m={m} />
+          <div className="bg-[var(--panel)] border-t border-[var(--border)] px-4 pt-2 pb-2.5 flex flex-col gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div role="tablist" aria-label="Write" className="flex gap-0.5 p-[3px] rounded-lg bg-black/[0.05]">
+                {[[false, 'Reply'], [true, 'Note, staff only']].map(([note, label]) => (
+                  <button key={label} type="button" role="tab" aria-selected={asNote === note} onClick={() => setAsNote(note)}
+                    className={`h-7 px-3 rounded-md text-xs ${asNote === note ? 'bg-white shadow-sm font-bold' : 'font-semibold text-[var(--text-3)]'}`}>{label}</button>
+                ))}
+              </div>
+              <span className="text-[11.5px]" style={{ color: asNote ? C.noteMeta : windowOpen ? '#1E7A4C' : 'var(--text-3)' }}>
+                {asNote ? 'Only staff see notes.' : `${!taken && whatsapp ? 'Sending takes this chat over from Octos. ' : ''}${windowLine}`}
+              </span>
             </div>
-          )
-        })}
-      </div>
+            {chips.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {chips.map((f, i) => {
+                  const b = badge(f.name, f.type)
+                  return (
+                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-lg border border-black/10 bg-[#FAFAF9]">
+                      {f.type.startsWith('image/')
+                        ? <img src={URL.createObjectURL(f)} alt="" className="w-8 h-8 rounded object-cover" />
+                        : <span className="w-8 h-8 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>}
+                      <span className="flex flex-col"><span className="text-xs font-semibold max-w-[180px] truncate">{f.name}</span><span className="text-[10.5px] text-[var(--text-3)]">{size(f.size)}</span></span>
+                      <button type="button" onClick={() => setChips(c => c.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="w-6 h-6 grid place-items-center rounded hover:bg-black/5"><I.close size={13} /></button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+            <div className="flex items-end gap-2">
+              <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+              <input ref={photoPick} type="file" multiple accept="image/*" className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+              <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach a document" title="Attach a document"
+                className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.clip size={18} /></button>
+              <button type="button" onClick={() => photoPick.current?.click()} aria-label="Attach a photo" title="Attach a photo"
+                className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.photo size={18} /></button>
+              <label htmlFor="reply" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
+              <textarea id="reply" rows={2} value={reply}
+                onChange={e => { setReply(e.target.value); setError('') }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
+                onPaste={e => { if (e.clipboardData?.files?.length) { e.preventDefault(); addFiles(e.clipboardData.files) } }}
+                placeholder={asNote ? 'Write a note only staff see' : `Reply to ${nameOf(conv)}`}
+                className="flex-1 min-h-[38px] max-h-32 px-3 py-2 text-[13.5px] leading-snug rounded-lg outline-none resize-none"
+                style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: '#fff', border: '1px solid var(--border)' }} />
+              <button type="button" onClick={submit} disabled={(!reply.trim() && !chips.length) || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
+                className="w-[42px] h-[38px] shrink-0 rounded-lg grid place-items-center text-white disabled:opacity-40"
+                style={{ background: asNote ? C.noteMeta : C.red }}>{asNote ? <I.check size={18} /> : <I.send size={17} />}</button>
+            </div>
+            {error && <p className="m-0 text-xs" style={{ color: C.redText }}>{error}</p>}
+            <span className="text-[11px] text-[var(--text-3)]">Enter sends, Shift+Enter adds a line. Drop files here, or paste a screenshot.</span>
+          </div>
+        )}
+      </section>
 
-      {!resolved && (
-        <div className="border-t border-[var(--border)] px-4 pt-3 pb-3 flex flex-col gap-2">
-          <div className="flex gap-2.5 items-end">
-            <label htmlFor="reply" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
-            <textarea id="reply" rows={1} value={reply}
-              onChange={e => { setReply(e.target.value); setError('') }} onKeyDown={onKey}
-              placeholder={asNote ? 'Write a note only staff see' : `Reply to ${nameOf(conv)}`}
-              className="flex-1 min-h-[36px] max-h-40 px-3 py-2 text-sm rounded-lg outline-none resize-none text-[var(--text)]"
-              style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: 'var(--panel)', border: '1px solid var(--border)' }} />
-            <button type="button" onClick={submit} disabled={!reply.trim() || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
-              className="w-10 h-9 shrink-0 rounded-lg flex items-center justify-center text-white disabled:opacity-40"
-              style={{ background: asNote ? C.noteMeta : C.red }}>
-              {asNote ? <CheckIcon size={18} /> : <SendIcon size={18} />}
-            </button>
-          </div>
-          {error && <p className="text-xs m-0" style={{ color: C.redText }}>{error}</p>}
-          <div className="flex gap-4 flex-wrap text-xs text-[var(--text-3)]">
-            <span>
-              {asNote ? 'Only staff see notes.' : conv.handled_by === 'OCTOS' || needsYou(conv) ? 'Sending takes this conversation over from Octos.' : ''}
-              {' '}Enter sends, Shift+Enter adds a line.
-            </span>
-            <button type="button" onClick={() => setAsNote(n => !n)} className="underline text-[var(--text-2)]">
-              {asNote ? 'Write a reply instead' : 'Write a note only staff see'}
-            </button>
-          </div>
+      {panel && (
+        <div className="hidden xl:flex">
+          <Panel conv={conv} files={files} actions={{
+            main: mainButton,
+            atCounter: () => atCounter.mutate(),
+            resolve: () => resolve.mutate(),
+          }} />
         </div>
       )}
     </div>
@@ -453,7 +524,7 @@ function Thread({ convId, onBack }) {
 }
 
 // ── The page ────────────────────────────────────────────────────────────
-const TABS = [{ key: 'ALL', label: 'All' }, { key: 'WHATSAPP' }, { key: 'EMAIL' }, { key: 'SMS' }]
+const TABS = ['ALL', 'WHATSAPP', 'SMS', 'EMAIL']
 const FILTERS = [
   { key: 'needs', label: 'Needs you', test: needsYou },
   { key: 'octos', label: 'Octos', test: c => c.handled_by === 'OCTOS' && c.channel === 'WHATSAPP' },
@@ -461,10 +532,13 @@ const FILTERS = [
 ]
 
 export default function Inbox() {
+  const queryClient = useQueryClient()
   const [channel, setChannel] = useState('ALL')
   const [filter, setFilter] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  const [panel, setPanel] = useState(true)
+  const [starting, setStarting] = useState(false)
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['conversations'],
@@ -474,104 +548,92 @@ export default function Inbox() {
     placeholderData: prev => prev,
   })
 
-  const unreadIn = key => conversations.filter(c => (key === 'ALL' || c.channel === key) && c.unread_count > 0).length
   const needsCount = conversations.filter(needsYou).length
-
+  const unread = conversations.filter(c => c.unread_count > 0).length
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     const f = FILTERS.find(x => x.key === filter)
     return conversations
       .filter(c => channel === 'ALL' || c.channel === channel)
       .filter(c => !f || f.test(c))
-      .filter(c => !q || [nameOf(c), c.last_message_preview, c.job?.ref, c.job?.what]
-        .some(v => (v || '').toLowerCase().includes(q)))
-      // Needs you first, then the newest.
-      .sort((a, b) => (needsYou(b) - needsYou(a)) ||
-        (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
+      .filter(c => !q || [nameOf(c), c.contact_phone, c.last_message_preview, c.job?.ref, c.job?.what].some(v => (v || '').toLowerCase().includes(q)))
+      .sort((a, b) => (needsYou(b) - needsYou(a)) || (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
   }, [conversations, channel, filter, query])
 
-  // On a wide screen, open the first conversation; on a phone, start with the list.
   useEffect(() => {
     if (!selectedId && shown.length && window.matchMedia('(min-width: 1024px)').matches) setSelectedId(shown[0].id)
   }, [shown, selectedId])
 
   return (
-    <div className="p-5 sm:p-6 flex flex-col gap-3 text-sm">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[240px] flex flex-col gap-1">
-          <h2 className="m-0 text-lg font-bold text-[var(--text)]">Inbox</h2>
-          <span className="text-[13px] text-[var(--text-2)]">
-            {needsCount > 0 && <span className="font-semibold" style={{ color: C.redText }}>{needsCount} need you, </span>}
-            {unreadIn('ALL')} unread. Octos is answering the rest.
+    <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-3 sm:m-4"
+      style={{ height: 'calc(100vh - 110px)', minHeight: 560 }}>
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="flex flex-col">
+          <span className="text-base font-bold">Inbox</span>
+          <span className="text-[11.5px] text-[var(--text-2)]">
+            {needsCount > 0 && <b style={{ color: C.redText }}>{needsCount} need{needsCount === 1 ? 's' : ''} you, </b>}
+            {unread} unread. Octos is answering the rest.
           </span>
         </div>
-        <div className="relative flex-[0_1_420px] min-w-[220px]">
-          <label htmlFor="inbox-search" className="sr-only">Search conversations</label>
-          <span className="absolute left-3 top-2.5 text-[var(--text-3)]"><SearchIcon size={16} /></span>
-          <input id="inbox-search" type="search" value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search names, messages or jobs"
-            className="w-full h-9 pl-9 pr-3 text-[13px] rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] outline-none focus:border-[var(--border-dark)]" />
+        <div className="relative flex-[0_1_320px] min-w-[200px] ml-2">
+          <I.search size={15} className="absolute left-2.5 top-[9px] text-[var(--text-3)]" />
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
+            placeholder="Search names, numbers, messages or jobs"
+            className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
         </div>
-      </div>
-
-      <div role="tablist" aria-label="Channel" className="flex gap-2 flex-wrap">
-        {TABS.map(t => {
-          const active = channel === t.key
-          const count = unreadIn(t.key)
-          const ch = CHANNEL[t.key]
-          return (
-            <button key={t.key} type="button" role="tab" aria-selected={active} onClick={() => setChannel(t.key)}
-              className="h-8 px-3 rounded-lg text-[13px] flex items-center gap-1.5 transition-colors"
-              style={active ? { background: C.red, color: '#FFFFFF', fontWeight: 700 }
-                : { background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text)', fontWeight: 600 }}>
-              {ch && <span style={{ color: active ? '#FFFFFF' : ch.ink }}><ch.Icon size={15} /></span>}
-              {t.label || ch.label}
-              {count > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[11px] flex items-center justify-center"
-                  style={active ? { background: '#FFFFFF', color: C.redText } : { background: C.red, color: '#FFFFFF' }}>{count}</span>
-              )}
+        <div role="tablist" aria-label="Channel" className="flex gap-0.5 p-[3px] rounded-[10px] bg-black/[0.05]">
+          {TABS.map(t => (
+            <button key={t} type="button" role="tab" aria-selected={channel === t} onClick={() => setChannel(t)}
+              className={`h-7 px-3 rounded-md text-xs ${channel === t ? 'bg-white shadow-sm font-bold' : 'font-semibold text-[var(--text-3)]'}`}>
+              {t === 'ALL' ? 'All' : CHANNEL[t].label}
             </button>
-          )
-        })}
+          ))}
+        </div>
+        <button type="button" onClick={() => setStarting(s => !s)}
+          className="ml-auto inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
+          <I.plus size={14} />New message
+        </button>
       </div>
 
-      <div className="flex gap-4 items-stretch" style={{ height: 'calc(100vh - 240px)', minHeight: 520 }}>
+      <div className="flex-1 min-h-0 flex">
         <section aria-label="Conversations"
-          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[340px] shrink-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
-          <div className="flex gap-1.5 flex-wrap p-3 border-b border-[var(--border)]">
+          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[300px] shrink-0 flex-col bg-[var(--panel)] border-r border-[var(--border)] relative`}>
+          <div className="flex gap-1.5 flex-wrap px-3 py-2 border-b border-[var(--border)]">
             {FILTERS.map(f => {
-              const on = filter === f.key
-              const red = f.key === 'needs'
+              const on = filter === f.key, red = f.key === 'needs'
               return (
                 <button key={f.key} type="button" aria-pressed={on} onClick={() => setFilter(on ? null : f.key)}
-                  className="rounded-full px-2.5 py-1 text-xs font-semibold"
-                  style={on ? { background: red ? C.red : 'var(--text)', color: '#FFFFFF', border: '1px solid transparent' }
+                  className="rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold"
+                  style={on ? { background: red ? C.red : '#16181D', color: '#fff', border: '1px solid transparent' }
                     : red ? { background: C.redSoft, color: C.redText, border: `1px solid ${C.redBorder}` }
-                    : { background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }}>
+                    : { background: 'var(--panel)', border: '1px solid var(--border)' }}>
                   {f.label}{red && needsCount ? `, ${needsCount}` : ''}
                 </button>
               )
             })}
           </div>
           <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
-              [1, 2, 3].map(i => <div key={i} className="h-20 m-3 bg-[var(--bg)] rounded-xl animate-pulse" />)
-            ) : shown.length === 0 ? (
-              <div className="p-8 text-center text-sm text-[var(--text-3)]">
-                {query || filter ? 'Nothing matches. Clear the search or filter to see everything.' : 'Messages from customers will appear here.'}
-              </div>
-            ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
+            {isLoading ? [1, 2, 3].map(i => <div key={i} className="h-16 m-3 bg-[var(--bg)] rounded-xl animate-pulse" />)
+              : shown.length === 0 ? (
+                <div className="p-8 text-center text-sm text-[var(--text-3)]">
+                  {query || filter ? 'Nothing matches. Clear the search or filter to see everything.' : 'Messages from customers will appear here.'}
+                </div>
+              ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
           </div>
-        </section>
-
-        <section aria-label="Conversation"
-          className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-1 min-w-0 flex-col bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden`}>
-          {selectedId ? (
-            <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-3)]">Choose a conversation to read it.</div>
+          {starting && (
+            <NewMessage onClose={() => setStarting(false)} onStarted={id => {
+              setStarting(false)
+              queryClient.invalidateQueries({ queryKey: ['conversations'] })
+              setSelectedId(id)
+            }} />
           )}
         </section>
+
+        <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-1 min-w-0`}>
+          {selectedId
+            ? <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel} />
+            : <div className="flex-1 grid place-items-center text-sm text-[var(--text-3)]">Choose a conversation to read it.</div>}
+        </div>
       </div>
     </div>
   )
