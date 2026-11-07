@@ -170,7 +170,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
-      .filter(s => s.is_active && s.category === jobType && !s.variant_of)
+      .filter(s => s.is_active && s.category === jobType && !s.variant_of && !s.addon_only)
       .filter(s => matchesSearch(s.name, search))
       .forEach(s => {
         const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
@@ -213,7 +213,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     setSelected(service)
     setSelQty(service.smart_defaults?.quantity || 1)
     setSelPages(service.smart_defaults?.pages || 1)
-    setSelRingSize(isBinding(service) ? 10 : null)
+    setSelRingSize(null)   // binding's ring size is a field of its own form
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
     setSelArtwork(null)
     setSelAddons([])
@@ -443,7 +443,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {Object.keys(grouped).length === 0 && <p className="text-sm text-[var(--text-3)] py-6 text-center">Nothing matches</p>}
         {Object.entries(grouped).map(([grp, items]) => (
           <div key={grp} className="mb-3">
-            <div className={`${H} px-2 mb-1`}>{grp}</div>
+            {Object.keys(grouped).length > 1 && <div className={`${H} px-2 mb-1`}>{grp}</div>}
             {items.map(s => (
               <button key={s.id} onClick={() => selectService(s)}
                       className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors
@@ -533,19 +533,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           </div>
         </div>
       )}
-      {isBinding(selected) && (
-        <div className="mt-4">
-          <div className={`${H} mb-1`}>Ring size (mm)</div>
-          <div className="flex flex-wrap gap-1">
-            {Array.from({ length: 27 }, (_, i) => 8 + i * 2).map(size => (
-              <button key={size} onClick={() => setSelRingSize(size)}
-                      className={`px-2 py-1 text-[11px] font-bold rounded-lg border ${selRingSize === size ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/10'}`}>
-                {size}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Binding's ring size is a field of its own form (7 Nov 2026). */}
 
       <div className="mt-4 grid grid-cols-2 lg:grid-cols-3 gap-3">
         {(selected.spec_template || []).length > 0
