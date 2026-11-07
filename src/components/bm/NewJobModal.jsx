@@ -906,7 +906,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     </div>
   )
 
-  // The whole window drawn 10% smaller (Khofi, 7 Nov). Its height is set in
+  // The whole window drawn at 96.3% (Khofi, 7 Nov: 10% smaller, then 7% back up). Its height is set in
   // pixels, which zoom scales in every browser, so it still fills 94% of the screen.
   const [screenH, setScreenH] = useState(() => window.innerHeight)
   useEffect(() => {
@@ -914,7 +914,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  const SCALE = 0.9
+  const SCALE = 0.963
 
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
