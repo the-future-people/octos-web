@@ -2,12 +2,12 @@
 //
 // Recording a job at the counter.
 //
-// One window for every kind of job (7 Nov 2026): what to make on the left,
-// the item being set up in the middle, the cart on the right. Production
-// and design carry more: the customer and who the job is for, each item's sizes,
-// finishing and file, and a promise. Three columns: what to make, the item
-// being set up, and the cart with everything the customer is told (total,
-// deposit, ready time) above the button that creates the job.
+// One window for every kind of job (7 Nov 2026, from Khofi's mock): what to
+// make on the left, the item being set up in the middle, the cart on the
+// right. Production and design carry more: the customer and who the job is
+// for, each item's sizes, finishing and file, and a promise. The cart holds
+// everything the customer is told (total, deposit, ready time) above the
+// button that creates the job.
 //
 // Every price and promise comes from the server; the browser does no
 // pricing of its own. Files are checked exactly as the app checks them and
@@ -25,13 +25,75 @@ import NewCustomerModal from './NewCustomerModal'
 import client from '../../api/client'
 
 const fmt = n => `GHS ${parseFloat(n || 0).toFixed(2)}`
-const TYPES = [['INSTANT', 'Instant'], ['PRODUCTION', 'Production'], ['DESIGN', 'Design']]
+const TYPES = [['INSTANT', 'Instant', 'bolt'], ['PRODUCTION', 'Production', 'layers'], ['DESIGN', 'Design', 'pen']]
+const BADGE = { INSTANT: 'Instant job', PRODUCTION: 'Production job', DESIGN: 'Design job' }
 const UNIT = { PER_SQFT: 'per sq ft', PER_SQCM: 'per sq cm', PER_COPY: 'per copy', PER_PAGE: 'per page',
                PER_SHEET: 'per sheet', PER_PIECE: 'per piece', PER_JOB: 'per job' }
 const ROLE = { REP: 'Rep', STAFF: 'Staff', OWNER: 'Owner', MEMBER: 'Member' }
-const H = 'text-[10px] font-black uppercase tracking-[0.08em] text-[var(--text-3)]'
-const FIELD = `w-full px-3 py-2.5 text-sm bg-white border border-black/10 rounded-xl outline-none
-               focus:border-blue-400 transition-colors disabled:bg-black/[0.03] disabled:text-[var(--text-2)]`
+const FIELD = `w-full px-3 h-[52px] text-[15px] bg-white border border-black/15 rounded-xl outline-none
+               focus:border-zinc-900 transition-colors disabled:bg-black/[0.03] disabled:text-[var(--text-2)]`
+const LABEL = 'block text-sm font-semibold mb-2'
+
+// ── Icons: one stroke set, drawn in the current text colour ─────────
+const PATHS = {
+  doc:    <><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M10 13h6M10 17h6" /></>,
+  copy:   <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></>,
+  cert:   <><circle cx="12" cy="9" r="5" /><path d="M9 13.5L8 21l4-2 4 2-1-7.5" /></>,
+  bind:   <><path d="M6 4h12v16H6z" /><path d="M4 7h4M4 11h4M4 15h4M4 19h4" /></>,
+  lam:    <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8l6 6M9 12l3 3" /></>,
+  scan:   <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16" />,
+  env:    <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>,
+  photo:  <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 8" /></>,
+  type:   <><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" /></>,
+  form:   <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+  bolt:   <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />,
+  layers: <><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></>,
+  pen:    <><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M13 7l4 4" /></>,
+  plus:   <path d="M12 5v14M5 12h14" />,
+  minus:  <path d="M5 12h14" />,
+  cart:   <><circle cx="9" cy="20" r="1.4" /><circle cx="18" cy="20" r="1.4" /><path d="M3 4h2l2.4 11h11.6l2-8H6.3" /></>,
+  tag:    <><path d="M3 12V4h8l10 10-8 8z" /><circle cx="7.5" cy="8.5" r="1.4" /></>,
+  check:  <path d="M5 12l5 5 9-10" />,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>,
+  person: <><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></>,
+  close:  <path d="M6 6l12 12M18 6L6 18" />,
+  clock:  <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+}
+function Icon({ kind, size = 20, className = '' }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 ${className}`}>
+      {PATHS[kind] || PATHS.doc}
+    </svg>
+  )
+}
+
+// What a service is, for its icon and its group in the list.
+function kindOf(s) {
+  const n = (s?.name || '').toLowerCase()
+  if (n.includes('binding')) return 'bind'
+  if (n.includes('laminat')) return 'lam'
+  if (n.includes('scan')) return 'scan'
+  if (n.includes('envelope') && !n.includes('printing')) return 'env'
+  if (n.includes('passport') || n.includes('photo print')) return 'photo'
+  if (n.includes('typing')) return 'type'
+  if (n.includes('form filling')) return 'form'
+  if (n.includes('flyer')) return 'flyer'
+  if (n.includes('certificate') || n.includes('art card') || n.includes('art paper') || n.includes('card')) return 'cert'
+  if (n.includes('photocopy')) return 'copy'
+  if (n.includes('banner') || n.includes('sticker')) return 'layers'
+  if (n.includes('logo') || n.includes('design')) return 'pen'
+  return 'doc'
+}
+const ICON_OF = { flyer: 'doc' }
+const GROUPS = [
+  ['doc', 'Printing'], ['copy', 'Photocopy'], ['cert', 'Certificates and cards'], ['flyer', 'Flyers'],
+  ['bind', 'Binding and lamination'], ['lam', 'Binding and lamination'], ['scan', 'Scanning'],
+  ['photo', 'Photos'], ['env', 'Envelopes'], ['type', 'Typing and forms'], ['form', 'Typing and forms'],
+  ['layers', 'Large format'], ['pen', 'Design'],
+]
+const GROUP_OF = Object.fromEntries(GROUPS)
+const GROUP_ORDER = [...new Set(GROUPS.map(g => g[1]))]
 
 function readyLabel(iso) {
   const at = new Date(iso)
@@ -47,6 +109,30 @@ const initials = c => ((c?.customer_type !== 'INDIVIDUAL' && c?.company_name)
   ? c.company_name.slice(0, 2)
   : `${c?.first_name?.[0] || ''}${c?.last_name?.[0] || ''}`).toUpperCase() || '?'
 const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.full_name) : c?.full_name)
+
+// A number with − and +, that can still be typed straight into. Raw while
+// typing (clamping each keystroke turned 168 into 6), settled on leaving.
+function Stepper({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter }) {
+  const n = parseInt(value) || 0
+  const btn = 'w-[52px] grid place-items-center bg-black/[0.04] hover:bg-black/[0.08] text-[var(--text)] disabled:opacity-35 transition-colors'
+  return (
+    <div>
+      <label htmlFor={id} className={LABEL}>{label}</label>
+      <div className={`flex items-stretch h-[52px] w-[200px] rounded-xl border border-black/15 overflow-hidden bg-white ${disabled ? 'opacity-60' : ''}`}>
+        <button type="button" aria-label={`Fewer: ${label}`} disabled={disabled || n <= min}
+                onClick={() => onCommit(Math.max(min, n - 1))} className={btn}><Icon kind="minus" size={18} /></button>
+        <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
+               onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+               onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
+               onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
+               className="flex-1 min-w-0 text-center text-[17px] font-semibold outline-none bg-transparent
+                          [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+        <button type="button" aria-label={`More: ${label}`} disabled={disabled || (max != null && n >= max)}
+                onClick={() => onCommit(n + 1)} className={btn}><Icon kind="plus" size={18} /></button>
+      </div>
+    </div>
+  )
+}
 
 /**
  * late   after closing: the same window, with a required reason (Branch
@@ -92,7 +178,6 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   useEffect(() => { const t = setTimeout(() => setDebouncedQty(selQty), 400); return () => clearTimeout(t) }, [selQty])
   useEffect(() => { const t = setTimeout(() => setDebouncedPages(selPages), 400); return () => clearTimeout(t) }, [selPages])
 
-  const isBinding  = s => s?.name?.toLowerCase().includes('binding')
   const isPassport = s => s?.name?.toLowerCase().includes('passport')
 
   const { data: servicesRaw = [] } = useQuery({
@@ -137,6 +222,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const itemTotal = (parseFloat(selPrice?.total || 0) + (selAddons.length ? parseFloat(addonQuote?.total || 0) : 0))
 
   function toggleAddon(a) {
+    // Packing: one for all copies unless the customer asks (decided 7 Nov).
     setSelAddons(list => (list.some(x => (x.service ?? x) === a.id)
       ? list.filter(x => (x.service ?? x) !== a.id)
       : [...list, a.packing ? { service: a.id, per_copy: false } : a.id]))
@@ -146,7 +232,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   }
 
   const SERVICE_ALIASES = [
-    { patterns: ['black', 'blk', 'bw', 'b&w', 'mono', 'monochrome', 'grayscale'], resolves: 'b&w' },
+    { patterns: ['black', 'blk', 'bw', 'b&w', 'mono', 'monochrome', 'grayscale'], resolves: 'black' },
     { patterns: ['colour', 'color', 'col', 'clr'], resolves: 'colour' },
     { patterns: ['print'], resolves: 'print' },
     { patterns: ['copy', 'cop', 'copi'], resolves: 'cop' },
@@ -167,16 +253,21 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       .every(tok => target.includes(tok) || target.includes(resolveToken(tok)))
   }
 
+  // Each product once: its other-sides version lives with it, and add-ons
+  // that only go with something else (a packed envelope, eyelets) are left
+  // out. Grouped by what they are.
   const grouped = useMemo(() => {
     const groups = {}
     servicesRaw
       .filter(s => s.is_active && s.category === jobType && !s.variant_of && !s.addon_only)
       .filter(s => matchesSearch(s.name, search))
       .forEach(s => {
-        const key = s.name.match(/^(A3|A4|A5|DL|Zeta)/)?.[0] || 'Other'
+        const key = GROUP_OF[kindOf(s)] || 'More'
         ;(groups[key] = groups[key] || []).push(s)
       })
-    return groups
+    Object.values(groups).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)))
+    return Object.fromEntries(
+      Object.entries(groups).sort(([a], [b]) => GROUP_ORDER.indexOf(a) - GROUP_ORDER.indexOf(b)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servicesRaw, jobType, search])
 
@@ -194,6 +285,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const familyOf = s => (s ? (versionsOf[s.variant_of || s.id] || [s])[0] : null)
   const plainName = s => (s?.name || '').replace(/\s*\((one side|both sides)\)$/i, '')
   const bothSides = s => s?.smart_defaults?.sides === 'DOUBLE'
+  const iconOf = s => ICON_OF[kindOf(s)] || kindOf(s)
 
   const { data: custResults = [] } = useQuery({
     queryKey: ['custLookup', custSearch],
@@ -346,10 +438,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
   // ── After closing: the note, and the reason ────────────────────
   const lateNote = late && (
-    <div className="flex items-center gap-2.5 px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs shrink-0">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-      </svg>
+    <div className="flex items-center gap-2.5 px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-sm shrink-0">
+      <Icon kind="clock" size={18} />
       <span>
         <b>Recording after closing.</b>{' '}
         {held ? 'The cashier has signed off: this job is held until the morning handover.'
@@ -358,9 +448,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     </div>
   )
   const lateBox = late && (
-    <div className="mt-3">
-      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-800 mb-1">Why is it being recorded late?</div>
-      <textarea rows={2} maxLength={500} value={lateReason} onChange={e => setLateReason(e.target.value)}
+    <div>
+      <label htmlFor="late-reason" className="block text-sm font-semibold text-amber-900 mb-1.5">Why is it being recorded late?</label>
+      <textarea id="late-reason" rows={2} maxLength={500} value={lateReason} onChange={e => setLateReason(e.target.value)}
                 placeholder="e.g. Customer arrived as we were closing with an urgent job"
                 className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl outline-none focus:border-amber-500 resize-none" />
     </div>
@@ -369,86 +459,108 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   // ── The parts ──────────────────────────────────────────────────
 
   const typeTabs = (
-    <div className="flex p-[3px] rounded-xl bg-black/[0.06]">
-      {TYPES.map(([v, label]) => (
-        <button key={v} onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
-                className={`px-4 py-1.5 rounded-[9px] text-[13px] font-bold transition-colors
-                            ${jobType === v ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
-          {label}
+    <div role="tablist" aria-label="Kind of job" className="flex gap-1 p-1 rounded-[14px] bg-black/[0.05]">
+      {TYPES.map(([v, label, icon]) => (
+        <button key={v} type="button" role="tab" aria-selected={jobType === v}
+                onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
+                className={`inline-flex items-center gap-2 h-11 px-4 rounded-[10px] text-[15px] transition-colors
+                            ${jobType === v ? 'bg-zinc-900 text-white font-semibold shadow-sm' : 'text-[var(--text-2)] font-medium hover:text-[var(--text)]'}`}>
+          <Icon kind={icon} size={18} />{label}
         </button>
       ))}
     </div>
   )
 
-  const customerBar = customer ? (
-    <div className="flex items-center gap-3 px-6 py-3 border-b border-black/[0.06] bg-black/[0.015]">
-      <span className="w-8 h-8 rounded-full bg-emerald-600 text-white grid place-items-center text-[11px] font-black shrink-0">
-        {initials(customer)}
-      </span>
-      <div className="leading-tight min-w-0">
-        <div className="text-sm font-bold truncate">{nameOf(customer)}</div>
-        <div className="text-[11px] text-[var(--text-3)]">{customer.phone}</div>
+  // Who the job is for: prominent, because production and design can't be
+  // created without it, and instant work is better with it.
+  const customerTag = jobType === 'INSTANT'
+    ? <span className="text-[13px] text-[var(--text-3)]">Optional for instant work: leave blank for a walk-in</span>
+    : <span className="text-[13px] font-semibold text-red-700">Needed: for the ready message and the collection PIN</span>
+
+  const customerBand = (
+    <div className="px-6 py-4 border-b border-black/[0.07] bg-[#fafaf9] shrink-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+        <label htmlFor="job-customer" className="text-base font-bold">Who is this job for?</label>
+        {!customer && customerTag}
       </div>
-      {customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
-        <div className="flex items-center gap-1.5 ml-4 min-w-0 overflow-x-auto">
-          <span className="text-xs text-[var(--text-3)] mr-0.5">For</span>
-          <button onClick={() => setOrderFor(null)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap
-                              ${!orderFor ? 'bg-[var(--text)] text-white border-transparent' : 'bg-white border-black/10 text-[var(--text-2)]'}`}>
-            {customer.gender === 'FEMALE' ? 'Herself' : customer.gender === 'MALE' ? 'Himself' : 'Themself'}
+      {customer ? (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-[14px] border-2 border-zinc-900 bg-white">
+          <span className="w-10 h-10 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-black shrink-0">
+            {initials(customer)}
+          </span>
+          <div className="leading-tight min-w-0">
+            <div className="text-base font-bold truncate">{nameOf(customer)}</div>
+            <div className="text-[13px] text-[var(--text-3)]">{customer.phone}</div>
+          </div>
+          {customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
+            <div className="flex items-center gap-1.5 ml-4 min-w-0 overflow-x-auto">
+              <span className="text-sm text-[var(--text-3)] mr-0.5">For</span>
+              <button type="button" onClick={() => setOrderFor(null)}
+                      className={`h-9 px-3 rounded-full text-[13px] font-bold border whitespace-nowrap
+                                  ${!orderFor ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)]'}`}>
+                {customer.gender === 'FEMALE' ? 'Herself' : customer.gender === 'MALE' ? 'Himself' : 'Themself'}
+              </button>
+              {customer.links.map(l => (
+                <button key={l.organisation} type="button" onClick={() => setOrderFor(l)}
+                        className={`h-9 px-3 rounded-full text-[13px] font-bold border whitespace-nowrap
+                                    ${orderFor?.organisation === l.organisation ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)]'}`}>
+                  {l.name}<span className="font-normal opacity-70"> · {ROLE[l.role] || l.role}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={() => { setCustomer(null); setOrderFor(null) }}
+                  className="ml-auto h-11 px-3 text-sm font-bold text-blue-700 shrink-0">Change customer</button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-stretch gap-3">
+          <div className="relative flex-1 min-w-[280px]">
+            <Icon kind="person" size={22} className="absolute left-[18px] top-[19px] text-[var(--text)] pointer-events-none" />
+            <input id="job-customer" value={custSearch} onChange={e => setCustSearch(e.target.value)}
+                   placeholder="Search by name or phone number"
+                   className={`w-full h-[60px] pl-[52px] pr-4 text-[17px] font-medium rounded-[14px] outline-none border-2 transition-colors
+                               ${jobType === 'INSTANT' ? 'border-zinc-900 bg-white' : 'border-red-600 bg-red-50/60'}`} />
+            {custResults.length > 0 && (
+              <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl border border-black/10 bg-[var(--panel)] shadow-xl overflow-hidden">
+                {custResults.map(c => (
+                  <button key={c.id} type="button" onClick={() => chooseCustomer(c)}
+                          className="w-full px-4 py-3 text-left hover:bg-black/[0.03] border-b border-black/[0.05] last:border-0">
+                    <div className="text-[15px] font-semibold">{nameOf(c)}</div>
+                    <div className="text-[13px] text-[var(--text-3)]">
+                      {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Contact: ${c.full_name} · ` : ''}{c.phone}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={() => setRegistering(true)}
+                  className="inline-flex items-center gap-2 h-[60px] px-5 rounded-[14px] border border-black/15 bg-white text-[15px] font-semibold whitespace-nowrap hover:border-black/30">
+            <Icon kind="plus" size={18} />Register customer
           </button>
-          {customer.links.map(l => (
-            <button key={l.organisation} onClick={() => setOrderFor(l)}
-                    className={`px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap
-                                ${orderFor?.organisation === l.organisation ? 'bg-[var(--text)] text-white border-transparent' : 'bg-white border-black/10 text-[var(--text-2)]'}`}>
-              {l.name}<span className="font-normal opacity-70"> · {ROLE[l.role] || l.role}</span>
-            </button>
-          ))}
         </div>
       )}
-      <button onClick={() => { setCustomer(null); setOrderFor(null) }}
-              className="ml-auto text-xs font-bold text-blue-700 shrink-0">Change customer</button>
-    </div>
-  ) : (
-    <div className="flex items-center gap-2 px-6 py-3 border-b border-black/[0.06]">
-      <div className="relative flex-1">
-        <input value={custSearch} onChange={e => setCustSearch(e.target.value)}
-               placeholder={jobType === 'INSTANT' ? 'Whose job is this? Leave blank for a walk-in' : 'Whose job is this? Name or number'}
-               className={`${FIELD} ${jobType !== 'INSTANT' ? 'border-red-200 bg-red-50/40' : ''}`} />
-        {custResults.length > 0 && (
-          <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl border border-black/10 bg-[var(--panel)] shadow-xl overflow-hidden">
-            {custResults.map(c => (
-              <button key={c.id} onClick={() => chooseCustomer(c)}
-                      className="w-full px-4 py-2.5 text-left hover:bg-black/[0.03] border-b border-black/[0.05] last:border-0">
-                <div className="text-sm font-semibold">{nameOf(c)}</div>
-                <div className="text-[11px] text-[var(--text-3)]">
-                  {c.customer_type !== 'INDIVIDUAL' && c.full_name ? `Contact: ${c.full_name} · ` : ''}{c.phone}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <button onClick={() => setRegistering(true)}
-              className="px-3.5 py-2.5 rounded-xl border border-black/10 bg-white text-sm font-bold text-blue-700 whitespace-nowrap">
-        + Register new
-      </button>
     </div>
   )
 
   const serviceList = (
-    <div className="flex flex-col min-h-0">
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" className={`${FIELD} mb-3`} />
-      <div className="flex-1 overflow-y-auto -mx-1 px-1">
+    <div className="flex flex-col min-h-0 h-full">
+      <div className="relative mb-3">
+        <Icon kind="search" size={18} className="absolute left-3 top-[13px] text-[var(--text-3)] pointer-events-none" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services" aria-label="Search services"
+               className="w-full h-11 pl-10 pr-3 text-[15px] bg-white border border-black/15 rounded-xl outline-none focus:border-zinc-900" />
+      </div>
+      <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
         {Object.keys(grouped).length === 0 && <p className="text-sm text-[var(--text-3)] py-6 text-center">Nothing matches</p>}
         {Object.entries(grouped).map(([grp, items]) => (
-          <div key={grp} className="mb-3">
-            {Object.keys(grouped).length > 1 && <div className={`${H} px-2 mb-1`}>{grp}</div>}
+          <div key={grp}>
+            {Object.keys(grouped).length > 1 && <div className="text-[13px] font-semibold text-[var(--text-3)] px-2 mb-1">{grp}</div>}
             {items.map(s => (
-              <button key={s.id} onClick={() => selectService(s)}
-                      className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors
-                                  ${familyOf(selected)?.id === s.id ? 'bg-zinc-900 text-white font-bold' : 'text-[var(--text-2)] hover:bg-black/[0.04]'}`}>
-                {plainName(s)}
+              <button key={s.id} type="button" onClick={() => selectService(s)}
+                      className={`w-full flex items-center gap-3 text-left min-h-11 px-3 py-2 rounded-xl text-[15px] transition-colors
+                                  ${familyOf(selected)?.id === s.id ? 'bg-zinc-900 text-white font-semibold' : 'text-[var(--text)] hover:bg-black/[0.04]'}`}>
+                <Icon kind={iconOf(s)} size={20} />
+                <span>{plainName(s)}</span>
               </button>
             ))}
           </div>
@@ -457,114 +569,128 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     </div>
   )
 
-  const specField = field => (
-    <div key={field.key}>
-      <div className={`${H} mb-1`}>{field.label}{field.unit ? ` (${field.unit})` : ''}</div>
-      {field.type === 'select' ? (
-        <select value={specValues[field.key] ?? ''} onChange={e => setSpecValues(v => ({ ...v, [field.key]: e.target.value }))}
-                className={FIELD}>
-          {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
-      ) : (
-        <input type="number" min={field.min ?? 1} max={field.max}
-               disabled={field.key === 'pages' && !!selArtwork?.page_count}
-               value={field.key === 'quantity' ? selQty : field.key === 'pages' ? selPages : (specValues[field.key] ?? '')}
-               onChange={e => {
-                 // Raw while typing: clamping each keystroke turned 168 into 6.
-                 const raw = e.target.value
-                 const n = raw === '' ? '' : parseInt(raw)
-                 if (field.key === 'quantity') setSelQty(n)
-                 else if (field.key === 'pages') { if (!selArtwork?.page_count) setSelPages(n) }
-                 else setSpecValues(v => ({ ...v, [field.key]: n }))
-               }}
-               onBlur={e => {
-                 const n = Math.max(field.min ?? 1, parseInt(e.target.value) || (field.min ?? 1))
-                 if (field.key === 'quantity') setSelQty(n)
-                 else if (field.key === 'pages') { if (!selArtwork?.page_count) setSelPages(n) }
-                 else setSpecValues(v => ({ ...v, [field.key]: n }))
-               }}
-               onKeyDown={e => { if (e.key === 'Enter') addToCart() }}
-               className={FIELD} />
-      )}
-    </div>
-  )
+  // One field of a product's form: − and + for numbers, a list for choices.
+  const specField = field => {
+    if (field.type === 'select') {
+      return (
+        <div key={field.key} className="min-w-[200px]">
+          <label htmlFor={`spec-${field.key}`} className={LABEL}>{field.label}{field.unit ? ` (${field.unit})` : ''}</label>
+          <select id={`spec-${field.key}`} value={specValues[field.key] ?? ''}
+                  onChange={e => setSpecValues(v => ({ ...v, [field.key]: e.target.value }))} className={FIELD}>
+            {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+      )
+    }
+    const locked = field.key === 'pages' && !!selArtwork?.page_count
+    const value = field.key === 'quantity' ? selQty : field.key === 'pages' ? selPages : (specValues[field.key] ?? '')
+    const put = n => {
+      if (field.key === 'quantity') setSelQty(n)
+      else if (field.key === 'pages') { if (!locked) setSelPages(n) }
+      else setSpecValues(v => ({ ...v, [field.key]: n }))
+    }
+    return (
+      <Stepper key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
+               label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`} disabled={locked}
+               onChange={put} onCommit={put} onEnter={addToCart} />
+    )
+  }
+
+  const sideCard = on => `flex items-center gap-3.5 min-h-[84px] px-5 py-4 rounded-2xl border-2 text-left transition-colors
+                          ${on ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-black/15 text-[var(--text)] hover:border-black/30'}`
 
   const editor = !selected ? (
     <div className="h-full grid place-items-center text-center px-6">
       <div>
-        <div className="text-sm font-semibold text-[var(--text-2)]">Choose what to make</div>
-        <div className="text-xs text-[var(--text-3)] mt-1">Pick a service on the left to set it up</div>
+        <div className="text-base font-semibold">Choose what to make</div>
+        <div className="text-sm text-[var(--text-3)] mt-1">Pick a service on the left to set it up</div>
       </div>
     </div>
   ) : (
-    <div>
-      <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-lg font-black">{plainName(selected)}</span>
-        {UNIT[selected.unit] && <span className="text-xs text-[var(--text-3)]">priced {UNIT[selected.unit]}</span>}
+    <div className="flex flex-col gap-6 min-h-full">
+      <div className="flex items-start gap-4">
+        <span className="w-[72px] h-[72px] rounded-2xl bg-black/[0.05] grid place-items-center shrink-0">
+          <Icon kind={iconOf(selected)} size={34} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-2xl font-bold leading-tight">{plainName(selected)}</h2>
+          {selected.description && <p className="mt-1 text-[15px] leading-snug text-[var(--text-3)] max-w-[56ch]">{selected.description}</p>}
+          {UNIT[selected.unit] && <p className="mt-1 text-[13px] text-[var(--text-3)]">Priced {UNIT[selected.unit]}</p>}
+        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/[0.05] text-[13px] font-semibold shrink-0">
+          <Icon kind={TYPES.find(t => t[0] === jobType)[2]} size={16} />{BADGE[jobType]}
+        </span>
       </div>
-      {selected.description && <p className="mt-1 text-xs text-[var(--text-3)] max-w-[60ch]">{selected.description}</p>}
 
       {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
-        <div className="mt-4">
-          <div className={`${H} mb-1`}>Sides</div>
-          <div className="grid grid-cols-2 gap-2 max-w-md">
-            {versionsOf[selected.variant_of || selected.id].map(v => (
-              <button key={v.id} type="button" onClick={() => switchVersion(v)}
-                      className={`text-left px-3 py-2.5 rounded-xl border text-sm transition-colors
-                                  ${selected.id === v.id ? 'border-zinc-900 ring-1 ring-zinc-900 bg-white font-bold' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
-                {bothSides(v) ? 'Both sides' : 'One side'}
-                {v.base_price && <span className="block text-[11px] font-normal text-[var(--text-3)]">GHS {v.base_price} a sheet</span>}
-              </button>
-            ))}
+        <fieldset>
+          <legend className="text-base font-bold mb-2.5">One side or both sides?</legend>
+          <div className="grid grid-cols-2 gap-3 max-w-[640px]">
+            {versionsOf[selected.variant_of || selected.id].map(v => {
+              const on = selected.id === v.id
+              return (
+                <button key={v.id} type="button" aria-pressed={on} onClick={() => switchVersion(v)} className={sideCard(on)}>
+                  <Icon kind={bothSides(v) ? 'copy' : 'doc'} size={30} />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-lg font-bold">{bothSides(v) ? 'Both sides' : 'One side'}</span>
+                    {v.base_price && (
+                      <span className={`text-sm ${on ? 'text-white/85' : 'text-[var(--text-3)]'}`}>
+                        GHS {v.base_price} {['sheet', 'PER_PAGE', 'PER_SHEET'].includes(v.unit) ? 'a sheet' : 'each'}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
           </div>
-        </div>
+        </fieldset>
       )}
 
       {isPassport(selected) && (
-        <div className="mt-4">
-          <div className={`${H} mb-1`}>Output</div>
-          <div className="flex gap-1.5">
+        <fieldset>
+          <legend className={LABEL}>Output</legend>
+          <div className="flex gap-2 max-w-[640px]">
             {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + digital'], ['DIGITAL', 'Digital only']].map(([v, t]) => (
-              <button key={v} onClick={() => setSelOutputMode(v)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/10'}`}>
+              <button key={v} type="button" onClick={() => setSelOutputMode(v)}
+                      className={`flex-1 h-11 text-sm font-bold rounded-xl border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
                 {t}
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
       )}
-      {/* Binding's ring size is a field of its own form (7 Nov 2026). */}
 
-      <div className="mt-4 grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {(selected.spec_template || []).length > 0
-          ? selected.spec_template.map(specField)
-          : [
-            { key: 'pages', label: 'Pages per copy', min: 1 },
-            { key: 'quantity', label: 'Number of copies', min: 1 },
-          ].map(specField)}
+      <div>
+        <div className="flex flex-wrap gap-4">
+          {(selected.spec_template || []).length > 0
+            ? selected.spec_template.map(specField)
+            : [
+              { key: 'pages', label: 'Pages per copy', min: 1 },
+              { key: 'quantity', label: 'Number of copies', min: 1 },
+            ].map(specField)}
+        </div>
+        {bothSides(selected) && (parseInt(selPages) || 0) > 0 && (
+          <p className="mt-2.5 text-sm text-[var(--text-3)]">
+            {selPages} page{selPages == 1 ? '' : 's'} on both sides is {Math.ceil(selPages / 2)} sheet{Math.ceil(selPages / 2) === 1 ? '' : 's'} a copy.
+          </p>
+        )}
       </div>
-      {bothSides(selected) && (parseInt(selPages) || 0) > 0 && (
-        <p className="mt-2 text-xs text-[var(--text-3)]">
-          {selPages} page{selPages == 1 ? '' : 's'} on both sides is {Math.ceil(selPages / 2)} sheet{Math.ceil(selPages / 2) === 1 ? '' : 's'} a copy.
-        </p>
-      )}
 
       {(selected.addons || []).length > 0 && (
-        <div className="mt-5">
-          <div className={`${H} mb-1.5`}>Finishing</div>
+        <fieldset>
+          <legend className={LABEL}>Add-ons</legend>
           <div className="flex flex-wrap gap-2">
             {selected.addons.map(a => {
               const on = selAddons.some(x => (x.service ?? x) === a.id)
               const priced = addonsPriced.find(x => x.service === a.id)
               return (
-                <button key={a.id} type="button" onClick={() => toggleAddon(a)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[13px] font-semibold transition-colors
-                                    ${on ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-black/10 bg-white text-[var(--text-2)] hover:border-black/25'}`}>
-                  <span className={`w-4 h-4 rounded grid place-items-center text-[10px] text-white
-                                    ${on ? 'bg-white/20' : 'border-[1.5px] border-black/20'}`}>{on ? '✓' : ''}</span>
+                <button key={a.id} type="button" aria-pressed={on} onClick={() => toggleAddon(a)}
+                        className={`inline-flex items-center gap-2 h-11 px-4 rounded-full border text-sm font-semibold transition-colors
+                                    ${on ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-black/15 bg-white text-[var(--text)] hover:border-black/30'}`}>
+                  {on && <Icon kind="check" size={16} />}
                   {a.name}
                   {on && priced && (
-                    <span className="font-normal text-[var(--text-3)]">
+                    <span className="font-normal text-white/80">
                       +{parseFloat(priced.total).toFixed(2)}{priced.detail ? ` · ${priced.detail}` : ''}
                     </span>
                   )}
@@ -575,24 +701,24 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           {selected.addons.filter(a => a.packing && selAddons.some(x => x.service === a.id)).map(a => {
             const choice = selAddons.find(x => x.service === a.id)
             return (selQty || 1) > 1 && (
-              <div key={a.id} className="mt-2 inline-flex p-[3px] rounded-xl bg-black/[0.05]">
-                {[[true, 'One per copy'], [false, 'One for all']].map(([v, t]) => (
+              <div key={a.id} className="mt-2.5 inline-flex p-1 rounded-xl bg-black/[0.05]">
+                {[[false, 'One for all'], [true, 'One per copy']].map(([v, t]) => (
                   <button key={t} type="button" onClick={() => setPerCopy(a.id, v)}
-                          className={`px-3 py-1 rounded-[9px] text-xs font-bold ${choice?.per_copy === v ? 'bg-white shadow-sm text-[var(--text)]' : 'text-[var(--text-3)]'}`}>
+                          className={`h-9 px-3 rounded-[9px] text-[13px] font-bold ${choice?.per_copy === v ? 'bg-white shadow-sm text-[var(--text)]' : 'text-[var(--text-3)]'}`}>
                     {a.name}: {t.toLowerCase()}
                   </button>
                 ))}
               </div>
             )
           })}
-          {addonError && <p className="mt-1.5 text-xs text-red-600">{addonError.response?.data?.detail || 'That finishing couldn’t be priced.'}</p>}
-        </div>
+          {addonError && <p className="mt-1.5 text-sm text-red-700">{addonError.response?.data?.detail || 'That finishing couldn’t be priced.'}</p>}
+        </fieldset>
       )}
 
       {wantsFile && (
-        <div className="mt-5">
-          <div className={`${H} mb-1.5`}>
-            Customer’s file{needsFile && <span className="text-red-600 normal-case tracking-normal font-bold"> · needed</span>}
+        <div>
+          <div className={LABEL}>
+            Customer’s file{needsFile && <span className="text-red-700 font-bold"> · needed</span>}
           </div>
           <CounterArtwork
             service={selected}
@@ -610,112 +736,133 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </div>
       )}
 
-      <div className="mt-6 flex items-end gap-4">
-        <div>
-          <div className={H}>Item total</div>
-          <div className="text-xl font-black tabular-nums" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>
-            {selPrice ? fmt(itemTotal) : '…'}
+      <div className="mt-auto">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+          <div className="flex items-center gap-3">
+            <Icon kind="tag" size={24} className="text-emerald-800" />
+            <div>
+              <div className="text-sm text-emerald-900">Item total</div>
+              <div className="text-[30px] leading-tight font-bold text-emerald-800 tabular-nums" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>
+                {selPrice ? fmt(itemTotal) : '…'}
+              </div>
+              {selAddons.length > 0 && selPrice && (
+                <div className="text-[13px] text-emerald-900/80">includes finishing {fmt(addonQuote?.total || 0)}</div>
+              )}
+            </div>
           </div>
-          {selAddons.length > 0 && selPrice && (
-            <div className="text-[11px] text-[var(--text-3)]">includes finishing {fmt(addonQuote?.total || 0)}</div>
-          )}
+          <button type="button" onClick={addToCart} disabled={!canAdd}
+                  className="inline-flex items-center gap-2.5 h-[52px] px-6 rounded-[14px] bg-zinc-900 text-white text-base font-semibold disabled:bg-black/20">
+            <Icon kind="cart" size={20} />Add to cart
+          </button>
         </div>
-        <button onClick={addToCart} disabled={!canAdd}
-                className="ml-auto px-5 py-3 rounded-xl bg-zinc-900 text-white text-sm font-black disabled:bg-black/10 disabled:text-[var(--text-3)]">
-          Add to cart ↵
-        </button>
+        {needsFile && !fileReady && (
+          <p className="mt-1.5 text-right text-[13px] text-[var(--text-3)]">Adds once the file is checked and printable</p>
+        )}
       </div>
-      {needsFile && !fileReady && (
-        <p className="mt-1.5 text-right text-[11px] text-[var(--text-3)]">Adds once the file is checked and printable</p>
-      )}
     </div>
   )
 
   const cartPanel = (
-    <div className="flex flex-col h-full min-h-0">
-      <div className={`${H} mb-2`}>Cart{cart.length ? ` · ${cart.length} item${cart.length === 1 ? '' : 's'}` : ''}</div>
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {cart.length === 0 && <p className="text-xs text-[var(--text-3)] py-6 text-center">Nothing added yet</p>}
+    <div className="flex flex-col h-full min-h-0 gap-3.5">
+      <div className="flex items-center gap-2.5">
+        <Icon kind="cart" size={24} />
+        <h2 className="text-xl font-bold">Cart ({cart.length})</h2>
+        {cart.length > 0 && (
+          <button type="button" onClick={() => setCart([])} className="ml-auto h-11 px-1 text-[15px] font-semibold text-blue-700">Clear</button>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
+        {cart.length === 0 && (
+          <div className="border-[1.5px] border-dashed border-black/15 rounded-2xl py-10 px-4 flex flex-col items-center gap-2 text-center text-[var(--text-3)]">
+            <Icon kind="cart" size={44} />
+            <div className="text-base font-semibold text-[var(--text)]">Nothing added yet</div>
+            <div className="text-sm">Pick a service on the left to set it up.</div>
+          </div>
+        )}
         {cart.map(item => (
-          <div key={item._id} className="py-2.5 border-b border-black/[0.06] group">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-bold truncate">{item.service.name}</div>
-                <div className="text-[11px] text-[var(--text-3)]">
-                  {item.specifications?.width_in && item.specifications?.height_in
-                    ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
-                    : `${item.quantity} × ${item.pages}pp`}
-                </div>
-                {item.addonsPriced?.length > 0 && (
-                  <div className="text-[11px] text-[var(--text-3)] truncate">
-                    + {item.addonsPriced.map(x => x.service_name + (x.detail ? ` (${x.detail})` : '')).join(', ')}
-                  </div>
-                )}
-                {item.artwork && (
-                  <div className={`text-[11px] font-semibold truncate ${item.artwork.verdict === 'warn' ? 'text-amber-700' : 'text-emerald-700'}`}>
-                    {item.artwork.filename} · {item.artwork.verdict === 'warn' ? 'worth a look' : 'good to print'}
-                  </div>
-                )}
+          <div key={item._id} className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl border border-black/[0.08] bg-white">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">{item.service.name}</div>
+              <div className="text-[13px] text-[var(--text-3)]">
+                {item.specifications?.width_in && item.specifications?.height_in
+                  ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
+                  : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`}
               </div>
-              <span className="text-[13px] font-bold tabular-nums">{parseFloat(item._price).toFixed(2)}</span>
-              <button onClick={() => removeFromCart(item._id)} aria-label="Remove"
-                      className="text-[var(--text-3)] hover:text-red-600 text-xs opacity-60 group-hover:opacity-100">✕</button>
+              {item.addonsPriced?.length > 0 && (
+                <div className="text-[13px] text-[var(--text-3)] truncate">
+                  + {item.addonsPriced.map(x => x.service_name + (x.detail ? ` (${x.detail})` : '')).join(', ')}
+                </div>
+              )}
+              {item.artwork && (
+                <div className={`text-[13px] font-semibold truncate ${item.artwork.verdict === 'warn' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {item.artwork.filename} · {item.artwork.verdict === 'warn' ? 'worth a look' : 'good to print'}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-sm font-bold tabular-nums">{fmt(item._price)}</span>
+              <button type="button" onClick={() => removeFromCart(item._id)} className="text-[13px] text-red-700 py-1">Remove</button>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="pt-3 mt-2 border-t border-black/[0.06]">
+      <div className="pt-4 border-t border-black/[0.08] space-y-3">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-[var(--text-3)]">Total</span>
-          <span className="text-lg font-black tabular-nums">{fmt(cartTotal)}</span>
+          <span className="text-base text-[var(--text-3)]">Total</span>
+          <span className="text-[26px] font-bold tabular-nums">{fmt(cartTotal)}</span>
         </div>
         {roomy && cartTotal > 0 && (
-          <div className="flex justify-between text-xs text-[var(--text-3)] mt-0.5">
+          <div className="flex justify-between text-sm text-[var(--text-3)]">
             <span>Deposit to start (70%)</span><b className="text-[var(--text)] tabular-nums">{fmt(deposit)}</b>
           </div>
         )}
         {roomy && (promiseError ? (
-          <p className="mt-2 text-[11px] text-amber-700">
+          <p className="text-[13px] text-amber-700">
             Octos couldn’t give a ready time: {promiseError.response?.data?.detail || 'it could not be reached.'}
           </p>
         ) : promise?.ready_at ? (
-          <p className="mt-2 text-xs text-blue-700" style={{ opacity: promiseLoading ? 0.5 : 1 }}>
+          <p className="text-sm text-[var(--text)]" style={{ opacity: promiseLoading ? 0.5 : 1 }}>
             <b>Ready about {readyLabel(promise.ready_at)}</b>{branchName ? ` · ${branchName}` : ''}
             {selected ? <span className="text-[var(--text-3)]"> (with this item)</span> : null}
           </p>
         ) : null)}
         {lateBox}
-        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-        <button onClick={handleSubmit} disabled={isPending || cart.length === 0}
-                className="mt-3 w-full py-3 rounded-xl bg-zinc-900 text-white text-sm font-black disabled:opacity-40">
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0}
+                className="w-full inline-flex items-center justify-center gap-2.5 h-[52px] rounded-[14px] bg-zinc-900 text-white text-base font-semibold disabled:bg-black/20">
+          <Icon kind="check" size={20} />
           {isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
-        <button onClick={onClose} className="mt-1.5 w-full py-2 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
+        <button type="button" onClick={onClose} className="w-full h-11 text-[15px] font-semibold text-[var(--text-3)]">Cancel</button>
       </div>
     </div>
   )
 
-
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-6xl h-[94vh]">
+      <div className="bg-[var(--panel)] rounded-[20px] shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1220px] h-[94vh]">
 
-        <div className="flex items-center gap-4 px-6 py-3.5 border-b border-black/[0.06] shrink-0">
-          <span className="text-[17px] font-black">New job</span>
+        <div className="flex flex-wrap items-center gap-5 px-6 py-4 border-b border-black/[0.07] shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-[10px] bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={20} /></span>
+            <span className="text-[22px] font-bold">New Job</span>
+          </div>
           {typeTabs}
-          {branchName && <span className="ml-auto text-xs text-[var(--text-3)] hidden sm:inline">{branchName}</span>}
-          <button onClick={onClose} aria-label="Close"
-                  className={`${branchName ? '' : 'ml-auto'} w-8 h-8 grid place-items-center rounded-full hover:bg-black/5 text-[var(--text-3)]`}>✕</button>
+          {branchName && <span className="ml-auto text-sm text-[var(--text-3)] hidden sm:inline">{branchName}</span>}
+          <button type="button" onClick={onClose} aria-label="Close"
+                  className={`${branchName ? '' : 'ml-auto'} w-11 h-11 grid place-items-center rounded-xl hover:bg-black/5 text-[var(--text-3)]`}>
+            <Icon kind="close" size={22} />
+          </button>
         </div>
 
         {lateNote}
-        <div className="shrink-0">{customerBar}</div>
+        {customerBand}
 
-        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[240px_1fr_300px] animate-unfold">
-          <div className="p-4 border-r border-black/[0.06] min-h-0 flex flex-col">{serviceList}</div>
-          <div className="p-5 overflow-y-auto min-h-0">{editor}</div>
-          <div className="p-4 bg-black/[0.015] border-l border-black/[0.06] min-h-0">{cartPanel}</div>
+        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[280px_1fr_340px] animate-unfold">
+          <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
+          <div className="p-6 overflow-y-auto min-h-0">{editor}</div>
+          <div className="p-5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
         </div>
       </div>
     </div>,
