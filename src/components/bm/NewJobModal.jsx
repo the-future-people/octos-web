@@ -30,9 +30,9 @@ const BADGE = { INSTANT: 'Instant job', PRODUCTION: 'Production job', DESIGN: 'D
 const UNIT = { PER_SQFT: 'per sq ft', PER_SQCM: 'per sq cm', PER_COPY: 'per copy', PER_PAGE: 'per page',
                PER_SHEET: 'per sheet', PER_PIECE: 'per piece', PER_JOB: 'per job' }
 const ROLE = { REP: 'Rep', STAFF: 'Staff', OWNER: 'Owner', MEMBER: 'Member' }
-const FIELD = `w-full px-3 h-[52px] text-[15px] bg-white border border-black/15 rounded-xl outline-none
+const FIELD = `w-full px-3 h-10 text-sm bg-white border border-black/15 rounded-xl outline-none
                focus:border-zinc-900 transition-colors disabled:bg-black/[0.03] disabled:text-[var(--text-2)]`
-const LABEL = 'block text-sm font-semibold mb-2'
+const LABEL = 'block text-xs font-semibold mb-1.5'
 
 // ── Icons: one stroke set, drawn in the current text colour ─────────
 const PATHS = {
@@ -114,21 +114,21 @@ const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.
 // typing (clamping each keystroke turned 168 into 6), settled on leaving.
 function Stepper({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter }) {
   const n = parseInt(value) || 0
-  const btn = 'w-[52px] grid place-items-center bg-black/[0.04] hover:bg-black/[0.08] text-[var(--text)] disabled:opacity-35 transition-colors'
+  const btn = 'w-10 grid place-items-center bg-black/[0.04] hover:bg-black/[0.08] text-[var(--text)] disabled:opacity-35 transition-colors'
   return (
     <div>
       <label htmlFor={id} className={LABEL}>{label}</label>
-      <div className={`flex items-stretch h-[52px] w-[200px] rounded-xl border border-black/15 overflow-hidden bg-white ${disabled ? 'opacity-60' : ''}`}>
+      <div className={`flex items-stretch h-10 w-[150px] rounded-xl border border-black/15 overflow-hidden bg-white ${disabled ? 'opacity-60' : ''}`}>
         <button type="button" aria-label={`Fewer: ${label}`} disabled={disabled || n <= min}
-                onClick={() => onCommit(Math.max(min, n - 1))} className={btn}><Icon kind="minus" size={18} /></button>
+                onClick={() => onCommit(Math.max(min, n - 1))} className={btn}><Icon kind="minus" size={16} /></button>
         <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
                onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
                onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
                onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
-               className="flex-1 min-w-0 text-center text-[17px] font-semibold outline-none bg-transparent
+               className="flex-1 min-w-0 text-center text-[15px] font-semibold outline-none bg-transparent
                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
         <button type="button" aria-label={`More: ${label}`} disabled={disabled || (max != null && n >= max)}
-                onClick={() => onCommit(n + 1)} className={btn}><Icon kind="plus" size={18} /></button>
+                onClick={() => onCommit(n + 1)} className={btn}><Icon kind="plus" size={16} /></button>
       </div>
     </div>
   )
@@ -459,13 +459,13 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   // ── The parts ──────────────────────────────────────────────────
 
   const typeTabs = (
-    <div role="tablist" aria-label="Kind of job" className="flex gap-1 p-1 rounded-[14px] bg-black/[0.05]">
+    <div role="tablist" aria-label="Kind of job" className="flex gap-0.5 p-[3px] rounded-xl bg-black/[0.05]">
       {TYPES.map(([v, label, icon]) => (
         <button key={v} type="button" role="tab" aria-selected={jobType === v}
                 onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
-                className={`inline-flex items-center gap-2 h-11 px-4 rounded-[10px] text-[15px] transition-colors
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[9px] text-[13px] transition-colors
                             ${jobType === v ? 'bg-zinc-900 text-white font-semibold shadow-sm' : 'text-[var(--text-2)] font-medium hover:text-[var(--text)]'}`}>
-          <Icon kind={icon} size={18} />{label}
+          <Icon kind={icon} size={15} />{label}
         </button>
       ))}
     </div>
@@ -474,22 +474,22 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   // Who the job is for: prominent, because production and design can't be
   // created without it, and instant work is better with it.
   const customerTag = jobType === 'INSTANT'
-    ? <span className="text-[13px] text-[var(--text-3)]">Optional for instant work: leave blank for a walk-in</span>
-    : <span className="text-[13px] font-semibold text-red-700">Needed: for the ready message and the collection PIN</span>
+    ? <span className="text-xs text-[var(--text-3)]">Optional for instant work: leave blank for a walk-in</span>
+    : <span className="text-xs font-semibold text-red-700">Needed: for the ready message and the collection PIN</span>
 
   const customerBand = (
-    <div className="px-6 py-4 border-b border-black/[0.07] bg-[#fafaf9] shrink-0">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-        <label htmlFor="job-customer" className="text-base font-bold">Who is this job for?</label>
+    <div className="px-6 py-3 border-b border-black/[0.07] bg-[#fafaf9] shrink-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1.5">
+        <label htmlFor="job-customer" className="text-sm font-bold">Who is this job for?</label>
         {!customer && customerTag}
       </div>
       {customer ? (
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-[14px] border-2 border-zinc-900 bg-white">
-          <span className="w-10 h-10 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-black shrink-0">
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2 rounded-xl border-2 border-zinc-900 bg-white">
+          <span className="w-8 h-8 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-black shrink-0">
             {initials(customer)}
           </span>
           <div className="leading-tight min-w-0">
-            <div className="text-base font-bold truncate">{nameOf(customer)}</div>
+            <div className="text-sm font-bold truncate">{nameOf(customer)}</div>
             <div className="text-[13px] text-[var(--text-3)]">{customer.phone}</div>
           </div>
           {customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
@@ -515,10 +515,10 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       ) : (
         <div className="flex flex-wrap items-stretch gap-3">
           <div className="relative flex-1 min-w-[280px]">
-            <Icon kind="person" size={22} className="absolute left-[18px] top-[19px] text-[var(--text)] pointer-events-none" />
+            <Icon kind="person" size={18} className="absolute left-3.5 top-[13px] text-[var(--text)] pointer-events-none" />
             <input id="job-customer" value={custSearch} onChange={e => setCustSearch(e.target.value)}
                    placeholder="Search by name or phone number"
-                   className={`w-full h-[60px] pl-[52px] pr-4 text-[17px] font-medium rounded-[14px] outline-none border-2 transition-colors
+                   className={`w-full h-11 pl-10 pr-4 text-[15px] font-medium rounded-xl outline-none border-2 transition-colors
                                ${jobType === 'INSTANT' ? 'border-zinc-900 bg-white' : 'border-red-600 bg-red-50/60'}`} />
             {custResults.length > 0 && (
               <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl border border-black/10 bg-[var(--panel)] shadow-xl overflow-hidden">
@@ -535,8 +535,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             )}
           </div>
           <button type="button" onClick={() => setRegistering(true)}
-                  className="inline-flex items-center gap-2 h-[60px] px-5 rounded-[14px] border border-black/15 bg-white text-[15px] font-semibold whitespace-nowrap hover:border-black/30">
-            <Icon kind="plus" size={18} />Register customer
+                  className="inline-flex items-center gap-2 h-11 px-4 rounded-xl border border-black/15 bg-white text-sm font-semibold whitespace-nowrap hover:border-black/30">
+            <Icon kind="plus" size={16} />Register customer
           </button>
         </div>
       )}
@@ -546,20 +546,20 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const serviceList = (
     <div className="flex flex-col min-h-0 h-full">
       <div className="relative mb-3">
-        <Icon kind="search" size={18} className="absolute left-3 top-[13px] text-[var(--text-3)] pointer-events-none" />
+        <Icon kind="search" size={16} className="absolute left-3 top-[10px] text-[var(--text-3)] pointer-events-none" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services" aria-label="Search services"
-               className="w-full h-11 pl-10 pr-3 text-[15px] bg-white border border-black/15 rounded-xl outline-none focus:border-zinc-900" />
+               className="w-full h-9 pl-9 pr-3 text-[13px] bg-white border border-black/15 rounded-xl outline-none focus:border-zinc-900" />
       </div>
-      <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
+      <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
         {Object.keys(grouped).length === 0 && <p className="text-sm text-[var(--text-3)] py-6 text-center">Nothing matches</p>}
         {Object.entries(grouped).map(([grp, items]) => (
           <div key={grp}>
-            {Object.keys(grouped).length > 1 && <div className="text-[13px] font-semibold text-[var(--text-3)] px-2 mb-1">{grp}</div>}
+            {Object.keys(grouped).length > 1 && <div className="text-[11px] font-semibold text-[var(--text-3)] px-2 mb-1">{grp}</div>}
             {items.map(s => (
               <button key={s.id} type="button" onClick={() => selectService(s)}
-                      className={`w-full flex items-center gap-3 text-left min-h-11 px-3 py-2 rounded-xl text-[15px] transition-colors
+                      className={`w-full flex items-center gap-2.5 text-left min-h-9 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors
                                   ${familyOf(selected)?.id === s.id ? 'bg-zinc-900 text-white font-semibold' : 'text-[var(--text)] hover:bg-black/[0.04]'}`}>
-                <Icon kind={iconOf(s)} size={20} />
+                <Icon kind={iconOf(s)} size={16} />
                 <span>{plainName(s)}</span>
               </button>
             ))}
@@ -596,45 +596,45 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     )
   }
 
-  const sideCard = on => `flex items-center gap-3.5 min-h-[84px] px-5 py-4 rounded-2xl border-2 text-left transition-colors
+  const sideCard = on => `flex items-center gap-3 min-h-[56px] px-4 py-2.5 rounded-xl border-2 text-left transition-colors
                           ${on ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-black/15 text-[var(--text)] hover:border-black/30'}`
 
   const editor = !selected ? (
     <div className="h-full grid place-items-center text-center px-6">
       <div>
-        <div className="text-base font-semibold">Choose what to make</div>
-        <div className="text-sm text-[var(--text-3)] mt-1">Pick a service on the left to set it up</div>
+        <div className="text-sm font-semibold">Choose what to make</div>
+        <div className="text-xs text-[var(--text-3)] mt-1">Pick a service on the left to set it up</div>
       </div>
     </div>
   ) : (
-    <div className="flex flex-col gap-6 min-h-full">
+    <div className="flex flex-col gap-4 min-h-full">
       <div className="flex items-start gap-4">
-        <span className="w-[72px] h-[72px] rounded-2xl bg-black/[0.05] grid place-items-center shrink-0">
-          <Icon kind={iconOf(selected)} size={34} />
+        <span className="w-[52px] h-[52px] rounded-xl bg-black/[0.05] grid place-items-center shrink-0">
+          <Icon kind={iconOf(selected)} size={26} />
         </span>
         <div className="flex-1 min-w-0">
-          <h2 className="text-2xl font-bold leading-tight">{plainName(selected)}</h2>
-          {selected.description && <p className="mt-1 text-[15px] leading-snug text-[var(--text-3)] max-w-[56ch]">{selected.description}</p>}
-          {UNIT[selected.unit] && <p className="mt-1 text-[13px] text-[var(--text-3)]">Priced {UNIT[selected.unit]}</p>}
+          <h2 className="text-lg font-bold leading-tight">{plainName(selected)}</h2>
+          {selected.description && <p className="mt-0.5 text-[13px] leading-snug text-[var(--text-3)] max-w-[60ch]">{selected.description}</p>}
+          {UNIT[selected.unit] && <p className="mt-0.5 text-xs text-[var(--text-3)]">Priced {UNIT[selected.unit]}</p>}
         </div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/[0.05] text-[13px] font-semibold shrink-0">
-          <Icon kind={TYPES.find(t => t[0] === jobType)[2]} size={16} />{BADGE[jobType]}
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/[0.05] text-xs font-semibold shrink-0">
+          <Icon kind={TYPES.find(t => t[0] === jobType)[2]} size={14} />{BADGE[jobType]}
         </span>
       </div>
 
       {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
         <fieldset>
-          <legend className="text-base font-bold mb-2.5">One side or both sides?</legend>
-          <div className="grid grid-cols-2 gap-3 max-w-[640px]">
+          <legend className="text-sm font-bold mb-2">One side or both sides?</legend>
+          <div className="grid grid-cols-2 gap-2.5 max-w-[520px]">
             {versionsOf[selected.variant_of || selected.id].map(v => {
               const on = selected.id === v.id
               return (
                 <button key={v.id} type="button" aria-pressed={on} onClick={() => switchVersion(v)} className={sideCard(on)}>
-                  <Icon kind={bothSides(v) ? 'copy' : 'doc'} size={30} />
+                  <Icon kind={bothSides(v) ? 'copy' : 'doc'} size={22} />
                   <span className="flex flex-col gap-0.5">
-                    <span className="text-lg font-bold">{bothSides(v) ? 'Both sides' : 'One side'}</span>
+                    <span className="text-[15px] font-bold">{bothSides(v) ? 'Both sides' : 'One side'}</span>
                     {v.base_price && (
-                      <span className={`text-sm ${on ? 'text-white/85' : 'text-[var(--text-3)]'}`}>
+                      <span className={`text-xs ${on ? 'text-white/85' : 'text-[var(--text-3)]'}`}>
                         GHS {v.base_price} {['sheet', 'PER_PAGE', 'PER_SHEET'].includes(v.unit) ? 'a sheet' : 'each'}
                       </span>
                     )}
@@ -652,7 +652,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           <div className="flex gap-2 max-w-[640px]">
             {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + digital'], ['DIGITAL', 'Digital only']].map(([v, t]) => (
               <button key={v} type="button" onClick={() => setSelOutputMode(v)}
-                      className={`flex-1 h-11 text-sm font-bold rounded-xl border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
+                      className={`flex-1 h-9 text-xs font-bold rounded-lg border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
                 {t}
               </button>
             ))}
@@ -661,7 +661,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       )}
 
       <div>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-3">
           {(selected.spec_template || []).length > 0
             ? selected.spec_template.map(specField)
             : [
@@ -670,7 +670,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             ].map(specField)}
         </div>
         {bothSides(selected) && (parseInt(selPages) || 0) > 0 && (
-          <p className="mt-2.5 text-sm text-[var(--text-3)]">
+          <p className="mt-2 text-xs text-[var(--text-3)]">
             {selPages} page{selPages == 1 ? '' : 's'} on both sides is {Math.ceil(selPages / 2)} sheet{Math.ceil(selPages / 2) === 1 ? '' : 's'} a copy.
           </p>
         )}
@@ -685,9 +685,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
               const priced = addonsPriced.find(x => x.service === a.id)
               return (
                 <button key={a.id} type="button" aria-pressed={on} onClick={() => toggleAddon(a)}
-                        className={`inline-flex items-center gap-2 h-11 px-4 rounded-full border text-sm font-semibold transition-colors
+                        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-[13px] font-semibold transition-colors
                                     ${on ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-black/15 bg-white text-[var(--text)] hover:border-black/30'}`}>
-                  {on && <Icon kind="check" size={16} />}
+                  {on && <Icon kind="check" size={14} />}
                   {a.name}
                   {on && priced && (
                     <span className="font-normal text-white/80">
@@ -737,22 +737,22 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       )}
 
       <div className="mt-auto">
-        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200">
           <div className="flex items-center gap-3">
-            <Icon kind="tag" size={24} className="text-emerald-800" />
+            <Icon kind="tag" size={20} className="text-emerald-800" />
             <div>
-              <div className="text-sm text-emerald-900">Item total</div>
-              <div className="text-[30px] leading-tight font-bold text-emerald-800 tabular-nums" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>
+              <div className="text-xs text-emerald-900">Item total</div>
+              <div className="text-[22px] leading-tight font-bold text-emerald-800 tabular-nums" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>
                 {selPrice ? fmt(itemTotal) : '…'}
               </div>
               {selAddons.length > 0 && selPrice && (
-                <div className="text-[13px] text-emerald-900/80">includes finishing {fmt(addonQuote?.total || 0)}</div>
+                <div className="text-[11px] text-emerald-900/80">includes finishing {fmt(addonQuote?.total || 0)}</div>
               )}
             </div>
           </div>
           <button type="button" onClick={addToCart} disabled={!canAdd}
-                  className="inline-flex items-center gap-2.5 h-[52px] px-6 rounded-[14px] bg-zinc-900 text-white text-base font-semibold disabled:bg-black/20">
-            <Icon kind="cart" size={20} />Add to cart
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-zinc-900 text-white text-sm font-semibold disabled:bg-black/20">
+            <Icon kind="cart" size={17} />Add to cart
           </button>
         </div>
         {needsFile && !fileReady && (
@@ -763,27 +763,27 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   )
 
   const cartPanel = (
-    <div className="flex flex-col h-full min-h-0 gap-3.5">
-      <div className="flex items-center gap-2.5">
-        <Icon kind="cart" size={24} />
-        <h2 className="text-xl font-bold">Cart ({cart.length})</h2>
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      <div className="flex items-center gap-2">
+        <Icon kind="cart" size={18} />
+        <h2 className="text-sm font-bold">Cart ({cart.length})</h2>
         {cart.length > 0 && (
-          <button type="button" onClick={() => setCart([])} className="ml-auto h-11 px-1 text-[15px] font-semibold text-blue-700">Clear</button>
+          <button type="button" onClick={() => setCart([])} className="ml-auto h-8 px-1 text-[13px] font-semibold text-blue-700">Clear</button>
         )}
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
         {cart.length === 0 && (
-          <div className="border-[1.5px] border-dashed border-black/15 rounded-2xl py-10 px-4 flex flex-col items-center gap-2 text-center text-[var(--text-3)]">
-            <Icon kind="cart" size={44} />
-            <div className="text-base font-semibold text-[var(--text)]">Nothing added yet</div>
-            <div className="text-sm">Pick a service on the left to set it up.</div>
+          <div className="border-[1.5px] border-dashed border-black/15 rounded-xl py-6 px-4 flex flex-col items-center gap-1.5 text-center text-[var(--text-3)]">
+            <Icon kind="cart" size={30} />
+            <div className="text-sm font-semibold text-[var(--text)]">Nothing added yet</div>
+            <div className="text-xs">Pick a service on the left to set it up.</div>
           </div>
         )}
         {cart.map(item => (
-          <div key={item._id} className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl border border-black/[0.08] bg-white">
+          <div key={item._id} className="flex items-start gap-2 px-3 py-2 rounded-lg border border-black/[0.08] bg-white">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">{item.service.name}</div>
-              <div className="text-[13px] text-[var(--text-3)]">
+              <div className="text-[13px] font-semibold">{item.service.name}</div>
+              <div className="text-[11px] text-[var(--text-3)]">
                 {item.specifications?.width_in && item.specifications?.height_in
                   ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
                   : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`}
@@ -807,10 +807,10 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         ))}
       </div>
 
-      <div className="pt-4 border-t border-black/[0.08] space-y-3">
+      <div className="pt-3 border-t border-black/[0.08] space-y-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="text-base text-[var(--text-3)]">Total</span>
-          <span className="text-[26px] font-bold tabular-nums">{fmt(cartTotal)}</span>
+          <span className="text-xs text-[var(--text-3)]">Total</span>
+          <span className="text-lg font-bold tabular-nums">{fmt(cartTotal)}</span>
         </div>
         {roomy && cartTotal > 0 && (
           <div className="flex justify-between text-sm text-[var(--text-3)]">
@@ -830,39 +830,39 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {lateBox}
         {error && <p className="text-sm text-red-700">{error}</p>}
         <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0}
-                className="w-full inline-flex items-center justify-center gap-2.5 h-[52px] rounded-[14px] bg-zinc-900 text-white text-base font-semibold disabled:bg-black/20">
-          <Icon kind="check" size={20} />
+                className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-zinc-900 text-white text-sm font-semibold disabled:bg-black/20">
+          <Icon kind="check" size={17} />
           {isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
-        <button type="button" onClick={onClose} className="w-full h-11 text-[15px] font-semibold text-[var(--text-3)]">Cancel</button>
+        <button type="button" onClick={onClose} className="w-full h-8 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
       </div>
     </div>
   )
 
   const modal = createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
-      <div className="bg-[var(--panel)] rounded-[20px] shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1220px] h-[94vh]">
+      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-6xl h-[94vh]">
 
-        <div className="flex flex-wrap items-center gap-5 px-6 py-4 border-b border-black/[0.07] shrink-0">
+        <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-[10px] bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={20} /></span>
-            <span className="text-[22px] font-bold">New Job</span>
+            <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={16} /></span>
+            <span className="text-[17px] font-bold">New Job</span>
           </div>
           {typeTabs}
           {branchName && <span className="ml-auto text-sm text-[var(--text-3)] hidden sm:inline">{branchName}</span>}
           <button type="button" onClick={onClose} aria-label="Close"
-                  className={`${branchName ? '' : 'ml-auto'} w-11 h-11 grid place-items-center rounded-xl hover:bg-black/5 text-[var(--text-3)]`}>
-            <Icon kind="close" size={22} />
+                  className={`${branchName ? '' : 'ml-auto'} w-9 h-9 grid place-items-center rounded-lg hover:bg-black/5 text-[var(--text-3)]`}>
+            <Icon kind="close" size={18} />
           </button>
         </div>
 
         {lateNote}
         {customerBand}
 
-        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[280px_1fr_340px] animate-unfold">
+        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[240px_1fr_300px] animate-unfold">
           <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
-          <div className="p-6 overflow-y-auto min-h-0">{editor}</div>
-          <div className="p-5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
+          <div className="p-5 overflow-y-auto min-h-0">{editor}</div>
+          <div className="p-4 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
         </div>
       </div>
     </div>,
