@@ -243,9 +243,9 @@ function Row({ c, selected, onOpen }) {
 }
 
 // ── Starting a chat: approved messages only, until the customer replies ──
-function NewMessage({ onClose, onStarted }) {
-  const [phone, setPhone] = useState('')
-  const [name, setName] = useState('')
+function NewMessage({ onClose, onStarted, prefill = null }) {
+  const [phone, setPhone] = useState(prefill?.phone || '')
+  const [name, setName] = useState(prefill?.name || '')
   const [pick, setPick] = useState(null)
   const [params, setParams] = useState([])
   const [error, setError] = useState('')
@@ -358,7 +358,7 @@ function Bubble({ m, who, first, initials, onReply, reports }) {
               <div className="flex flex-col gap-px px-2.5 py-1.5 rounded-md text-xs text-[var(--text-2)] bg-black/[0.045] max-w-[360px]"
                 style={{ borderLeft: `3px solid ${q.who === 'Octos' ? '#CC0000' : '#080808'}` }}>
                 <b className="text-[11.5px]" style={{ color: q.who === 'Octos' ? '#CC0000' : '#080808' }}>{q.who}</b>
-                <span className="line-clamp-2">{q.body || q.media_name || 'A file'}</span>
+                <span className="line-clamp-2">{q.body && q.body !== q.media_name ? q.body : ((q.media_mime || '').startsWith('image/') ? '📷 Photo' : q.media_name || 'A file')}</span>
               </div>
             )}
             {photo && <Photo m={m} />}
@@ -481,7 +481,7 @@ function Panel({ conv, actions, files, onClose }) {
 }
 
 // ── The open chat ───────────────────────────────────────────────────────
-function Thread({ convId, onBack, panel, setPanel }) {
+function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const queryClient = useQueryClient()
   const wide = useWide()
   const [reply, setReply] = useState('')
@@ -625,7 +625,7 @@ function Thread({ convId, onBack, panel, setPanel }) {
                 <span className="w-[3px] self-stretch rounded bg-[#080808] shrink-0" />
                 <span className="flex-1 min-w-0 flex flex-col">
                   <b className="text-[11.5px]">Replying to {kindOf(replyTo) === 'octos' ? 'Octos' : kindOf(replyTo) === 'customer' ? nameOf(conv) : (replyTo.sent_by_name || 'Staff')}</b>
-                  <span className="text-xs text-[var(--text-3)] truncate">{(replyTo.body || replyTo.media_name || 'A file').replace(/\n+/g, ' ')}</span>
+                  <span className="text-xs text-[var(--text-3)] truncate">{(replyTo.body && replyTo.body !== replyTo.media_name ? replyTo.body : (isPhoto(replyTo) ? '📷 Photo' : replyTo.media_name || 'A file')).replace(/\n+/g, ' ')}</span>
                 </span>
                 <button type="button" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message" className="w-7 h-7 grid place-items-center rounded-full hover:bg-black/5"><I.close size={13} /></button>
               </div>
@@ -657,6 +657,23 @@ function Thread({ convId, onBack, panel, setPanel }) {
                 })}
               </div>
             )}
+            {whatsapp && !windowOpen && !asNote ? (() => {
+              // WhatsApp's rule, not Octos's: free messages only within 24 hours of the
+              // customer's last; after that, an approved message (8 Nov 2026).
+              const last = [...messages].reverse().find(x => x.direction === 'INBOUND')?.created_at
+              const when = last ? `${dayLabel(last) === 'Today' ? 'today' : dayLabel(last) === 'Yesterday' ? 'yesterday' : `on ${dayLabel(last)}`} at ${clock(last)}` : 'more than a day ago'
+              return (
+                <div className="flex flex-wrap items-center gap-3 px-3.5 py-3 rounded-xl bg-black/[0.035]">
+                  <span className="flex-1 min-w-[260px] text-[12.5px] leading-snug text-[var(--text-2)]">
+                    <b className="text-[var(--text)]">{nameOf(conv)} last wrote {when}.</b>{' '}
+                    WhatsApp only allows free messages within 24 hours of a customer’s last message.
+                    To reach them now, send an approved message; once they reply, you can write freely again.
+                  </span>
+                  <button type="button" onClick={() => onApproved?.(conv)}
+                    className="shrink-0 h-9 px-3.5 rounded-lg bg-[#080808] text-white text-xs font-semibold">Send an approved message</button>
+                </div>
+              )
+            })() : (
             <div className="flex items-end gap-2">
               <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
               <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach photos or documents" title="Attach photos or documents"
@@ -685,6 +702,7 @@ function Thread({ convId, onBack, panel, setPanel }) {
                 className="w-[42px] h-[38px] shrink-0 rounded-lg grid place-items-center text-white disabled:opacity-40"
                 style={{ background: asNote ? C.noteMeta : C.red }}>{asNote ? <I.check size={18} /> : <I.send size={17} />}</button>
             </div>
+            )}
             {error && <p className="m-0 text-xs" style={{ color: C.redText }}>{error}</p>}
             <span className="text-[11px] text-[var(--text-3)]">Enter sends, Shift+Enter adds a line. Drop files here, or paste a screenshot.</span>
           </div>
@@ -719,6 +737,7 @@ export default function Inbox({ focus = null } = {}) {
   const [selectedId, setSelectedId] = useState(null)
   const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
+  const [prefill, setPrefill] = useState(null)
   // Opened from a notification: the chat it points at, or what needs you.
   useEffect(() => {
     if (!focus) return
@@ -807,7 +826,7 @@ export default function Inbox({ focus = null } = {}) {
               ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
           </div>
           {starting && (
-            <NewMessage onClose={() => setStarting(false)} onStarted={id => {
+            <NewMessage prefill={prefill} onClose={() => { setStarting(false); setPrefill(null) }} onStarted={id => {
               setStarting(false)
               queryClient.invalidateQueries({ queryKey: ['conversations'] })
               setSelectedId(id)
@@ -817,7 +836,8 @@ export default function Inbox({ focus = null } = {}) {
 
         <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-1 min-w-0`}>
           {selectedId
-            ? <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel} />
+            ? <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel}
+                onApproved={c => { setPrefill({ name: nameOf(c), phone: c.contact_phone }); setStarting(true) }} />
             : <div className="flex-1 grid place-items-center text-sm text-[var(--text-3)]">Choose a conversation to read it.</div>}
         </div>
       </div>
