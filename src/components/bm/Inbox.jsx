@@ -92,13 +92,23 @@ const fileUrl = m => `/api/v1/communications/messages/${m.id}/file/`
 // counter computers the browser saves it to a dedicated folder and opens it
 // straight away (see the staff guide); Windows empties that folder on a
 // schedule. There is no separate Download (Khofi, 8 Nov 2026).
+// Inside the Octos desktop app, the app itself keeps the file in its private
+// folder and opens it (octos-desktop, open_file); in a browser, as below.
+const desktopInvoke = () => window.__TAURI__?.core?.invoke
 function openFile(m) {
   client.get(fileUrl(m) + '?download=1', { responseType: 'blob' })
-    .then(r => {
+    .then(async r => {
+      const name = m.media_name || (isPhoto(m) ? 'photo.png' : 'file')
+      const invoke = desktopInvoke()
+      if (invoke) {
+        const bytes = new Uint8Array(await r.data.arrayBuffer())
+        await invoke('open_file', bytes, { headers: { 'x-file-id': String(m.id), 'x-file-name': encodeURIComponent(name) } })
+        return
+      }
       const url = URL.createObjectURL(r.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = m.media_name || (isPhoto(m) ? 'photo.png' : 'file')
+      a.download = name
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     })
