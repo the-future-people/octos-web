@@ -20,6 +20,22 @@ const C = {
   amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
 }
 const MAX_FILE = 16 * 1024 * 1024
+// The emojis a print shop's chats actually use.
+const EMOJIS = ['🙏', '👍', '😊', '🙂', '😀', '😂', '❤️', '👌', '✅', '❌', '⚠️', '📄', '🖨️', '📎', '📸', '📦',
+  '⏰', '📍', '💳', '💯', '🎉', '👏', '🤝', '🙌', '😅', '🤔', '😢', '😍', '🔥', '⭐', '👋', '📞']
+// Wide enough to keep the side panel as a column beside the chat; narrower
+// than this it slides over the chat instead, so the chat keeps its width.
+const WIDE = '(min-width: 1600px)'
+function useWide() {
+  const [wide, setWide] = useState(() => window.matchMedia(WIDE).matches)
+  useEffect(() => {
+    const query = window.matchMedia(WIDE)
+    const change = () => setWide(query.matches)
+    query.addEventListener('change', change)
+    return () => query.removeEventListener('change', change)
+  }, [])
+  return wide
+}
 const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
 const getConversations = () =>
@@ -60,8 +76,11 @@ function until(iso) {
 }
 const size = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 
+// What happened to the chat (took over, handed back, resolved, at the counter):
+// recorded as staff-only messages, but events, not notes anyone wrote.
+const EVENT = /(took over from Octos|handed (the conversation|it) back|resolved (this|the) (conversation|chat)|reopened|at the counter|asked for a person)/i
 function kindOf(m) {
-  if (m.is_internal_note) return m.channel === 'SYSTEM' && !m.media_file && !m.sent_by ? 'event' : 'note'
+  if (m.is_internal_note) return !m.media_file && (EVENT.test(m.body || '') || (m.channel === 'SYSTEM' && !m.sent_by)) ? 'event' : 'note'
   if (m.direction === 'INBOUND') return 'customer'
   return m.sent_by ? 'staff' : 'octos'
 }
@@ -102,6 +121,7 @@ const I = {
   back: p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>,
   check: p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>,
   close: p => <Svg {...p}><path d="M6 6l12 12M18 6 6 18" /></Svg>,
+  smile: p => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Svg>,
 }
 const CHANNEL = {
   WHATSAPP: { label: 'WhatsApp', colour: '#1E7A4C' },
@@ -218,7 +238,7 @@ function NewMessage({ onClose, onStarted }) {
 function FileCard({ m, tint }) {
   const b = badge(m.media_name, m.media_mime, m.message_type)
   return (
-    <div className="flex items-center gap-2.5 w-[400px] max-w-full p-2 rounded-lg border border-black/5" style={{ background: tint }}>
+    <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg border border-black/5" style={{ background: tint }}>
       <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
@@ -237,7 +257,22 @@ function FileCard({ m, tint }) {
 function Bubble({ m, who, first }) {
   const kind = kindOf(m)
   if (kind === 'event') {
-    return <div className="self-center text-[11.5px] text-[var(--text-3)] py-1.5 text-center">{m.body}, {clock(m.created_at)}</div>
+    return <div className="self-center text-[11px] text-[var(--text-3)] py-1 text-center">{(m.body || '').replace(/\.$/, '')}, {clock(m.created_at)}</div>
+  }
+  if (kind === 'note') {
+    // A note: a small annotation under the conversation, never mistaken for a message.
+    return (
+      <div className="self-end max-w-[75%] mt-0.5 flex items-start gap-1.5 px-2 py-1 rounded-md text-[11.5px] leading-snug"
+        style={{ background: C.note, borderLeft: `3px solid ${C.noteBorder}`, color: C.noteText }} title="A note only staff see">
+        <span aria-hidden="true">📝</span>
+        <span className="min-w-0">
+          <b style={{ color: C.noteMeta }}>{(m.sent_by_name || 'Staff').split(' ')[0]}:</b>{' '}
+          <span className="whitespace-pre-line">{m.body && m.body !== m.media_name ? m.body : ''}</span>
+          {m.media_file && <> <a href={m.media_file} target="_blank" rel="noreferrer" className="underline">{m.media_name || 'file'}</a></>}
+        </span>
+        <span className="shrink-0 text-[10px] opacity-70">{clock(m.created_at)}</span>
+      </div>
+    )
   }
   const mine = kind !== 'customer'
   const look = {
@@ -252,7 +287,7 @@ function Bubble({ m, who, first }) {
   return (
     <div className={`flex flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'} ${first ? 'mt-2.5' : ''}`}>
       {first && <span className="text-[11px] font-bold px-1" style={{ color: look.label }}>{who}</span>}
-      <div className={`max-w-[66%] flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
+      <div className={`max-w-[75%] min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
         style={{ background: look.bg, border: look.border || 0, borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px' }}>
         {photo && (
           <a href={m.media_file} target="_blank" rel="noreferrer">
@@ -270,7 +305,7 @@ function Bubble({ m, who, first }) {
 }
 
 // ── The side panel ──────────────────────────────────────────────────────
-function Panel({ conv, actions, files }) {
+function Panel({ conv, actions, files, onClose }) {
   const whatsapp = conv.channel === 'WHATSAPP'
   const state = inVisit(conv)
     ? ['At the counter', `Octos is quiet until ${clock(conv.counter_until)}.`, C.amberSoft, C.noteBorder, C.amberText]
@@ -285,10 +320,12 @@ function Panel({ conv, actions, files }) {
   const small = 'flex-1 h-8 rounded-lg border border-black/15 bg-white text-xs font-semibold disabled:opacity-40'
   return (
     <aside aria-label="Details" className="w-[290px] shrink-0 bg-[var(--panel)] border-l border-[var(--border)] p-3.5 flex flex-col gap-4 overflow-y-auto">
+      {onClose && (
+        <button type="button" onClick={onClose} className="self-end -mb-2 h-7 px-2 rounded-md text-xs font-semibold text-[var(--text-3)] hover:bg-black/5">Close details</button>
+      )}
       <div className="flex flex-col gap-1.5 p-3 rounded-xl" style={{ background: state[2], border: `1px solid ${state[3]}` }}>
         <span className="font-bold text-[13px]" style={{ color: state[4] }}>{resolved ? 'Resolved' : state[0]}</span>
         {!resolved && <span className="text-[12.5px] leading-snug text-[var(--text)]">{state[1]}</span>}
-        {!resolved && whatsapp && actions.main}
         {!resolved && (
           <div className="flex gap-1.5">
             {whatsapp && !inVisit(conv) && <button type="button" onClick={actions.atCounter} className={small}>At the counter</button>}
@@ -342,6 +379,7 @@ function Panel({ conv, actions, files }) {
 // ── The open chat ───────────────────────────────────────────────────────
 function Thread({ convId, onBack, panel, setPanel }) {
   const queryClient = useQueryClient()
+  const wide = useWide()
   const [reply, setReply] = useState('')
   const [asNote, setAsNote] = useState(false)
   const [chips, setChips] = useState([])
@@ -349,7 +387,17 @@ function Thread({ convId, onBack, panel, setPanel }) {
   const [dragging, setDragging] = useState(false)
   const scroller = useRef(null)
   const filePick = useRef(null)
-  const photoPick = useRef(null)
+  const box = useRef(null)
+  const [emojis, setEmojis] = useState(false)
+  // An emoji goes where the cursor is, and the box keeps its focus.
+  const addEmoji = e => {
+    const el = box.current
+    const at = el ? el.selectionStart : reply.length
+    const end = el ? el.selectionEnd : reply.length
+    setReply(r => r.slice(0, at) + e + r.slice(end))
+    setEmojis(false)
+    requestAnimationFrame(() => { if (el) { el.focus(); el.setSelectionRange(at + e.length, at + e.length) } })
+  }
 
   const { data: conv, isLoading } = useQuery({
     queryKey: ['conversation', convId],
@@ -413,7 +461,7 @@ function Thread({ convId, onBack, panel, setPanel }) {
 
   let lastWho = '', lastDay = ''
   return (
-    <div className="flex-1 min-w-0 flex">
+    <div className="flex-1 min-w-0 flex relative">
       <section aria-label="Conversation" className="flex-1 min-w-0 flex flex-col bg-[#FBFBFA]"
         onDragOver={e => { e.preventDefault(); if (!resolved) setDragging(true) }}
         onDragLeave={() => setDragging(false)}
@@ -431,18 +479,18 @@ function Thread({ convId, onBack, panel, setPanel }) {
             style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
         </div>
 
-        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto px-5 py-3 flex flex-col gap-1 relative">
+        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-3 flex flex-col gap-1 relative">
           {dragging && <div className="absolute inset-2 z-10 rounded-xl border-2 border-dashed border-zinc-900 bg-white/80 grid place-items-center text-sm font-semibold">Drop to attach</div>}
           {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
           {messages.map(m => {
             const kind = kindOf(m)
             const who = kind === 'octos' ? 'Octos' : kind === 'staff' ? `${m.sent_by_name || 'Staff'}, staff`
-              : kind === 'note' ? `Note by ${m.sent_by_name || 'staff'}, staff only` : kind === 'customer' ? nameOf(conv) : ''
+              : kind === 'customer' ? nameOf(conv) : ''
             const day = dayLabel(m.created_at)
             const newDay = day !== lastDay
-            const first = newDay || who !== lastWho
+            const first = newDay || (who && who !== lastWho)
             lastDay = day
-            lastWho = who
+            if (who) lastWho = who   // notes and events don't break a speaker's run
             return (
               <div key={m.id} className="flex flex-col">
                 {newDay && (
@@ -450,7 +498,7 @@ function Thread({ convId, onBack, panel, setPanel }) {
                     <span className="flex-1 h-px bg-[var(--border)]" /><span>{day}</span><span className="flex-1 h-px bg-[var(--border)]" />
                   </div>
                 )}
-                <Bubble m={m} who={who} first={first && kind !== 'event'} />
+                <Bubble m={m} who={who} first={!!who && first} />
               </div>
             )
           })}
@@ -487,13 +535,22 @@ function Thread({ convId, onBack, panel, setPanel }) {
             )}
             <div className="flex items-end gap-2">
               <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-              <input ref={photoPick} type="file" multiple accept="image/*" className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-              <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach a document" title="Attach a document"
+              <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach photos or documents" title="Attach photos or documents"
                 className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.clip size={18} /></button>
-              <button type="button" onClick={() => photoPick.current?.click()} aria-label="Attach a photo" title="Attach a photo"
-                className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.photo size={18} /></button>
+              <div className="relative">
+                <button type="button" onClick={() => setEmojis(v => !v)} aria-label="Add an emoji" title="Add an emoji" aria-expanded={emojis}
+                  className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.smile size={18} /></button>
+                {emojis && (
+                  <div className="absolute bottom-[46px] left-0 z-30 w-[288px] p-2 rounded-xl border border-[var(--border)] bg-white shadow-xl grid grid-cols-8 gap-0.5">
+                    {EMOJIS.map(e => (
+                      <button key={e} type="button" onClick={() => addEmoji(e)} aria-label={e}
+                        className="w-8 h-8 rounded-md text-lg hover:bg-black/5 grid place-items-center">{e}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <label htmlFor="reply" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
-              <textarea id="reply" rows={2} value={reply}
+              <textarea id="reply" ref={box} rows={2} value={reply}
                 onChange={e => { setReply(e.target.value); setError('') }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
                 onPaste={e => { if (e.clipboardData?.files?.length) { e.preventDefault(); addFiles(e.clipboardData.files) } }}
@@ -511,9 +568,8 @@ function Thread({ convId, onBack, panel, setPanel }) {
       </section>
 
       {panel && (
-        <div className="hidden xl:flex">
-          <Panel conv={conv} files={files} actions={{
-            main: mainButton,
+        <div className={wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}>
+          <Panel conv={conv} files={files} onClose={wide ? null : () => setPanel(false)} actions={{
             atCounter: () => atCounter.mutate(),
             resolve: () => resolve.mutate(),
           }} />
@@ -537,7 +593,7 @@ export default function Inbox() {
   const [filter, setFilter] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
-  const [panel, setPanel] = useState(true)
+  const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
 
   const { data: conversations = [], isLoading } = useQuery({
@@ -565,23 +621,23 @@ export default function Inbox() {
   }, [shown, selectedId])
 
   return (
-    <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-3 sm:m-4"
-      style={{ height: 'calc(100vh - 110px)', minHeight: 560 }}>
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
-        <div className="flex flex-col">
+    <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-2"
+      style={{ height: 'calc(100vh - 100px)', minHeight: 560 }}>
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="flex flex-col shrink-0">
           <span className="text-base font-bold">Inbox</span>
           <span className="text-[11.5px] text-[var(--text-2)]">
             {needsCount > 0 && <b style={{ color: C.redText }}>{needsCount} need{needsCount === 1 ? 's' : ''} you, </b>}
             {unread} unread. Octos is answering the rest.
           </span>
         </div>
-        <div className="relative flex-[0_1_320px] min-w-[200px] ml-2">
+        <div className="relative flex-[1_1_220px] max-w-[320px] min-w-[140px]">
           <I.search size={15} className="absolute left-2.5 top-[9px] text-[var(--text-3)]" />
           <input type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
             placeholder="Search names, numbers, messages or jobs"
             className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
         </div>
-        <div role="tablist" aria-label="Channel" className="flex gap-0.5 p-[3px] rounded-[10px] bg-black/[0.05]">
+        <div role="tablist" aria-label="Channel" className="flex shrink-0 gap-0.5 p-[3px] rounded-[10px] bg-black/[0.05]">
           {TABS.map(t => (
             <button key={t} type="button" role="tab" aria-selected={channel === t} onClick={() => setChannel(t)}
               className={`h-7 px-3 rounded-md text-xs ${channel === t ? 'bg-white shadow-sm font-bold' : 'font-semibold text-[var(--text-3)]'}`}>
@@ -590,14 +646,14 @@ export default function Inbox() {
           ))}
         </div>
         <button type="button" onClick={() => setStarting(s => !s)}
-          className="ml-auto inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
+          className="ml-auto shrink-0 inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
           <I.plus size={14} />New message
         </button>
       </div>
 
       <div className="flex-1 min-h-0 flex">
         <section aria-label="Conversations"
-          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[300px] shrink-0 flex-col bg-[var(--panel)] border-r border-[var(--border)] relative`}>
+          className={`${selectedId ? 'hidden lg:flex' : 'flex'} w-full lg:w-[280px] shrink-0 flex-col bg-[var(--panel)] border-r border-[var(--border)] relative`}>
           <div className="flex gap-1.5 flex-wrap px-3 py-2 border-b border-[var(--border)]">
             {FILTERS.map(f => {
               const on = filter === f.key, red = f.key === 'needs'
