@@ -1,5 +1,5 @@
 // src/pages/bm/BMPortal.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import useBranchSocket from '../../hooks/useBranchSocket'
 import BMTopbar from '../../components/bm/BMTopbar'
@@ -53,6 +53,19 @@ export default function BMPortal() {
   const [activeSection, setActiveSection] = useState('overview')
   const [mobileOpen,    setMobileOpen]    = useState(false)
   const reminder = useReminders()
+  // A notification opens the page it is about, and the item in it (8 Nov 2026).
+  const [focus, setFocus] = useState(null)
+  useEffect(() => {
+    const open = (e) => {
+      const { section, id, filter } = e.detail || {}
+      if (!section) return
+      setActiveSection(section)
+      setFocus({ section, id, filter, at: Date.now() })
+      setMobileOpen(false)
+    }
+    window.addEventListener('octos:open', open)
+    return () => window.removeEventListener('octos:open', open)
+  }, [])
 
   const handleNav = (id) => {
     setActiveSection(id)
@@ -71,7 +84,7 @@ export default function BMPortal() {
       case 'catalogue':   return <Catalogue />
       case 'performance': return <Performance />
       case 'staff':       return <Staff />
-      case 'inbox':       return <Inbox />
+      case 'inbox':       return <Inbox focus={focus?.section === 'inbox' ? focus : null} />
       case 'notes':       return <PersonalNotes onIdleRedirect={() => setActiveSection('overview')} />
       default:
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label

@@ -1,5 +1,14 @@
 // src/components/cashier/NotificationBell.jsx
-import { useState, useRef, useEffect } from 'react'
+//
+// The bell, in every portal's top bar (rebuilt 8 Nov 2026).
+// - The menu is drawn on the page itself, positioned under the bell, not
+//   inside the top bar: in the desktop app the bar is black and is the
+//   window's drag area, and a menu inside it inherited both.
+// - Clicking a notification opens what it is about (its link, or for older
+//   ones the page it is clearly about) and marks it read. The portal listens
+//   for 'octos:open' and shows that page.
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getNotifications,
@@ -8,27 +17,61 @@ import {
   markAllNotificationsRead,
 } from '../../api/notifications'
 
-// Re-export from bm api if needed — both use same endpoints
+// Where a notification points: its link ("inbox/123", "inventory",
+// "inbox?needs"), else what its words make plain.
+function targetOf(n) {
+  const link = (n.link || '').replace(/^\/+/, '')
+  if (link) {
+    const [path, query] = link.split('?')
+    const [section, id] = path.split('/')
+    return { section, id: id || null, filter: query || null }
+  }
+  const text = n.message || ''
+  if (n.verb === 'stock_low' || /\b(low|toner|paper|ink)\b.*remaining/i.test(text)) return { section: 'inventory' }
+  if (/^needs you/i.test(text) || n.verb === 'conversation_assigned' || n.verb === 'message_received')
+    return { section: 'inbox', filter: 'needs' }
+  if (/\bPFI-/i.test(text) || /proforma/i.test(text)) return { section: 'proformas' }
+  if (/\bsheet\b|\bfloat\b|sign.?off/i.test(text)) return { section: 'daysheet' }
+  if (/\bcredit\b|\boverdue\b/i.test(text)) return { section: 'customers' }
+  if (/\bFP-[A-Z]+-\d+/i.test(text) || /\bjob\b/i.test(text)) return { section: 'jobs' }
+  return null
+}
 
 export default function NotificationBell() {
   const [open,    setOpen]    = useState(false)
   const [showAll, setShowAll] = useState(false)
-  const ref         = useRef(null)
+  const [place,   setPlace]   = useState(null)
+  const button      = useRef(null)
+  const menu        = useRef(null)
   const queryClient = useQueryClient()
 
-  // Close on outside click
+  // Close on a click anywhere but the bell and its menu.
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setOpen(false)
-        setShowAll(false)
-      }
+      if (button.current?.contains(e.target) || menu.current?.contains(e.target)) return
+      setOpen(false)
+      setShowAll(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Poll unread count every 30s
+  // Under the bell, right edges aligned; across the screen on a phone.
+  useLayoutEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const r = button.current?.getBoundingClientRect()
+      if (!r) return
+      const phone = window.innerWidth < 640
+      setPlace(phone
+        ? { top: r.bottom + 8, left: 8, right: 8 }
+        : { top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right), width: 360 })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open])
+
   const { data: countData } = useQuery({
     queryKey: ['notifCount'],
     queryFn:  () => getUnreadCount().then(r => r.data),
@@ -36,7 +79,6 @@ export default function NotificationBell() {
     staleTime: 0,
   })
 
-  // Load notifications only when dropdown is open
   const { data: notifsData, isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn:  () => getNotifications().then(r => r.data),
@@ -47,131 +89,108 @@ export default function NotificationBell() {
   const allNotifs = Array.isArray(notifsData) ? notifsData : (notifsData?.results || [])
   const notifs    = showAll ? allNotifs : allNotifs.slice(0, 5)
 
-  const { mutate: markRead } = useMutation({
-    mutationFn: (id) => markNotificationRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifCount'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    },
-  })
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+  }
+  const { mutate: markRead } = useMutation({ mutationFn: (id) => markNotificationRead(id), onSuccess: refresh })
+  const { mutate: markAll }  = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
-  const { mutate: markAll } = useMutation({
-    mutationFn: markAllNotificationsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifCount'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    },
-  })
+  const openOne = (n) => {
+    if (!n.is_read) markRead(n.id)
+    const target = targetOf(n)
+    if (target) {
+      window.dispatchEvent(new CustomEvent('octos:open', { detail: target }))
+      setOpen(false)
+      setShowAll(false)
+    }
+  }
 
   return (
-    <div className="relative" ref={ref}>
-
-      {/* Bell button */}
+    <div className="relative">
       <button
+        ref={button}
         onClick={() => setOpen(o => !o)}
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-expanded={open}
         className="relative w-8 h-8 flex items-center justify-center rounded-full
           hover:bg-[var(--bg)] text-[var(--text-2)] transition-colors"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
-
-        {/* Unread badge */}
         {unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1
-            bg-red-500 text-white text-[9px] font-bold rounded-full
+            bg-[#cc0000] text-white text-[9px] font-bold rounded-full
             flex items-center justify-center leading-none pointer-events-none">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
       </button>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="fixed left-2 right-2 top-16 sm:absolute sm:left-auto sm:right-0
-          sm:top-10 sm:w-[360px] bg-[var(--panel)]
-          border border-[var(--border)] rounded-xl shadow-xl z-50 overflow-hidden">
+      {open && place && createPortal(
+        <div ref={menu} role="dialog" aria-label="Notifications"
+          style={{ position: 'fixed', zIndex: 10000, ...place }}
+          className="bg-[var(--panel)] border border-[var(--border)] rounded-xl shadow-xl overflow-hidden">
 
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3
-            border-b border-[var(--border)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
             <span className="text-sm font-bold text-[var(--text)]">
-              {unread > 0 ? `${unread} New Notifications` : 'Notifications'}
+              {unread > 0 ? `${unread} new` : 'Notifications'}
             </span>
             {unread > 0 && (
-              <button
-                onClick={() => markAll()}
-                className="text-xs text-[var(--text-3)] hover:text-[var(--text)]
-                  transition-colors">
+              <button onClick={() => markAll()}
+                className="text-xs text-[var(--text-3)] hover:text-[var(--text)] transition-colors">
                 Mark all as read
               </button>
             )}
           </div>
 
-          {/* List */}
           <div className="overflow-y-auto max-h-[360px]">
             {isLoading && !notifsData ? (
-              <div className="p-6 text-center text-sm text-[var(--text-3)]">
-                Loading…
-              </div>
+              <div className="p-6 text-center text-sm text-[var(--text-3)]">Loading…</div>
             ) : allNotifs.length === 0 ? (
               <div className="p-6 text-center">
                 <p className="text-sm font-semibold text-[var(--text-2)]">All caught up</p>
-                <p className="text-xs text-[var(--text-3)] mt-1">No notifications yet</p>
+                <p className="text-xs text-[var(--text-3)] mt-1">Nothing needs you right now</p>
               </div>
             ) : (
               <>
-                {notifs.map(n => (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.is_read && markRead(n.id)}
-                    className={`px-4 py-3 border-b border-[var(--border)] last:border-0
-                      cursor-pointer transition-colors hover:bg-[var(--bg)]
-                      ${!n.is_read ? 'bg-[var(--blue-bg)]' : ''}`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0
-                        ${!n.is_read ? 'bg-[var(--blue-text)]' : 'bg-transparent'}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs leading-relaxed
-                          ${!n.is_read
-                            ? 'text-[var(--text)] font-semibold'
-                            : 'text-[var(--text-2)]'}`}>
-                          {n.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {n.actor_name && (
-                            <span className="text-[10px] text-[var(--text-3)]">
-                              {n.actor_name}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-[var(--text-3)]">
-                            {n.time_ago}
+                {notifs.map(n => {
+                  const goes = !!targetOf(n)
+                  return (
+                    <button key={n.id} type="button" onClick={() => openOne(n)}
+                      className={`w-full text-left px-4 py-3 border-b border-[var(--border)] last:border-0
+                        transition-colors hover:bg-[var(--bg)] ${!n.is_read ? 'bg-[var(--red-bg)]' : ''}`}>
+                      <div className="flex items-start gap-2.5">
+                        <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.is_read ? 'bg-[#cc0000]' : 'bg-transparent'}`} />
+                        <span className="flex-1 min-w-0">
+                          <span className={`block text-xs leading-relaxed
+                            ${!n.is_read ? 'text-[var(--text)] font-semibold' : 'text-[var(--text-2)]'}`}>
+                            {n.message}
                           </span>
-                        </div>
+                          <span className="flex items-center gap-2 mt-1">
+                            {n.actor_name && <span className="text-[10px] text-[var(--text-3)]">{n.actor_name}</span>}
+                            <span className="text-[10px] text-[var(--text-3)]">{n.time_ago}</span>
+                            {goes && <span className="ml-auto text-[10px] font-semibold text-[var(--text-2)]">Open →</span>}
+                          </span>
+                        </span>
                       </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Show more */}
+                    </button>
+                  )
+                })}
                 {allNotifs.length > 5 && !showAll && (
-                  <button
-                    onClick={() => setShowAll(true)}
+                  <button onClick={() => setShowAll(true)}
                     className="w-full py-3 text-xs font-semibold text-[var(--text-3)]
-                      hover:text-[var(--text)] hover:bg-[var(--bg)] transition-colors
-                      border-t border-[var(--border)]">
+                      hover:text-[var(--text)] hover:bg-[var(--bg)] transition-colors border-t border-[var(--border)]">
                     Show {allNotifs.length - 5} more ↓
                   </button>
                 )}
               </>
             )}
           </div>
-
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

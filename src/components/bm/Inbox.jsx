@@ -640,7 +640,7 @@ const FILTERS = [
   { key: 'people', label: 'People', test: withPerson },
 ]
 
-export default function Inbox() {
+export default function Inbox({ focus = null } = {}) {
   const queryClient = useQueryClient()
   const [channel, setChannel] = useState('ALL')
   const [filter, setFilter] = useState(null)
@@ -648,6 +648,12 @@ export default function Inbox() {
   const [selectedId, setSelectedId] = useState(null)
   const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
+  // Opened from a notification: the chat it points at, or what needs you.
+  useEffect(() => {
+    if (!focus) return
+    if (focus.id) setSelectedId(Number(focus.id))
+    if (focus.filter) setFilter(focus.filter)
+  }, [focus])
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['conversations'],
