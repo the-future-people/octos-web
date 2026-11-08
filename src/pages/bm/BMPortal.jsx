@@ -58,7 +58,8 @@ export default function BMPortal() {
   useEffect(() => {
     const open = (e) => {
       const { section, id, filter } = e.detail || {}
-      if (!section) return
+      // Only a page this portal has; never "Coming soon" from a notification.
+      if (!section || !SECTIONS.some(s => s.items.some(i => i.id === section))) return
       setActiveSection(section)
       setFocus({ section, id, filter, at: Date.now() })
       setMobileOpen(false)

@@ -17,15 +17,33 @@ import {
   markAllNotificationsRead,
 } from '../../api/notifications'
 
-// Where a notification points: its link ("inbox/123", "inventory",
-// "inbox?needs"), else what its words make plain.
-function targetOf(n) {
-  const link = (n.link || '').replace(/^\/+/, '')
-  if (link) {
-    const [path, query] = link.split('?')
-    const [section, id] = path.split('/')
-    return { section, id: id || null, filter: query || null }
+// The pages a notification can open, and the other words links use for them.
+const PAGES = ['overview', 'daysheet', 'jobs', 'proformas', 'inbox', 'notes', 'performance',
+  'catalogue', 'staff', 'inventory', 'customers', 'reports']
+const ALIAS = { proforma: 'proformas', invoices: 'proformas', invoice: 'proformas',
+  conversations: 'inbox', conversation: 'inbox', communications: 'inbox', chats: 'inbox',
+  job: 'jobs', sheet: 'daysheet', sheets: 'daysheet', 'day-sheet': 'daysheet',
+  customer: 'customers', stock: 'inventory', consumables: 'inventory', reports: 'reports' }
+
+// Where a link points: the first part that is a real page ("/bm/proformas/12/"
+// is the proformas, item 12); null when no part of it is.
+function fromLink(link) {
+  const [path, query] = link.replace(/^[a-z]+:\/\/[^/]+/i, '').split('?')
+  const parts = path.split('/').filter(Boolean).map(p => p.toLowerCase())
+  for (let i = 0; i < parts.length; i++) {
+    const section = PAGES.includes(parts[i]) ? parts[i] : ALIAS[parts[i]]
+    if (section) {
+      const id = parts.slice(i + 1).find(p => /^\d+$/.test(p)) || null
+      return { section, id, filter: query || null }
+    }
   }
+  return null
+}
+
+// Where a notification points: its link, else what its words make plain.
+function targetOf(n) {
+  const linked = n.link ? fromLink(n.link) : null
+  if (linked) return linked
   const text = n.message || ''
   if (n.verb === 'stock_low' || /\b(low|toner|paper|ink)\b.*remaining/i.test(text)) return { section: 'inventory' }
   if (/^needs you/i.test(text) || n.verb === 'conversation_assigned' || n.verb === 'message_received')
