@@ -1,15 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@800;900&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --bg: #f5f5f3;
+  --bg: #f5f5f5;
   --panel: #ffffff;
-  --border: #e5e5e3;
-  --border-dark: #d4d4d0;
-  --text: #0a0a0a;
+  --border: #e6e6e6;
+  --border-dark: #dcdcdc;
+  --text: #080808;
   --text-2: #404040;
   --text-3: #737373;
   --radius: 12px;
@@ -20,9 +20,9 @@
   --amber-bg: #fffbeb;
   --amber-border: #fde68a;
   --amber-text: #d97706;
-  --red-bg: #fef2f2;
-  --red-border: #fecaca;
-  --red-text: #dc2626;
+  --red-bg: #fbeaea;
+  --red-border: #f2c2c2;
+  --red-text: #cc0000;
   --blue-bg: #eff6ff;
   --blue-border: #bfdbfe;
   --blue-text: #2563eb;
@@ -115,3 +115,21 @@ body {
 }
 .animate-unfold { animation: unfold 0.32s cubic-bezier(.2, .8, .2, 1) both; transform-origin: top center; }
 @media (prefers-reduced-motion: reduce) { .animate-unfold { animation: none; } }
+
+/* ── Octos brand (8 Nov 2026) ─────────────────────────────────────────────
+   The logo's colours, for anything that wants them by name, and the OCTOS
+   wordmark in Unbounded. Red only for what needs attention; green only for
+   money and Online. */
+:root {
+  --octos-black: #080808;
+  --octos-red: #cc0000;
+  --octos-mist: #f0f0f0;
+  --octos-line: #dcdcdc;
+  --octos-money: #1e7a4c;
+}
+.octos-wordmark {
+  font-family: 'Unbounded', 'Syne', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
