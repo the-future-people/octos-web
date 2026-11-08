@@ -8,3 +8,7 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+// Inside the Octos desktop app: the page is marked, for the app's own look
+// (index.css, html.octos-desktop). Browsers are left as they are.
+if (window.__TAURI__) document.documentElement.classList.add('octos-desktop')

@@ -1,4 +1,6 @@
 // src/components/coordinator/CoordinatorTopbar.jsx
+import OctosBrand from '../shared/OctosBrand'
+import WindowControls from '../shared/WindowControls'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
@@ -60,7 +62,7 @@ export default function CoordinatorTopbar({ user, onLogout }) {
 
   if (!user) {
     return (
-      <header className="bg-[var(--panel)] border-b border-[var(--border)] shrink-0">
+      <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-center">
           <span className="text-sm text-[var(--text-3)]">
             Session expired — please sign in again
@@ -71,13 +73,11 @@ export default function CoordinatorTopbar({ user, onLogout }) {
   }
 
   return (
-    <header className="bg-[var(--panel)] border-b border-[var(--border)] shrink-0">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+    <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between" data-tauri-drag-region>
 
         <div className="flex items-center gap-3">
-          <span className="font-display font-black text-xl text-[var(--text)] tracking-tight">
-            Octos
-          </span>
+          <OctosBrand />
           <span className="hidden sm:block w-px h-4 bg-[var(--border)]" aria-hidden="true" />
           <div className="hidden sm:flex flex-col leading-none">
             <span className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
@@ -184,6 +184,7 @@ export default function CoordinatorTopbar({ user, onLogout }) {
           </div>
         </div>
       </div>
+      <WindowControls />
     </header>
   )
 }
