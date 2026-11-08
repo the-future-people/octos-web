@@ -153,6 +153,35 @@ html.octos-desktop .octos-topbar {
   border-bottom-color: #080808 !important;
 }
 html.octos-desktop .octos-topbar > div:first-child {
+  /* Starts where the page's content starts (its max-w-6xl column), so the
+     logo lines up with the menu; the window's controls stay at the far
+     right. */
   flex: 1;
   max-width: none;
+  margin-left: max(0px, calc((100vw - 72rem) / 2));
+  margin-right: 0;
+}
+
+/* Menus dropping from the black bar (notifications, the profile menu) keep
+   the page's own colours, light or dark, not the bar's white-on-black. */
+html.octos-desktop body {
+  --page-panel: var(--panel); --page-bg: var(--bg); --page-text: var(--text);
+  --page-text-2: var(--text-2); --page-text-3: var(--text-3);
+  --page-border: var(--border); --page-border-dark: var(--border-dark);
+}
+html.octos-desktop .octos-topbar .absolute {
+  --panel: var(--page-panel); --bg: var(--page-bg); --text: var(--page-text);
+  --text-2: var(--page-text-2); --text-3: var(--page-text-3);
+  --border: var(--page-border); --border-dark: var(--page-border-dark);
+}
+
+/* ── Dark mode: buttons drawn in the text colour with white writing ───────
+   In dark mode the text colour is white, so their writing vanished (New Job,
+   for one). There, their writing takes the page's background colour. */
+:is(.dark, [data-theme="dark"]) .bg-\[var\(--text\)\]:is(.text-white),
+:is(.dark, [data-theme="dark"]) .bg-\[var\(--text\)\] .text-white {
+  color: var(--panel) !important;
+}
+:is(.dark, [data-theme="dark"]) .bg-\[var\(--text\)\] [class*="text-white/"] {
+  color: var(--text-3) !important;
 }
