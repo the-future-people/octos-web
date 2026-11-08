@@ -87,20 +87,22 @@ function kindOf(m) {
 // Files come through Octos's own view, never straight from the bucket
 // (settings.py: every file goes through the view that checks who is asking).
 const fileUrl = m => `/api/v1/communications/messages/${m.id}/file/`
-function openFile(m, download = false) {
-  // A tab opened now, before the wait, so the browser doesn't block it.
-  const tab = download ? null : window.open('', '_blank')
-  client.get(fileUrl(m) + (download ? '?download=1' : ''), { responseType: 'blob' })
+// Open: the file is handed to the computer to open in its own app (Acrobat,
+// Word, PowerPoint, the photo viewer), as WhatsApp Desktop does. On the
+// counter computers the browser saves it to a dedicated folder and opens it
+// straight away (see the staff guide); Windows empties that folder on a
+// schedule. There is no separate Download (Khofi, 8 Nov 2026).
+function openFile(m) {
+  client.get(fileUrl(m) + '?download=1', { responseType: 'blob' })
     .then(r => {
       const url = URL.createObjectURL(r.data)
-      if (download) {
-        const a = document.createElement('a')
-        a.href = url; a.download = m.media_name || 'file'
-        document.body.appendChild(a); a.click(); a.remove()
-      } else if (tab) tab.location.href = url
+      const a = document.createElement('a')
+      a.href = url
+      a.download = m.media_name || (isPhoto(m) ? 'photo.png' : 'file')
+      document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     })
-    .catch(() => { if (tab) tab.close(); window.alert('That file could not be opened. Try again.') })
+    .catch(() => window.alert('That file could not be opened. Try again.'))
 }
 // A photo, fetched with the user's sign-in and shown from memory.
 function Photo({ m }) {
@@ -112,7 +114,7 @@ function Photo({ m }) {
   if (isError) return <span className="block px-3 py-6 text-xs text-[var(--text-3)]">This photo could not be loaded.</span>
   if (!src) return <span className="block w-[220px] h-[160px] rounded-lg bg-black/[0.05] animate-pulse" />
   return (
-    <button type="button" onClick={() => openFile(m)} className="block" title="Open the photo">
+    <button type="button" onClick={() => openFile(m)} className="block" title="Open in the photo viewer">
       <img src={src} alt={m.media_name || 'Photo'} className="block rounded-lg max-w-full" style={{ maxHeight: 340, minWidth: 160 }} />
     </button>
   )
@@ -279,8 +281,7 @@ function FileCard({ m, tint }) {
       </span>
       {m.media_file && (
         <span className="flex gap-1.5 shrink-0">
-          <button type="button" onClick={() => openFile(m)} className="px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
-          <button type="button" onClick={() => openFile(m, true)} className="px-2.5 py-1 rounded-md border border-black/15 bg-white text-[11.5px] font-semibold">Download</button>
+          <button type="button" onClick={() => openFile(m)} className="px-3 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
         </span>
       )}
     </div>
