@@ -84,6 +84,39 @@ function kindOf(m) {
   if (m.direction === 'INBOUND') return 'customer'
   return m.sent_by ? 'staff' : 'octos'
 }
+// Files come through Octos's own view, never straight from the bucket
+// (settings.py: every file goes through the view that checks who is asking).
+const fileUrl = m => `/api/v1/communications/messages/${m.id}/file/`
+function openFile(m, download = false) {
+  // A tab opened now, before the wait, so the browser doesn't block it.
+  const tab = download ? null : window.open('', '_blank')
+  client.get(fileUrl(m) + (download ? '?download=1' : ''), { responseType: 'blob' })
+    .then(r => {
+      const url = URL.createObjectURL(r.data)
+      if (download) {
+        const a = document.createElement('a')
+        a.href = url; a.download = m.media_name || 'file'
+        document.body.appendChild(a); a.click(); a.remove()
+      } else if (tab) tab.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    })
+    .catch(() => { if (tab) tab.close(); window.alert('That file could not be opened. Try again.') })
+}
+// A photo, fetched with the user's sign-in and shown from memory.
+function Photo({ m }) {
+  const { data: src, isError } = useQuery({
+    queryKey: ['messageFile', m.id],
+    queryFn: () => client.get(fileUrl(m), { responseType: 'blob' }).then(r => URL.createObjectURL(r.data)),
+    staleTime: Infinity,
+  })
+  if (isError) return <span className="block px-3 py-6 text-xs text-[var(--text-3)]">This photo could not be loaded.</span>
+  if (!src) return <span className="block w-[220px] h-[160px] rounded-lg bg-black/[0.05] animate-pulse" />
+  return (
+    <button type="button" onClick={() => openFile(m)} className="block" title="Open the photo">
+      <img src={src} alt={m.media_name || 'Photo'} className="block rounded-lg max-w-full" style={{ maxHeight: 340, minWidth: 160 }} />
+    </button>
+  )
+}
 const hasFile = m => !!(m.media_file || m.media_id || MEDIA.includes(m.message_type))
 const isPhoto = m => (m.media_mime || '').startsWith('image/') || m.message_type === 'IMAGE'
 function badge(name, mime, type) {
@@ -246,8 +279,8 @@ function FileCard({ m, tint }) {
       </span>
       {m.media_file && (
         <span className="flex gap-1.5 shrink-0">
-          <a href={m.media_file} target="_blank" rel="noreferrer" className="px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</a>
-          <a href={m.media_file} download={m.media_name || true} className="px-2.5 py-1 rounded-md border border-black/15 bg-white text-[11.5px] font-semibold">Download</a>
+          <button type="button" onClick={() => openFile(m)} className="px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
+          <button type="button" onClick={() => openFile(m, true)} className="px-2.5 py-1 rounded-md border border-black/15 bg-white text-[11.5px] font-semibold">Download</button>
         </span>
       )}
     </div>
@@ -268,7 +301,7 @@ function Bubble({ m, who, first }) {
         <span className="min-w-0">
           <b style={{ color: C.noteMeta }}>{(m.sent_by_name || 'Staff').split(' ')[0]}:</b>{' '}
           <span className="whitespace-pre-line">{m.body && m.body !== m.media_name ? m.body : ''}</span>
-          {m.media_file && <> <a href={m.media_file} target="_blank" rel="noreferrer" className="underline">{m.media_name || 'file'}</a></>}
+          {m.media_file && <> <button type="button" onClick={() => openFile(m)} className="underline">{m.media_name || 'file'}</button></>}
         </span>
         <span className="shrink-0 text-[10px] opacity-70">{clock(m.created_at)}</span>
       </div>
@@ -289,11 +322,7 @@ function Bubble({ m, who, first }) {
       {first && <span className="text-[11px] font-bold px-1" style={{ color: look.label }}>{who}</span>}
       <div className={`max-w-[75%] min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
         style={{ background: look.bg, border: look.border || 0, borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px' }}>
-        {photo && (
-          <a href={m.media_file} target="_blank" rel="noreferrer">
-            <img src={m.media_file} alt={m.media_name || 'Photo'} className="block rounded-lg max-w-full" style={{ maxHeight: 340, minWidth: 160 }} />
-          </a>
-        )}
+        {photo && <Photo m={m} />}
         {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
         {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
         <span className={`self-end text-[10.5px] text-[var(--text-3)] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`}>
@@ -362,13 +391,13 @@ function Panel({ conv, actions, files, onClose }) {
         {files.map(m => {
           const b = badge(m.media_name, m.media_mime, m.message_type)
           return (
-            <a key={m.id} href={m.media_file || undefined} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[12.5px] hover:bg-black/[0.03] rounded-md p-0.5">
+            <button type="button" key={m.id} onClick={() => openFile(m)} className="flex items-center gap-2 text-left text-[12.5px] hover:bg-black/[0.03] rounded-md p-0.5">
               <span className="w-7 h-9 shrink-0 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
               <span className="flex-1 min-w-0 flex flex-col">
                 <span className="font-semibold truncate">{m.media_name || (isPhoto(m) ? 'Photo' : 'File')}</span>
                 <span className="text-[11px] text-[var(--text-3)] truncate">{kindOf(m) === 'customer' ? 'From the customer' : kindOf(m) === 'octos' ? 'From Octos' : 'From staff'}, {clock(m.created_at)}</span>
               </span>
-            </a>
+            </button>
           )
         })}
       </div>

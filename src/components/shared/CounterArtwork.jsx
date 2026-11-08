@@ -72,7 +72,7 @@ export default function CounterArtwork({ service, specifications, result, onResu
 
   return (
     <div>
-      <input ref={input} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp"
+      <input ref={input} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp,.doc,.docx,.odt,.rtf"
              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; send(f) }} />
 
       {stage ? (
