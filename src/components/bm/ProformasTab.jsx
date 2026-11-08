@@ -23,7 +23,11 @@ function shortDate(iso) {
  * proforma with three days left is not "issued" in any useful sense — it
  * is a thing that needs chasing before it dies.
  */
+// Past its date is expired, even if the record hasn't caught up yet.
+const lapsed = p => p.status === 'ISSUED' && (p.is_expired || (p.days_left !== null && p.days_left !== undefined && p.days_left < 0))
+
 function statusOf(p) {
+  if (lapsed(p))                 return { label: 'Expired',   cls: 'bg-zinc-100 text-zinc-400' }
   if (p.status === 'DRAFT')      return { label: 'Draft',     cls: 'bg-zinc-100 text-zinc-600' }
   if (p.status === 'CONVERTED')  return { label: 'Converted', cls: 'bg-emerald-100 text-emerald-700' }
   if (p.status === 'EXPIRED')    return { label: 'Expired',   cls: 'bg-zinc-100 text-zinc-400' }
@@ -36,7 +40,7 @@ function statusOf(p) {
 function subLine(p) {
   if (p.status === 'DRAFT')     return `${shortDate(p.created_at)} · draft`
   if (p.status === 'CONVERTED') return `Accepted ${shortDate(p.converted_at || p.updated_at)}`
-  if (p.status === 'EXPIRED')   return `Expired ${shortDate(p.valid_until)}`
+  if (p.status === 'EXPIRED' || lapsed(p)) return `Expired ${shortDate(p.valid_until)}`
   if (p.status === 'SUPERSEDED') return `Replaced by a later version`
   if (p.days_left === null || p.days_left === undefined)
     return `Issued ${shortDate(p.issued_at)}`
@@ -85,25 +89,25 @@ export default function ProformasTab({ onOpenDetail }) {
   const { data, isLoading } = useQuery({
     queryKey: ['proformas', filter, page],
     queryFn:  () => getProformas({
-      status: filter && filter !== 'open' ? filter : undefined,
+      status: filter || undefined,
       page,
       page_size: 10,
     }).then(r => r.data),
     staleTime: 15_000,
-    placeholderData: prev => prev,
+    // The last list stays up only while moving between pages of the same
+    // tab; a new tab shows its own loading rows, never the old tab's list.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === filter ? prev : undefined),
   })
 
   const rows  = Array.isArray(data) ? data : (data?.results || [])
   const count = data?.count || rows.length
 
-  // "Open" is not a status the backend knows — it is everything still
-  // live, which is DRAFT plus ISSUED.
-  const visible = filter === 'open'
-    ? rows.filter(p => p.status === 'DRAFT' || p.status === 'ISSUED')
-    : rows
+  // "Open" (drafts and issued) is filtered by the server, so a page of ten
+  // is ten open proformas; one that lapsed since is left out here too.
+  const visible = filter === 'open' ? rows.filter(p => !lapsed(p)) : rows
 
   const openValue = visible
-    .filter(p => p.status === 'ISSUED')
+    .filter(p => p.status === 'ISSUED' && !lapsed(p))
     .reduce((s, p) => s + parseFloat(p.total || 0), 0)
 
   const { mutate: issue, isPending: issuing } = useMutation({
@@ -179,7 +183,7 @@ export default function ProformasTab({ onOpenDetail }) {
           <h2 className="text-lg font-bold text-[var(--text)]">Proformas</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">
             {filter === 'open' && openValue > 0
-              ? `${visible.length} open · ${fmt(openValue)} outstanding`
+              ? `${count} open · ${fmt(openValue)} outstanding`
               : `${count} proforma${count !== 1 ? 's' : ''}`}
           </p>
         </div>
@@ -240,8 +244,8 @@ export default function ProformasTab({ onOpenDetail }) {
 
           {visible.map(p => {
             const s       = statusOf(p)
-            const urgent  = p.status === 'ISSUED' && p.days_left !== null && p.days_left <= 3
-            const faded   = p.status === 'EXPIRED' || p.status === 'SUPERSEDED'
+            const urgent  = p.status === 'ISSUED' && !lapsed(p) && p.days_left !== null && p.days_left <= 3
+            const faded   = p.status === 'EXPIRED' || p.status === 'SUPERSEDED' || lapsed(p)
             return (
               <div key={p.id}
                 className={`grid grid-cols-1 sm:grid-cols-12 gap-2 items-center px-4 py-3
