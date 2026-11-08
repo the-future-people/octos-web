@@ -12,9 +12,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 
+// Octos's colours, from the logo (8 Nov 2026): black, and red only for what
+// needs attention. Octos's own messages are Mist grey with its mark beside its
+// name; 'mint' keeps its name below, but is the Mist family now.
 const C = {
-  red: '#D0342C', redText: '#B42318', redDeep: '#8E2A22', redSoft: '#FDF0EF', redBorder: '#F3C6C2',
-  mint: '#E4F3EB', mintText: '#12241A', mintIcon: '#1E6B47', mintStrip: '#F2F8F4', mintBorder: '#D3EADD',
+  red: '#CC0000', redText: '#B30000', redDeep: '#8A0000', redSoft: '#FBEAEA', redBorder: '#F2C2C2',
+  mint: '#F0F0F0', mintText: '#080808', mintIcon: '#080808', mintStrip: '#F7F7F7', mintBorder: '#DCDCDC',
   staff: '#FBE7E5', staffText: '#2A1412',
   note: '#FFF8E6', noteBorder: '#E8C66A', noteText: '#3A2D05', noteMeta: '#7A5A06',
   amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
@@ -78,7 +81,7 @@ const size = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max
 
 // What happened to the chat (took over, handed back, resolved, at the counter):
 // recorded as staff-only messages, but events, not notes anyone wrote.
-const EVENT = /(took over from Octos|handed (the conversation|it) back|resolved (this|the) (conversation|chat)|reopened|at the counter|asked for a person)/i
+const EVENT = /(took over from Octos|handed (the conversation|it) back|resolved (this|the) (conversation|chat)|conversation resolved|resolved by|reopened|at the counter|asked for a person)/i
 function kindOf(m) {
   if (m.is_internal_note) return !m.media_file && (EVENT.test(m.body || '') || (m.channel === 'SYSTEM' && !m.sent_by)) ? 'event' : 'note'
   if (m.direction === 'INBOUND') return 'customer'
@@ -129,6 +132,8 @@ function Photo({ m }) {
     </button>
   )
 }
+// Octos's mark (public/octos-mark.svg), beside its name wherever it speaks.
+const OctosMark = ({ s = 14 }) => <img src="/octos-mark.svg" alt="" width={s} height={s} className="inline-block shrink-0" />
 const hasFile = m => !!(m.media_file || m.media_id || MEDIA.includes(m.message_type))
 const isPhoto = m => (m.media_mime || '').startsWith('image/') || m.message_type === 'IMAGE'
 function badge(name, mime, type) {
@@ -178,7 +183,7 @@ const channelOf = c => CHANNEL[c?.channel] || CHANNEL.SMS
 function Avatar({ c, s = 36 }) {
   return (
     <span className="shrink-0 rounded-full grid place-items-center font-bold text-white"
-      style={{ width: s, height: s, fontSize: s / 2.8, background: channelOf(c).colour }}>{initialsOf(c)}</span>
+      style={{ width: s, height: s, fontSize: s / 2.8, background: '#080808' }}>{initialsOf(c)}</span>
   )
 }
 
@@ -213,7 +218,11 @@ function Row({ c, selected, onOpen }) {
           {asked ? `Needs you: ${c.handoff_reason}` : (c.last_message_preview || 'No messages yet')}
         </span>
         <span className="flex gap-1.5 items-center">
-          {tag && <span className="text-[10.5px] font-bold px-2 py-px rounded-full" style={tag[1]}>{tag[0]}</span>}
+          {tag && (
+            <span className="text-[10.5px] font-bold px-2 py-px rounded-full inline-flex items-center gap-1" style={tag[1]}>
+              {tag[0] === 'Octos' && <OctosMark s={12} />}{tag[0]}
+            </span>
+          )}
           {c.job && <span className="text-[10.5px] text-[var(--text-3)] truncate">Job {c.job.ref}</span>}
           <span className="text-[10.5px] font-semibold" style={{ color: channelOf(c).colour }}>{channelOf(c).label}</span>
           {c.unread_count > 0 && !selected && <span className="ml-auto w-2 h-2 rounded-full" style={{ background: C.red }} aria-label="Unread" />}
@@ -330,7 +339,11 @@ function Bubble({ m, who, first }) {
   const text = m.body && m.body !== m.media_name ? m.body : ''
   return (
     <div className={`flex flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'} ${first ? 'mt-2.5' : ''}`}>
-      {first && <span className="text-[11px] font-bold px-1" style={{ color: look.label }}>{who}</span>}
+      {first && (
+        <span className="text-[11px] font-bold px-1 inline-flex items-center gap-1" style={{ color: look.label }}>
+          {kind === 'octos' && <OctosMark s={15} />}{who}
+        </span>
+      )}
       <div className={`max-w-[75%] min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
         style={{ background: look.bg, border: look.border || 0, borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px' }}>
         {photo && <Photo m={m} />}
