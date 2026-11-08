@@ -1,3 +1,5 @@
+import NavBadge, { NavDot } from '../shared/NavBadge'
+import useInboxBadge from '../../hooks/useInboxBadge'
 // src/components/bm/BMSidebar.jsx
 const ICONS = {
   grid: (
@@ -79,6 +81,8 @@ const ICONS = {
 }
 
 export default function BMSidebar({ sections, active, onNavigate, mobileOpen, onMobileClose }) {
+  // The inbox's badge: unread chats, and chats Octos asked a person to take.
+  const badge = useInboxBadge()
   const SidebarContent = ({ collapsed = false }) => (
     <div className="pt-3">
       {sections.map(section => (
@@ -99,12 +103,13 @@ export default function BMSidebar({ sections, active, onNavigate, mobileOpen, on
                   className={`w-full flex items-center gap-3 px-4 py-2 text-sm
                     transition-colors text-left rounded-lg
                     ${active === item.id
-                      ? 'bg-[var(--bg)] text-[var(--text)] font-semibold'
+                      ? 'octos-nav-active'
                       : 'text-[var(--text-2)] hover:bg-[var(--bg)] font-medium'
                     }`}
                 >
                   <span className="shrink-0">{ICONS[item.icon]}</span>
                   {item.label}
+                  {item.id === 'inbox' && <NavBadge {...badge} />}
                 </button>
               </div>
               {/* Icon only — sm collapsed */}
@@ -112,14 +117,15 @@ export default function BMSidebar({ sections, active, onNavigate, mobileOpen, on
                 <button
                   onClick={() => onNavigate(item.id)}
                   title={item.label}
-                  className={`w-full flex items-center justify-center py-3
+                  className={`relative w-full flex items-center justify-center py-3
                     transition-colors
                     ${active === item.id
-                      ? 'bg-[var(--bg)] text-[var(--text)]'
+                      ? 'octos-nav-active octos-nav-icon'
                       : 'text-[var(--text-2)] hover:bg-[var(--bg)]'
                     }`}
                 >
                   {ICONS[item.icon]}
+                  {item.id === 'inbox' && <NavDot {...badge} />}
                 </button>
               </div>
             </div>
@@ -154,12 +160,13 @@ export default function BMSidebar({ sections, active, onNavigate, mobileOpen, on
                     className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm
                       transition-colors text-left
                       ${active === item.id
-                        ? 'bg-[var(--bg)] text-[var(--text)] font-semibold'
+                        ? 'octos-nav-active'
                         : 'text-[var(--text-2)] hover:bg-[var(--bg)] font-medium'
                       }`}
                   >
                     <span className="shrink-0">{ICONS[item.icon]}</span>
                     {item.label}
+                    {item.id === 'inbox' && <NavBadge {...badge} />}
                   </button>
                 ))}
               </div>
@@ -189,14 +196,15 @@ export default function BMSidebar({ sections, active, onNavigate, mobileOpen, on
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
                   title={item.label}
-                  className={`w-full flex items-center justify-center py-3
+                  className={`relative w-full flex items-center justify-center py-3
                     transition-colors
                     ${active === item.id
-                      ? 'bg-[var(--bg)] text-[var(--text)]'
+                      ? 'octos-nav-active octos-nav-icon'
                       : 'text-[var(--text-2)] hover:bg-[var(--bg)]'
                     }`}
                 >
                   {ICONS[item.icon]}
+                  {item.id === 'inbox' && <NavDot {...badge} />}
                 </button>
               ))}
             </div>

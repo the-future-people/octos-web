@@ -185,3 +185,31 @@ html.octos-desktop .octos-topbar .absolute {
 :is(.dark, [data-theme="dark"]) .bg-\[var\(--text\)\] [class*="text-white/"] {
   color: var(--text-3) !important;
 }
+
+/* ── The menu (8 Nov 2026) ─────────────────────────────────────────────────
+   The page you're on: a grey pill, bold, a heavier icon and a red edge
+   (style B), plain in light and dark. The inbox badge's gentle pulse. */
+.octos-nav-active {
+  position: relative;
+  background: rgba(8, 8, 8, 0.07) !important;
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+:is(.dark, [data-theme="dark"]) .octos-nav-active { background: rgba(255, 255, 255, 0.09) !important; }
+.octos-nav-active svg { stroke-width: 2.4; }
+.octos-nav-active::before {
+  content: '';
+  position: absolute;
+  left: -12px; top: 8px; bottom: 8px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #cc0000;
+}
+.octos-nav-active.octos-nav-icon::before { left: 0; }
+@keyframes octos-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(204, 0, 0, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(204, 0, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(204, 0, 0, 0); }
+}
+.octos-pulse { animation: octos-pulse 1.8s infinite; }
+@media (prefers-reduced-motion: reduce) { .octos-pulse { animation: none; } }

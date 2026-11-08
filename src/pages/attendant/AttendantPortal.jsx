@@ -20,6 +20,8 @@ import Inbox               from '../../components/bm/Inbox'
 import NewJobModal         from '../../components/bm/NewJobModal'
 import NewCustomerModal    from '../../components/bm/NewCustomerModal'
 import DailyGreeting       from '../../components/layout/DailyGreeting'
+import NavBadge, { NavDot } from '../../components/shared/NavBadge'
+import useInboxBadge      from '../../hooks/useInboxBadge'
 
 const getSheetToday = () => client.get('/api/v1/finance/sheets/today/').then(r => r.data)
 
@@ -105,6 +107,8 @@ export default function AttendantPortal() {
   const isTimeLocked = lockData ? !lockData.can_create_jobs : false
   const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isTimeLocked
   const reminder = useReminders()
+  // The inbox's badge on the menu: unread chats, and chats that need a person.
+  const badge = useInboxBadge()
 
   const sections = [...new Set(NAV.map(n => n.section))]
 
@@ -191,11 +195,12 @@ export default function AttendantPortal() {
                           className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl
                             text-sm font-semibold transition-colors mb-0.5 text-left
                             ${page === item.key
-                              ? 'bg-[var(--text)] text-white'
+                              ? 'octos-nav-active'
                               : 'text-[var(--text-2)] hover:bg-[var(--bg)] hover:text-[var(--text)]'
                             }`}>
                           <span className="shrink-0">{item.icon}</span>
                           {item.label}
+                          {item.key === 'inbox' && <NavBadge {...badge} />}
                         </button>
                       ))}
                     </div>
@@ -221,11 +226,12 @@ export default function AttendantPortal() {
                         className={`w-full flex items-center gap-3 px-4 py-2 text-sm
                           transition-colors text-left rounded-lg
                           ${page === item.key
-                            ? 'bg-[var(--bg)] text-[var(--text)] font-semibold'
+                            ? 'octos-nav-active'
                             : 'text-[var(--text-2)] hover:bg-[var(--bg)] font-medium'
                           }`}>
                         <span className="shrink-0">{item.icon}</span>
                         {item.label}
+                        {item.key === 'inbox' && <NavBadge {...badge} />}
                       </button>
                     </div>
                   ))}
@@ -245,13 +251,14 @@ export default function AttendantPortal() {
                   {NAV.filter(n => n.section === section).map(item => (
                     <button key={item.key} onClick={() => handleNav(item.key)}
                       title={item.label}
-                      className={`w-full flex items-center justify-center py-3
+                      className={`relative w-full flex items-center justify-center py-3
                         transition-colors
                         ${page === item.key
-                          ? 'bg-[var(--bg)] text-[var(--text)]'
+                          ? 'octos-nav-active octos-nav-icon'
                           : 'text-[var(--text-2)] hover:bg-[var(--bg)]'
                         }`}>
                       {item.icon}
+                      {item.key === 'inbox' && <NavDot {...badge} />}
                     </button>
                   ))}
                 </div>
