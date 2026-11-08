@@ -23,6 +23,14 @@ const C = {
   amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
 }
 const MAX_FILE = 16 * 1024 * 1024
+// Each voice has its ring (8 Nov 2026): the customer soft grey, Octos a red-into-
+// black gradient, staff black. On a faint wallpaper of Octos's own doodles.
+const RING = {
+  octos: { border: '1.5px solid transparent', background: 'linear-gradient(#F5F5F5, #F5F5F5) padding-box, linear-gradient(135deg, #CC0000, #080808 70%) border-box' },
+  staff: { border: '1.5px solid #080808', background: '#FFFFFF' },
+  customer: { border: '1.5px solid #E2E2E2', background: '#FFFFFF' },
+}
+const WALL = { backgroundColor: '#F2F2F1', backgroundImage: 'url(data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22260%22%20height%3D%22260%22%20viewBox%3D%220%200%20260%20260%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234a4a4a%22%20stroke-opacity%3D%22.07%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20transform%3D%22translate%2818%2020%29%20rotate%28-8%29%22%3E%3Crect%20x%3D%224%22%20y%3D%2212%22%20width%3D%2234%22%20height%3D%2218%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M10%2012V3h22v9M10%2024h22v13H10z%22%2F%3E%3Cpath%20d%3D%22M14%2030h14M14%2034h9%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28150%2014%29%20rotate%2810%29%22%3E%3Cpath%20d%3D%22M3%202h20l7%207v29H3z%22%2F%3E%3Cpath%20d%3D%22M23%202v7h7M8%2016h16M8%2022h16M8%2028h10%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28212%2092%29%20rotate%28-12%29%22%3E%3Cpath%20d%3D%22M14%202c6%209%2011%2015%2011%2021a11%2011%200%200%201-22%200c0-6%205-12%2011-21z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2892%2098%29%20rotate%2818%29%22%3E%3Cpath%20d%3D%22M20%2026%208%2014a6%206%200%200%201%208.5-8.5l13%2013a3.5%203.5%200%200%201-5%205L12.5%2011.5%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2826%20120%29%20rotate%286%29%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2234%22%20height%3D%2224%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22m2%207%2017%2012L36%207%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28176%20170%29%20rotate%280%29%22%3E%3Cpath%20d%3D%22M12%202v8M12%2016v8M2%2013h8M16%2013h8%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28120%20186%29%20rotate%28-20%29%22%3E%3Cpath%20d%3D%22M4%2030c-2-12%206-20%2016-20%208%200%2012%206%209%2011-2%204-8%204-9%200-1-3%202-5%204-4%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2828%20206%29%20rotate%2814%29%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3Cpath%20d%3D%22M12%206v6l4%203%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28222%20222%29%20rotate%28-6%29%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2216%22%20height%3D%2226%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M8%2024h4%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20fill%3D%22%234a4a4a%22%20fill-opacity%3D%22.07%22%3E%3Ccircle%20cx%3D%2264%22%20cy%3D%2272%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%22200%22%20cy%3D%2256%22%20r%3D%222.4%22%2F%3E%3Ccircle%20cx%3D%22246%22%20cy%3D%22160%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2274%22%20cy%3D%22168%22%20r%3D%222.2%22%2F%3E%3Ccircle%20cx%3D%22160%22%20cy%3D%22124%22%20r%3D%221.8%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22250%22%20r%3D%222%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E)', backgroundSize: '260px 260px' }
 // The emojis a print shop's chats actually use.
 const EMOJIS = ['🙏', '👍', '😊', '🙂', '😀', '😂', '❤️', '👌', '✅', '❌', '⚠️', '📄', '🖨️', '📎', '📸', '📦',
   '⏰', '📍', '💳', '💯', '🎉', '👏', '🤝', '🙌', '😅', '🤔', '😢', '😍', '🔥', '⭐', '👋', '📞']
@@ -171,6 +179,8 @@ const I = {
   back: p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>,
   check: p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>,
   close: p => <Svg {...p}><path d="M6 6l12 12M18 6 6 18" /></Svg>,
+  reply: p => <Svg {...p}><path d="M9 17 4 12l5-5" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></Svg>,
+  lock: p => <Svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>,
   smile: p => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Svg>,
 }
 const CHANNEL = {
@@ -307,7 +317,7 @@ function FileCard({ m, tint }) {
   )
 }
 
-function Bubble({ m, who, first }) {
+function Bubble({ m, who, first, initials, onReply, reports }) {
   const kind = kindOf(m)
   if (kind === 'event') {
     return <div className="self-center text-[11px] text-[var(--text-3)] py-1 text-center">{(m.body || '').replace(/\.$/, '')}, {clock(m.created_at)}</div>
@@ -328,31 +338,72 @@ function Bubble({ m, who, first }) {
     )
   }
   const mine = kind !== 'customer'
-  const look = {
-    octos: { bg: C.mint, label: C.mintIcon },
-    staff: { bg: C.staff, label: C.redDeep },
-    note: { bg: C.note, label: C.noteMeta, border: `1px dashed ${C.noteBorder}` },
-    customer: { bg: '#FFFFFF', label: 'var(--text-3)', border: '1px solid #ECECEA' },
-  }[kind]
   const file = hasFile(m)
   const photo = file && isPhoto(m) && m.media_file
   const text = m.body && m.body !== m.media_name ? m.body : ''
+  const q = m.reply_preview
   return (
-    <div className={`flex flex-col gap-0.5 ${mine ? 'items-end' : 'items-start'} ${first ? 'mt-2.5' : ''}`}>
-      {first && (
-        <span className="text-[11px] font-bold px-1 inline-flex items-center gap-1" style={{ color: look.label }}>
-          {kind === 'octos' && <OctosMark s={15} />}{who}
-        </span>
-      )}
-      <div className={`max-w-[75%] min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3 py-2'}`}
-        style={{ background: look.bg, border: look.border || 0, borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px' }}>
-        {photo && <Photo m={m} />}
-        {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
-        {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
-        <span className={`self-end text-[10.5px] text-[var(--text-3)] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`}>
-          {clock(m.created_at)} <Ticks msg={m} />
-        </span>
+    <div className={`group flex gap-2.5 items-end ${mine ? 'flex-row-reverse' : ''} ${first ? 'mt-3' : 'mt-0.5'}`}>
+      <span className="w-[30px] shrink-0" aria-hidden="true">
+        {first && (kind === 'octos'
+          ? <img src="/octos-tile.svg" alt="" width={30} height={30} className="block rounded-full" />
+          : <span className="w-[30px] h-[30px] rounded-full bg-[#080808] text-white text-[10.5px] font-bold grid place-items-center">{initials}</span>)}
+      </span>
+      <div className={`max-w-[66%] min-w-0 flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`}>
+        {first && <span className="text-[11px] font-bold text-[var(--text-3)] px-1.5">{who}</span>}
+        <div className={`flex items-center gap-1.5 min-w-0 max-w-full ${mine ? 'flex-row-reverse' : ''}`}>
+          <div className={`min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3.5 py-2.5'}`}
+            style={{ ...RING[kind], borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', boxShadow: '0 1px 2px rgba(8,8,8,.05)' }}>
+            {q && (
+              <div className="flex flex-col gap-px px-2.5 py-1.5 rounded-md text-xs text-[var(--text-2)] bg-black/[0.045] max-w-[360px]"
+                style={{ borderLeft: `3px solid ${q.who === 'Octos' ? '#CC0000' : '#080808'}` }}>
+                <b className="text-[11.5px]" style={{ color: q.who === 'Octos' ? '#CC0000' : '#080808' }}>{q.who}</b>
+                <span className="line-clamp-2">{q.body || q.media_name || 'A file'}</span>
+              </div>
+            )}
+            {photo && <Photo m={m} />}
+            {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
+            {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
+            <span className={`self-end text-[10.5px] text-[var(--text-3)] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`}>
+              {clock(m.created_at)} <Ticks msg={m} />
+            </span>
+          </div>
+          {onReply && (
+            <button type="button" onClick={() => onReply(m)} aria-label="Reply to this message" title="Reply"
+              className="w-[30px] h-[30px] shrink-0 rounded-full grid place-items-center bg-white/80 text-[var(--text-2)] shadow-sm
+                opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-white hover:text-[var(--text)] transition-opacity">
+              <I.reply size={15} />
+            </button>
+          )}
+        </div>
+        {reports && m.report && <Report report={m.report} />}
       </div>
+    </div>
+  )
+}
+
+// Octos's report under its message: what it did and why, for staff only.
+function Report({ report }) {
+  const [open, setOpen] = useState(false)
+  const DOT = { ok: '#1E7A4C', warn: '#CC0000', info: '#9B9B9B' }
+  return (
+    <div className="w-[340px] max-w-full flex flex-col gap-1">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-white/80 hover:bg-white shadow-[0_1px_1px_rgba(0,0,0,.04)] text-[11.5px] text-[var(--text-3)] text-left">
+        <I.lock size={11} />
+        <b className="text-[var(--text-2)] shrink-0">Octos’s report</b>
+        <span className="truncate flex-1 min-w-0">{report.summary}</span>
+        <span className="shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1.5 ml-1.5 px-3 py-2 rounded-r-[10px] bg-white/65" style={{ borderLeft: '2px solid rgba(8,8,8,.15)' }}>
+          {report.steps.map(([tone, words], i) => (
+            <span key={i} className="flex gap-2 items-start text-[11.5px] leading-snug text-[var(--text-2)]">
+              <span className="w-[7px] h-[7px] rounded-full shrink-0 mt-[5px]" style={{ background: DOT[tone] || DOT.info }} />{words}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -438,6 +489,10 @@ function Thread({ convId, onBack, panel, setPanel }) {
   const [chips, setChips] = useState([])
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [replyTo, setReplyTo] = useState(null)
+  // Octos's reports, on or off, remembered on this computer.
+  const [reports, setReports] = useState(() => { try { return localStorage.getItem('octos.reports') !== 'off' } catch { return true } })
+  const toggleReports = () => setReports(on => { try { localStorage.setItem('octos.reports', on ? 'off' : 'on') } catch { /* private */ } return !on })
   const scroller = useRef(null)
   const filePick = useRef(null)
   const box = useRef(null)
@@ -472,14 +527,15 @@ function Thread({ convId, onBack, panel, setPanel }) {
   const resolve = useMutation(act('resolve'))
   const send = useMutation({
     mutationFn: () => {
-      if (!chips.length) return client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote })
+      if (!chips.length) return client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote, reply_to: replyTo?.id || null })
       const form = new FormData()
       chips.forEach(f => form.append('attachments', f))
       form.append('body', reply)
       form.append('is_internal_note', asNote ? 'true' : 'false')
+      if (replyTo) form.append('reply_to', String(replyTo.id))
       return client.post(`/api/v1/communications/${convId}/reply/`, form)
     },
-    onSuccess: () => { setReply(''); setChips([]); setError(''); setAsNote(false); refresh() },
+    onSuccess: () => { setReply(''); setChips([]); setError(''); setAsNote(false); setReplyTo(null); refresh() },
     // The server says why (a closed window, a file too big); what was typed stays.
     onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
@@ -527,12 +583,17 @@ function Thread({ convId, onBack, panel, setPanel }) {
             <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email}</span>
           </div>
           {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
+          <button type="button" onClick={toggleReports} aria-pressed={reports} title="Octos's reports under its messages, only staff see them"
+            className="hidden sm:inline-flex items-center gap-1.5 h-[34px] px-3 rounded-full text-xs font-semibold"
+            style={reports ? { background: '#080808', color: '#fff' } : { border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <I.lock size={12} />{reports ? 'Reports on' : 'Reports off'}
+          </button>
           <button type="button" onClick={() => setPanel(p => !p)} aria-label="Details" title="Details" aria-pressed={panel}
             className="w-[34px] h-[34px] rounded-lg grid place-items-center"
             style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
         </div>
 
-        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-3 flex flex-col gap-1 relative">
+        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-3 flex flex-col gap-1 relative" style={WALL}>
           {dragging && <div className="absolute inset-2 z-10 rounded-xl border-2 border-dashed border-zinc-900 bg-white/80 grid place-items-center text-sm font-semibold">Drop to attach</div>}
           {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
           {messages.map(m => {
@@ -547,11 +608,11 @@ function Thread({ convId, onBack, panel, setPanel }) {
             return (
               <div key={m.id} className="flex flex-col">
                 {newDay && (
-                  <div className="flex items-center gap-3 text-[11px] text-[var(--text-3)] py-2">
-                    <span className="flex-1 h-px bg-[var(--border)]" /><span>{day}</span><span className="flex-1 h-px bg-[var(--border)]" />
-                  </div>
+                  <div className="self-center my-2 px-3 py-0.5 rounded-full bg-white/90 shadow-[0_1px_1px_rgba(0,0,0,.05)] text-[11px] font-semibold text-[var(--text-3)]">{day}</div>
                 )}
-                <Bubble m={m} who={who} first={!!who && first} />
+                <Bubble m={m} who={who} first={!!who && first} reports={reports}
+                  initials={kind === 'customer' ? initialsOf(conv) : initialsOf({ display_name: m.sent_by_name || 'Staff' })}
+                  onReply={!resolved && conv.channel === 'WHATSAPP' && m.id && (kind === 'customer' || kind === 'octos' || kind === 'staff') ? setReplyTo : null} />
               </div>
             )
           })}
@@ -559,6 +620,16 @@ function Thread({ convId, onBack, panel, setPanel }) {
 
         {!resolved && (
           <div className="bg-[var(--panel)] border-t border-[var(--border)] px-4 pt-2 pb-2.5 flex flex-col gap-2">
+            {replyTo && (
+              <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 rounded-[10px] bg-black/[0.04]">
+                <span className="w-[3px] self-stretch rounded bg-[#080808] shrink-0" />
+                <span className="flex-1 min-w-0 flex flex-col">
+                  <b className="text-[11.5px]">Replying to {kindOf(replyTo) === 'octos' ? 'Octos' : kindOf(replyTo) === 'customer' ? nameOf(conv) : (replyTo.sent_by_name || 'Staff')}</b>
+                  <span className="text-xs text-[var(--text-3)] truncate">{(replyTo.body || replyTo.media_name || 'A file').replace(/\n+/g, ' ')}</span>
+                </span>
+                <button type="button" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message" className="w-7 h-7 grid place-items-center rounded-full hover:bg-black/5"><I.close size={13} /></button>
+              </div>
+            )}
             <div className="flex items-center gap-2.5 flex-wrap">
               <div role="tablist" aria-label="Write" className="flex gap-0.5 p-[3px] rounded-lg bg-black/[0.05]">
                 {[[false, 'Reply'], [true, 'Note, staff only']].map(([note, label]) => (
