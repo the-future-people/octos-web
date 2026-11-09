@@ -584,7 +584,7 @@ function PhotoViewer({ ms, at, setAt, title, onPdf, making }) {
   }, [ms.length, setAt])
   const arrow = off => `w-[52px] h-[52px] shrink-0 rounded-full grid place-items-center text-[30px] leading-none text-white bg-white/15 ${off ? 'opacity-25 cursor-default' : 'hover:bg-white/25'}`
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`${title}'s photos`} onClick={e => e.target === e.currentTarget && close()}
+    <div role="dialog" aria-modal="true" aria-label={`${title}'s photos`}
       className="fixed inset-0 z-[10000] flex flex-col bg-[rgba(8,8,8,.92)] text-white" style={{ fontFamily: 'inherit' }}>
       <div className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap">
         <b className="text-sm">{title} · {at + 1} of {ms.length}</b>
@@ -595,13 +595,16 @@ function PhotoViewer({ ms, at, setAt, title, onPdf, making }) {
           <button type="button" onClick={close} aria-label="Close" className="h-9 w-9 rounded-lg text-xl hover:bg-white/10">×</button>
         </span>
       </div>
-      <div className="flex-1 min-h-0 flex items-center justify-center gap-5 px-4" onClick={e => e.target === e.currentTarget && close()}>
-        <button type="button" aria-label="Previous photo" onClick={() => setAt(i => Math.max(0, i - 1))} className={arrow(at === 0)}>‹</button>
-        <div className="min-w-0 max-w-[min(1100px,80vw)] h-full max-h-[calc(100vh-200px)] grid place-items-center">
+      {/* The arrows stay at the screen's edges whatever the photo's size (9 Nov 2026). */}
+      <div className="relative flex-1 min-h-0 flex items-center justify-center px-24">
+        <button type="button" aria-label="Previous photo" onClick={() => setAt(i => Math.max(0, i - 1))}
+          className={`absolute left-6 top-1/2 -translate-y-1/2 ${arrow(at === 0)}`}>‹</button>
+        <div className="min-w-0 w-full max-w-[1100px] h-full max-h-[calc(100vh-200px)] grid place-items-center">
           {src ? <img src={src} alt={m.media_name || `Photo ${at + 1}`} className="max-w-full max-h-full object-contain rounded-lg" />
                : <span className="w-[420px] max-w-full h-[320px] rounded-lg bg-white/10 animate-pulse" />}
         </div>
-        <button type="button" aria-label="Next photo" onClick={() => setAt(i => Math.min(ms.length - 1, i + 1))} className={arrow(at === ms.length - 1)}>›</button>
+        <button type="button" aria-label="Next photo" onClick={() => setAt(i => Math.min(ms.length - 1, i + 1))}
+          className={`absolute right-6 top-1/2 -translate-y-1/2 ${arrow(at === ms.length - 1)}`}>›</button>
       </div>
       <div className="flex gap-1.5 justify-center px-4 py-3.5 overflow-x-auto">
         {ms.map((p, i) => (
