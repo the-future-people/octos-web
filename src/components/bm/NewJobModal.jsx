@@ -304,6 +304,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
   // From a chat linked to a customer: that customer, chosen already (9 Nov 2026).
   const [chatFile, setChatFile] = useState(null)
+  // Only services that count pages take a file's pages: binding is priced per set (9 Nov 2026).
+  const usesPages = s => (s?.spec_template || []).some(f => f.key === 'pages')
   useEffect(() => {
     if (!fromChat?.customerId || customer) return
     getCustomers({ search: fromChat.phone || fromChat.name || '', page_size: 10 })
@@ -315,7 +317,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const selectService = service => {
     setSelected(service)
     setSelQty(service.smart_defaults?.quantity || 1)
-    setSelPages(chatFile?.pages || service.smart_defaults?.pages || 1)
+    setSelPages((usesPages(service) && chatFile?.pages) || service.smart_defaults?.pages || 1)
     setSelRingSize(null)   // binding's ring size is a field of its own form
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
     setSelArtwork(null)
@@ -509,7 +511,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             const on = chatFile?.id === f.id
             return (
               <button key={f.id} type="button" title={f.info}
-                onClick={() => { setChatFile(on ? null : f); if (!on && f.pages && selected) setSelPages(f.pages) }}
+                onClick={() => { setChatFile(on ? null : f); if (!on && f.pages && usesPages(selected)) setSelPages(f.pages) }}
                 className={`h-8 px-3 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0
                   ${on ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)] hover:border-black/40'}`}>
                 {f.name}{f.pages ? ` · ${f.pages} page${f.pages === 1 ? '' : 's'}` : ''}
