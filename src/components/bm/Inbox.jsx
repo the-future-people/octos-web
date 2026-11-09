@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
+import { getCustomers } from '../../api/bm'
 
 // Octos's colours, from the logo (8 Nov 2026): black, and red only for what
 // needs attention. Octos's own messages are Mist grey with its mark beside its
@@ -408,6 +409,44 @@ function Report({ report }) {
   )
 }
 
+// Staff link a chat to a customer they recognise (9 Nov 2026), e.g. a
+// WhatsApp username chat with no number.
+function LinkCustomer({ conv }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const { data: found = [] } = useQuery({
+    queryKey: ['linkCustomer', q],
+    queryFn: () => getCustomers({ search: q.trim(), page_size: 6 }).then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || []))),
+    enabled: open && q.trim().length >= 2,
+  })
+  const link = useMutation({
+    mutationFn: id => client.post(`/api/v1/communications/${conv.id}/link-customer/`, { customer: id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', conv.id] })
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      setOpen(false)
+    },
+  })
+  if (!open) {
+    return <button type="button" onClick={() => setOpen(true)} className="self-start text-xs font-semibold underline text-[var(--text-2)]">Link to a customer</button>
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Name or phone number" aria-label="Find the customer"
+        className="h-8 px-2.5 text-xs rounded-lg border border-black/15 bg-white outline-none focus:border-zinc-900" />
+      {found.map(c => (
+        <button key={c.id} type="button" onClick={() => link.mutate(c.id)} disabled={link.isPending}
+          className="text-left text-xs px-2 py-1.5 rounded-md hover:bg-black/5">
+          <b>{c.display_name || c.company_name || c.full_name}</b> · {c.phone}
+        </button>
+      ))}
+      {q.trim().length >= 2 && found.length === 0 && <span className="text-[11px] text-[var(--text-3)]">No customer matches.</span>}
+      <button type="button" onClick={() => setOpen(false)} className="self-start text-[11px] text-[var(--text-3)]">Cancel</button>
+    </div>
+  )
+}
+
 // ── The side panel ──────────────────────────────────────────────────────
 function Panel({ conv, actions, files, onClose }) {
   const whatsapp = conv.channel === 'WHATSAPP'
@@ -442,7 +481,9 @@ function Panel({ conv, actions, files, onClose }) {
         <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">CUSTOMER</span>
         <span className="font-bold text-sm">{nameOf(conv)}</span>
         <span className="text-[12.5px] text-[var(--text-2)]">{conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
-        <span className="text-xs text-[var(--text-3)]">{conv.customer ? 'Registered customer' : 'Not registered yet'}</span>
+        {conv.customer
+          ? <span className="text-xs text-[var(--text-3)]">Registered customer</span>
+          : <><span className="text-xs text-[var(--text-3)]">Not linked to a customer yet</span><LinkCustomer conv={conv} /></>}
       </div>
 
       {job && (
