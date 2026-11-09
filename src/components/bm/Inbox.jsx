@@ -1021,9 +1021,7 @@ export default function Inbox({ focus = null } = {}) {
       .sort((a, b) => (needsYou(b) - needsYou(a)) || (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
   }, [conversations, channel, filter, query])
 
-  useEffect(() => {
-    if (!selectedId && shown.length && window.matchMedia('(min-width: 1024px)').matches) setSelectedId(shown[0].id)
-  }, [shown, selectedId])
+  // No chat opens by itself (9 Nov 2026): staff choose. Opening one marks it read.
 
   return (
     <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-2"
@@ -1094,7 +1092,7 @@ export default function Inbox({ focus = null } = {}) {
           {selectedId
             ? <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel}
                 onApproved={c => { setPrefill({ name: nameOf(c), phone: c.contact_phone }); setStarting(true) }} />
-            : <div className="flex-1 grid place-items-center text-sm text-[var(--text-3)]">Choose a conversation to read it.</div>}
+            : <div className="flex-1 grid place-items-center text-sm font-semibold text-[var(--text-3)]" style={WALL}><span className="px-4 py-2 rounded-full bg-white/90 shadow-sm">Choose a chat to open it</span></div>}
         </div>
       </div>
     </div>
