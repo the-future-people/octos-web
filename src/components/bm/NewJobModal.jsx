@@ -140,7 +140,7 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
  *        Manager only; the server checks). held: no cashier on duty, so
  *        the job waits for the morning handover.
  */
-export default function NewJobModal({ onClose, onSuccess, late = false, held = false }) {
+export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -302,10 +302,20 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     setCustomer(c); setOrderFor(null); setCustSearch('')
   }
 
+  // From a chat linked to a customer: that customer, chosen already (9 Nov 2026).
+  const [chatFile, setChatFile] = useState(null)
+  useEffect(() => {
+    if (!fromChat?.customerId || customer) return
+    getCustomers({ search: fromChat.phone || fromChat.name || '', page_size: 10 })
+      .then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])).find(c => c.id === fromChat.customerId))
+      .then(c => { if (c) setCustomer(c) })
+      .catch(() => {})
+  }, [fromChat?.customerId])   // eslint-disable-line react-hooks/exhaustive-deps
+
   const selectService = service => {
     setSelected(service)
     setSelQty(service.smart_defaults?.quantity || 1)
-    setSelPages(service.smart_defaults?.pages || 1)
+    setSelPages(chatFile?.pages || service.smart_defaults?.pages || 1)
     setSelRingSize(null)   // binding's ring size is a field of its own form
     setSelOutputMode(isPassport(service) ? 'PRINT' : null)
     setSelArtwork(null)
@@ -376,6 +386,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     onSuccess: res => {
       invalidateAfterJobCreated(queryClient)
       setSuccessJob(res.data?.job_number || res.data?.id || '—')
+      // Recorded from a chat: the job is linked to it, so the chat shows it.
+      if (fromChat?.conversationId && res.data?.id) {
+        client.post(`/api/v1/communications/${fromChat.conversationId}/link-job/`, { job: res.data.id })
+          .then(() => queryClient.invalidateQueries({ queryKey: ['conversation', fromChat.conversationId] }))
+          .catch(() => {})
+      }
       attemptKey.current = crypto.randomUUID().replace(/-/g, '')
     },
     onError: err => {
@@ -472,6 +488,38 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       ))}
     </div>
   )
+
+  // From a chat (9 Nov 2026): who wrote, and the files they sent. Choosing a
+  // file fills in its pages, as Octos measured them.
+  const chatBand = fromChat ? (
+    <div className="px-6 py-2.5 border-b border-black/[0.07] bg-white shrink-0 flex flex-col gap-2">
+      {!customer && (
+        <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <span className="px-2 py-0.5 rounded-full bg-[#E9F6EF] text-[#1E7A4C] text-[11px] font-bold">WhatsApp</span>
+          <b>{fromChat.name}</b>
+          <span className="text-[var(--text-3)]">{fromChat.phone || (fromChat.username ? '@' + fromChat.username : 'number hidden')}</span>
+          <span className="text-[var(--text-3)]">· not registered: recorded as a walk-in from this chat</span>
+          <button type="button" onClick={() => setRegistering(true)} className="ml-auto text-[13px] font-bold text-blue-700">Register them</button>
+        </div>
+      )}
+      {fromChat.files?.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <span className="text-xs font-semibold text-[var(--text-3)] shrink-0">Their files</span>
+          {fromChat.files.map(f => {
+            const on = chatFile?.id === f.id
+            return (
+              <button key={f.id} type="button" title={f.info}
+                onClick={() => { setChatFile(on ? null : f); if (!on && f.pages && selected) setSelPages(f.pages) }}
+                className={`h-8 px-3 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0
+                  ${on ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)] hover:border-black/40'}`}>
+                {f.name}{f.pages ? ` · ${f.pages} page${f.pages === 1 ? '' : 's'}` : ''}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  ) : null
 
   // Who the job is for: prominent, because production and design can't be
   // created without it, and instant work is better with it.
@@ -937,6 +985,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
         {lateNote}
         {customerBand}
+        {chatBand}
 
         <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[240px_1fr_280px] animate-unfold">
           <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>

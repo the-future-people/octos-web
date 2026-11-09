@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 import { getCustomers } from '../../api/bm'
+import NewJobModal from './NewJobModal'
 
 // Octos's colours, from the logo (8 Nov 2026): black, and red only for what
 // needs attention. Octos's own messages are Mist grey with its mark beside its
@@ -703,6 +704,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
   const [replyTo, setReplyTo] = useState(null)
+  const [recording, setRecording] = useState(false)
   // Octos's reports, on or off, remembered on this computer.
   const [reports, setReports] = useState(() => { try { return localStorage.getItem('octos.reports') !== 'off' } catch { return true } })
   const toggleReports = () => setReports(on => { try { localStorage.setItem('octos.reports', on ? 'off' : 'on') } catch { /* private */ } return !on })
@@ -807,6 +809,20 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
             <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
           </div>
           {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
+          {/* Record the job without leaving the chat (9 Nov 2026). */}
+          <button type="button" onClick={() => setRecording(true)}
+            className="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-lg text-[13px] font-semibold bg-[#CC0000] text-white">
+            <I.plus size={14} />Record a job
+          </button>
+          {recording && (
+            <NewJobModal onClose={() => setRecording(false)} onSuccess={() => setRecording(false)}
+              fromChat={{
+                conversationId: conv.id, customerId: conv.customer || null, name: nameOf(conv),
+                phone: conv.contact_phone, username: conv.contact_username,
+                files: messages.filter(x => x.direction === 'INBOUND' && x.media_file && !isPhoto(x)).slice(-8).reverse()
+                  .map(x => ({ id: x.id, name: x.media_name || 'File', pages: x.media_pages, info: fileInfo(x) })),
+              }} />
+          )}
           <button type="button" onClick={toggleReports} aria-pressed={reports} title="Octos's reports under its messages, only staff see them"
             className="hidden sm:inline-flex items-center gap-1.5 h-[34px] px-3 rounded-full text-xs font-semibold"
             style={reports ? { background: '#080808', color: '#fff' } : { border: '1px solid var(--border)', color: 'var(--text-2)' }}>
