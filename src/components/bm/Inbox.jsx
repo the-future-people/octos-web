@@ -9,6 +9,7 @@
 // see. Photos are shown, documents are cards with what Octos read from them,
 // and replies can carry files (paperclip, drag, or paste a screenshot).
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 import { getCustomers } from '../../api/bm'
@@ -457,6 +458,164 @@ function LinkCustomer({ conv }) {
   )
 }
 
+// ── Photos sent together: one album (9 Nov 2026) ──────────────────────────
+// Customers often send many photos at once. In a row from the customer, with
+// no words between and within three minutes of each other, they show as one
+// album: a grid, +N, and Open as one PDF to print them all at once. Any photo
+// opens the viewer: arrows (and the arrow keys) to move through them, and to
+// open or save each on its own.
+const ALBUM_GAP_MS = 3 * 60 * 1000
+const plainPhoto = m => isPhoto(m) && kindOf(m) === 'customer' && !(m.body && m.body !== m.media_name) && !m.reply_preview
+
+function groupPhotos(messages) {
+  const items = []
+  for (const m of messages) {
+    const last = items[items.length - 1]
+    const run = last?.photos
+    if (plainPhoto(m) && run && new Date(m.created_at) - new Date(run[run.length - 1].created_at) <= ALBUM_GAP_MS) {
+      run.push(m)
+    } else {
+      items.push(plainPhoto(m) ? { m, photos: [m] } : { m })
+    }
+  }
+  return items.map(it => (it.photos && it.photos.length > 1 ? { m: it.m, album: it.photos } : { m: it.m }))
+}
+
+// Any blob, opened in its app (the desktop app) or downloaded (the browser).
+async function openBlob(name, blob, id) {
+  const invoke = desktopInvoke()
+  if (invoke) {
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    await invoke('open_file', bytes, { headers: { 'x-file-id': String(id), 'x-file-name': encodeURIComponent(name) } })
+    return
+  }
+  saveBlob(name, blob)
+}
+
+function saveBlob(name, blob) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+function savePhoto(m) {
+  client.get(fileUrl(m) + '?download=1', { responseType: 'blob' })
+    .then(r => saveBlob(m.media_name || `photo-${m.id}.jpg`, r.data))
+    .catch(() => window.alert('That photo could not be saved. Try again.'))
+}
+
+function usePhotoSrc(m) {
+  return useQuery({
+    queryKey: ['messageFile', m.id],
+    queryFn: () => client.get(fileUrl(m), { responseType: 'blob' }).then(r => URL.createObjectURL(r.data)),
+    staleTime: Infinity,
+    enabled: !!m.media_file,
+  }).data
+}
+
+function Thumb({ m }) {
+  const src = usePhotoSrc(m)
+  if (!src) return <span className="absolute inset-0 bg-black/[0.06] animate-pulse" />
+  return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
+}
+
+function Album({ ms, conv, who, first, initials }) {
+  const [at, setAt] = useState(null)
+  const [making, setMaking] = useState(false)
+  const shown = ms.slice(0, 4)
+  const more = ms.length - 4
+  const ready = ms.filter(x => x.media_file)
+  const makePdf = () => {
+    if (making || !ready.length) return
+    setMaking(true)
+    client.post(`/api/v1/communications/${conv.id}/photos-pdf/`, { messages: ready.map(x => x.id) }, { responseType: 'blob' })
+      .then(r => openBlob(`${nameOf(conv)}, ${ready.length} photos.pdf`, r.data, ready[0].id))
+      .catch(() => window.alert('The PDF could not be made. Try again.'))
+      .finally(() => setMaking(false))
+  }
+  return (
+    <div className={`flex gap-2.5 items-end ${first ? 'mt-3' : 'mt-0.5'}`}>
+      <span className="w-[30px] shrink-0" aria-hidden="true">
+        {first && <span className="w-[30px] h-[30px] rounded-full bg-[#080808] text-white text-[10.5px] font-bold grid place-items-center">{initials}</span>}
+      </span>
+      <div className="flex flex-col gap-1 items-start min-w-0">
+        {first && <span className="text-[11px] font-bold text-[var(--text-3)] px-1.5">{who}</span>}
+        <div className="flex flex-col gap-1.5 p-1.5" style={{ ...RING.customer, borderRadius: '18px 18px 18px 6px', boxShadow: '0 1px 2px rgba(8,8,8,.05)' }}>
+          <div className="grid grid-cols-2 gap-1 rounded-xl overflow-hidden" style={{ width: 'min(344px, 60vw)' }}>
+            {shown.map((m, i) => (
+              <button key={m.id} type="button" onClick={() => setAt(i)} aria-label={`Photo ${i + 1} of ${ms.length}`}
+                className="relative h-[150px] bg-black/[0.05]">
+                <Thumb m={m} />
+                {i === 3 && more > 0 && <span className="absolute inset-0 bg-black/45 text-white text-3xl font-bold grid place-items-center">+{more}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 px-0.5">
+            <span className="flex-1 text-xs text-[var(--text-2)]">{ms.length} photos{ready.length < ms.length ? `, ${ms.length - ready.length} still arriving` : ''}</span>
+            <button type="button" onClick={makePdf} disabled={making || !ready.length}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#080808] text-white text-[12.5px] font-semibold disabled:opacity-60">
+              {making && <span className="w-3 h-3 rounded-full border-2 border-white/35 border-t-white animate-spin" aria-hidden="true" />}
+              {making ? 'Making the PDF…' : 'Open as one PDF'}
+            </button>
+          </div>
+          <span className="self-end text-[10.5px] text-[var(--text-3)] px-1">{clock(ms[ms.length - 1].created_at)}</span>
+        </div>
+      </div>
+      {at !== null && <PhotoViewer ms={ms} at={at} setAt={setAt} title={nameOf(conv)} onPdf={makePdf} making={making} />}
+    </div>
+  )
+}
+
+function PhotoViewer({ ms, at, setAt, title, onPdf, making }) {
+  const m = ms[at]
+  const src = usePhotoSrc(m)
+  const close = () => setAt(null)
+  useEffect(() => {
+    const keys = e => {
+      if (e.key === 'ArrowLeft') setAt(i => Math.max(0, i - 1))
+      if (e.key === 'ArrowRight') setAt(i => Math.min(ms.length - 1, i + 1))
+      if (e.key === 'Escape') setAt(null)
+    }
+    window.addEventListener('keydown', keys)
+    return () => window.removeEventListener('keydown', keys)
+  }, [ms.length, setAt])
+  const arrow = off => `w-[52px] h-[52px] shrink-0 rounded-full grid place-items-center text-[30px] leading-none text-white bg-white/15 ${off ? 'opacity-25 cursor-default' : 'hover:bg-white/25'}`
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={`${title}'s photos`} onClick={e => e.target === e.currentTarget && close()}
+      className="fixed inset-0 z-[10000] flex flex-col bg-[rgba(8,8,8,.92)] text-white" style={{ fontFamily: 'inherit' }}>
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap">
+        <b className="text-sm">{title} · {at + 1} of {ms.length}</b>
+        <span className="flex gap-2 flex-wrap">
+          <button type="button" onClick={() => openFile(m)} disabled={!m.media_file} className="h-9 px-3.5 rounded-lg bg-white text-[#080808] text-[12.5px] font-semibold disabled:opacity-50">Open this photo</button>
+          <button type="button" onClick={() => savePhoto(m)} disabled={!m.media_file} className="h-9 px-3.5 rounded-lg bg-white/15 text-[12.5px] font-semibold disabled:opacity-50">Save this photo</button>
+          <button type="button" onClick={onPdf} disabled={making} className="h-9 px-3.5 rounded-lg bg-[#CC0000] text-[12.5px] font-semibold disabled:opacity-60">{making ? 'Making the PDF…' : 'Open all as one PDF'}</button>
+          <button type="button" onClick={close} aria-label="Close" className="h-9 w-9 rounded-lg text-xl hover:bg-white/10">×</button>
+        </span>
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center gap-5 px-4" onClick={e => e.target === e.currentTarget && close()}>
+        <button type="button" aria-label="Previous photo" onClick={() => setAt(i => Math.max(0, i - 1))} className={arrow(at === 0)}>‹</button>
+        <div className="min-w-0 max-w-[min(1100px,80vw)] h-full max-h-[calc(100vh-200px)] grid place-items-center">
+          {src ? <img src={src} alt={m.media_name || `Photo ${at + 1}`} className="max-w-full max-h-full object-contain rounded-lg" />
+               : <span className="w-[420px] max-w-full h-[320px] rounded-lg bg-white/10 animate-pulse" />}
+        </div>
+        <button type="button" aria-label="Next photo" onClick={() => setAt(i => Math.min(ms.length - 1, i + 1))} className={arrow(at === ms.length - 1)}>›</button>
+      </div>
+      <div className="flex gap-1.5 justify-center px-4 py-3.5 overflow-x-auto">
+        {ms.map((p, i) => (
+          <button key={p.id} type="button" onClick={() => setAt(i)} aria-label={`Photo ${i + 1}`}
+            className={`relative w-[54px] h-[54px] shrink-0 rounded-lg overflow-hidden border-[3px] ${i === at ? 'border-white' : 'border-transparent opacity-60 hover:opacity-90'}`}>
+            <Thumb m={p} />
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── The side panel ──────────────────────────────────────────────────────
 function Panel({ conv, actions, files, onClose }) {
   const whatsapp = conv.channel === 'WHATSAPP'
@@ -647,7 +806,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
         <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-3 flex flex-col gap-1 relative" style={WALL}>
           {dragging && <div className="absolute inset-2 z-10 rounded-xl border-2 border-dashed border-zinc-900 bg-white/80 grid place-items-center text-sm font-semibold">Drop to attach</div>}
           {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
-          {messages.map(m => {
+          {groupPhotos(messages).map(({ m, album }) => {
             const kind = kindOf(m)
             const who = kind === 'octos' ? 'Octos' : kind === 'staff' ? `${m.sent_by_name || 'Staff'}, staff`
               : kind === 'customer' ? nameOf(conv) : ''
@@ -661,9 +820,13 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                 {newDay && (
                   <div className="self-center my-2 px-3 py-0.5 rounded-full bg-white/90 shadow-[0_1px_1px_rgba(0,0,0,.05)] text-[11px] font-semibold text-[var(--text-3)]">{day}</div>
                 )}
+                {album ? (
+                  <Album ms={album} conv={conv} who={who} first={!!who && first} initials={initialsOf(conv)} />
+                ) : (
                 <Bubble m={m} who={who} first={!!who && first} reports={reports}
                   initials={kind === 'customer' ? initialsOf(conv) : initialsOf({ display_name: m.sent_by_name || 'Staff' })}
                   onReply={!resolved && conv.channel === 'WHATSAPP' && m.id && (kind === 'customer' || kind === 'octos' || kind === 'staff') ? setReplyTo : null} />
+                )}
               </div>
             )
           })}
