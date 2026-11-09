@@ -719,9 +719,20 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
 
   const { data: conv, isLoading } = useQuery({
     queryKey: ['conversation', convId],
-    queryFn: () => getConversation(convId),
-    staleTime: 2_000,
-    refetchInterval: 3_000,   // new messages and ticks appear on their own
+    // Only what's new since the last message we have, and the last 15 (ticks,
+    // files just arrived): a few KB, not the whole chat. The live connection
+    // says when to ask; every 20 seconds is only a safety net (9 Nov 2026).
+    queryFn: async () => {
+      const before = queryClient.getQueryData(['conversation', convId])
+      const last = before?.messages?.length ? before.messages[before.messages.length - 1].id : 0
+      if (!last) return getConversation(convId)
+      const fresh = await client.get(`/api/v1/communications/${convId}/`, { params: { after: last } }).then(r => r.data)
+      const byId = new Map(before.messages.map(m => [m.id, m]))
+      for (const m of fresh.messages) byId.set(m.id, m)
+      return { ...fresh, messages: [...byId.values()].sort((a, b) => a.id - b.id) }
+    },
+    staleTime: 1_000,
+    refetchInterval: 20_000,
   })
   const messages = conv?.messages || []
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [messages.length, convId])
