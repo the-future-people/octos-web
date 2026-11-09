@@ -441,7 +441,7 @@ function Panel({ conv, actions, files, onClose }) {
       <div className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">CUSTOMER</span>
         <span className="font-bold text-sm">{nameOf(conv)}</span>
-        <span className="text-[12.5px] text-[var(--text-2)]">{conv.contact_phone || conv.contact_email}</span>
+        <span className="text-[12.5px] text-[var(--text-2)]">{conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
         <span className="text-xs text-[var(--text-3)]">{conv.customer ? 'Registered customer' : 'Not registered yet'}</span>
       </div>
 
@@ -580,7 +580,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
           <Avatar c={conv} s={38} />
           <div className="flex-1 min-w-0 flex flex-col">
             <h2 className="m-0 text-[14.5px] font-bold truncate">{nameOf(conv)}</h2>
-            <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email}</span>
+            <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
           </div>
           {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
           <button type="button" onClick={toggleReports} aria-pressed={reports} title="Octos's reports under its messages, only staff see them"
