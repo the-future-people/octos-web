@@ -59,7 +59,9 @@ const withPerson = c => c?.handled_by === 'STAFF' && !c?.handoff_reason
 const inVisit = c => !!c?.counter_until && new Date(c.counter_until) > new Date()
 
 const titleCase = s => (s ? s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : s)
-const nameOf = c => titleCase(c?.display_name || c?.contact_name) || c?.contact_phone || 'Unknown'
+// WhatsApp names in decorative letters (𝐀𝐫𝐭𝐡𝐮𝐫) read as plain ones (NFKC), so they look like
+// everyone else's and give a proper initial.
+const nameOf = c => titleCase((c?.display_name || c?.contact_name || '').normalize('NFKC')) || c?.contact_phone || 'Unknown'
 const initialsOf = c => {
   const words = (nameOf(c) || '').replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean)
   return ((words[0]?.[0] || '#') + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase()
@@ -307,7 +309,15 @@ function FileCard({ m, tint }) {
       <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
-        <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
+        {m.media_file
+          ? <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
+          : (
+            // Recorded before WhatsApp has handed the file over: it takes a few seconds.
+            <span className="text-[11.5px] text-[var(--text-3)] inline-flex items-center gap-1.5" role="status">
+              <span className="w-3 h-3 rounded-full border-2 border-black/15 border-t-black/60 animate-spin" aria-hidden="true" />
+              Receiving the file…
+            </span>
+          )}
       </span>
       {m.media_file && (
         <span className="flex gap-1.5 shrink-0">
