@@ -340,7 +340,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       service: selected,
       quantity: selQty,
       pages: selPages,
-      ring_size: selRingSize,
+      // The ring picker keeps the ring in the form (specValues); the job needs it too (9 Nov 2026).
+      ring_size: selRingSize || (specValues.ring_size ? parseInt(specValues.ring_size) : null),
       output_mode: selOutputMode,
       specifications: { ...specValues },
       _price: itemTotal.toFixed(2),
