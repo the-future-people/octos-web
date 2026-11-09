@@ -860,6 +860,18 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
               </div>
             )
           })}
+          {/* Octos is working on a reply (9 Nov 2026): wait, or take over deliberately. */}
+          {conv.octos_writing && (
+            <div className="flex flex-row-reverse items-center gap-2.5 mt-2" role="status">
+              <img src="/octos-tile.svg" alt="" width={30} height={30} className="block rounded-full shrink-0" />
+              <span className="inline-flex gap-1 px-3.5 py-3 rounded-[18px_18px_6px_18px]" style={RING.octos}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#9B9B9B] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </span>
+              <span className="text-[11px] text-[var(--text-3)]">Octos is writing…</span>
+            </div>
+          )}
         </div>
 
         {!resolved && (
