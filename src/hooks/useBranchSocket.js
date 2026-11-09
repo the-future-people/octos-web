@@ -94,6 +94,15 @@ function dispatchInvalidations(events, queryClient) {
   // Use sets for O(1) lookup
   const set = new Set(events)
 
+  // The inbox, live (9 Nov 2026): a chat changed, so the list and that chat refresh now.
+  if (set.has('conversations')) {
+    queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    queryClient.invalidateQueries({ queryKey: ['notifCount'] })
+  }
+  events
+    .filter(e => typeof e === 'string' && e.startsWith('conversation:'))
+    .forEach(e => queryClient.invalidateQueries({ queryKey: ['conversation', Number(e.split(':')[1])] }))
+
   // Map server event names to invalidation functions
   if (set.has('paymentQueue') && set.has('cashierSummary')) {
     invalidateAfterPaymentConfirmed(queryClient)
