@@ -140,6 +140,11 @@ export default function Focus({ lane, onPickLane, counts, queue, flash, onDone, 
                 {current.branch_name ? ` · ${current.branch_name.replace(/ Branch$/, '')}` : ''}
                 {` · waited ${waited(current.created_at)} · ${current.phone || ''} · ${channel(current.preferred_channel)}`}
               </p>
+              {current.also_applied?.length > 0 && (
+                <p className="mt-1 inline-block rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold" style={{ color: '#A32D2D' }}>
+                  Also applied for {current.also_applied.join(', ')}
+                </p>
+              )}
             </div>
             <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: s.solid }}>
               1 of {queue.length}

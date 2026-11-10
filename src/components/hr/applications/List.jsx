@@ -157,7 +157,10 @@ export default function List({ apps, vacancies, vacancy, setVacancy, onWorkNow }
                         <Avatar name={a.full_name} size={28} />
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-[var(--text)]">{a.full_name}{a.is_priority && <span style={{ color: '#BA7517' }}> ★</span>}</p>
-                          <p className="truncate text-xs text-[var(--text-3)]">{a.vacancy_title || 'General application'}</p>
+                          <p className="truncate text-xs text-[var(--text-3)]">
+                            {a.vacancy_title || 'General application'}
+                            {a.also_applied?.length > 0 && <span style={{ color: '#A32D2D' }}> · also {a.also_applied.join(', ')}</span>}
+                          </p>
                         </div>
                       </div>
                     </td>
