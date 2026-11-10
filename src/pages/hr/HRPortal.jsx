@@ -7,14 +7,12 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import HRTopbar from '../../components/hr/HRTopbar'
 import Vacancies from '../../components/hr/Vacancies'
-import client from '../../api/client'
-
-// Where the classic (Django) HR portal lives, for panes not yet moved
-const CLASSIC_HR_URL = `${client.defaults.baseURL}/portal/hr/`
+import Applications from '../../components/hr/Applications'
+import { CLASSIC_HR_URL } from '../../api/hr'
 
 const PANES = [
   { path: 'vacancies', label: 'Vacancies', ready: true },
-  { path: 'applications', label: 'Applications' },
+  { path: 'applications', label: 'Applications', ready: true },
   { path: 'onboarding', label: 'Onboarding' },
   { path: 'employees', label: 'Employees' },
   { path: 'overview', label: 'Overview' },
@@ -51,6 +49,7 @@ export default function HRPortal() {
         <main className="min-w-0">
           <Routes>
             <Route path="vacancies" element={<Vacancies />} />
+            <Route path="applications" element={<Applications />} />
             <Route path="*" element={<Navigate to="vacancies" replace />} />
           </Routes>
         </main>

@@ -30,3 +30,38 @@ export const slugify = (text) =>
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
 export const careersUrl = (vacancy) => `${WEBSITE}/careers/${vacancy.id}-${slugify(vacancy.title)}`
+
+// ── Applications ─────────────────────────────────────────────
+export const getApplications = () =>
+  client.get('/api/v1/recruitment/applications/')
+
+export const getApplication = (id) =>
+  client.get(`/api/v1/recruitment/applications/${id}/`)
+
+// payload: { stage, q1_score…q5_score (1–5), general_comment }
+export const screenApplication = (id, payload) =>
+  client.post(`/api/v1/recruitment/applications/${id}/screen/`, payload)
+
+// payload: { interview_scheduled_at, interview_location }
+export const inviteToInterview = (id, payload) =>
+  client.post(`/api/v1/recruitment/applications/${id}/invite/`, payload)
+
+export const scoreInterview = (id, payload) =>
+  client.post(`/api/v1/recruitment/applications/${id}/interview/`, payload)
+
+// payload: { decision: 'HIRE' | 'REJECT', rejection_reason }
+export const decideApplication = (id, payload) =>
+  client.post(`/api/v1/recruitment/applications/${id}/decide/`, payload)
+
+export const recordAcceptance = (id, accepted) =>
+  client.post(`/api/v1/recruitment/applications/${id}/accept/`, { accepted })
+
+// The CV, served by Django with the right file type. The access token rides in
+// the address because an <iframe> can't send headers.
+export const cvUrl = (id) =>
+  `${client.defaults.baseURL}/api/v1/recruitment/applications/${id}/cv/?token=${encodeURIComponent(localStorage.getItem('access_token') || '')}`
+
+// The new hire's onboarding form is a Django page on the API server
+export const onboardingUrl = (token) => `${client.defaults.baseURL}/onboarding/${token}/`
+
+export const CLASSIC_HR_URL = `${client.defaults.baseURL}/portal/hr/`

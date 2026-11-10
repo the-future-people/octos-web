@@ -159,8 +159,10 @@ function validate(f) {
 // ── List ─────────────────────────────────────────────────────
 
 function VacancyRow({ v, selected, onSelect }) {
-  const s = STATUS[v.status] || STATUS.CLOSED
   const d = daysLeft(v.closes_at)
+  // Open but past its closing date: not on the careers page, so don't call it Open
+  const expired = v.status === 'OPEN' && d !== null && d < 0
+  const s = expired ? { label: 'Expired', tone: 'amber' } : (STATUS[v.status] || STATUS.CLOSED)
   const urgent = v.status === 'OPEN' && d !== null && d <= 5
   return (
     <button
