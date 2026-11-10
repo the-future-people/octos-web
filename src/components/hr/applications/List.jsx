@@ -5,13 +5,13 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getApplication } from '../../../api/hr'
 import {
-  PANEL, INPUT, STAGE, STATUS_TEXT, Avatar, chipFor, laneOf, waited, fmtDay, fmtDateTime, channel, errorText,
+  PANEL, STAGE, STATUS_TEXT, Avatar, chipFor, laneOf, waited, fmtDay, fmtDateTime, channel, errorText,
 } from './shared'
 import { CvPanel, OnboardingLink } from './actions'
+import FilterBar from './FilterBar'
 
-const STAGE_FILTERS = [
-  ['', 'All stages'], ['waiting', 'Waiting on HR'], ['onboarding', 'Hired and onboarding'], ['closed', 'Rejected or declined'],
-]
+const isClosed = (a) => ['REJECTED', 'WITHDRAWN', 'DECLINED'].includes(a.status)
+const stageKey = (a) => (laneOf(a) ? 'waiting' : isClosed(a) ? 'closed' : 'hired')
 
 function history(a) {
   const rows = [[a.created_at, `Applied (${a.track === 'RECOMMENDATION' ? 'recommended' : a.track === 'APPOINTMENT' ? 'appointed' : 'website'})`]]
@@ -73,35 +73,62 @@ function Record({ id, onWorkNow }) {
 export default function List({ apps, vacancies, vacancy, setVacancy, onWorkNow }) {
   const [search, setSearch] = useState('')
   const [stage, setStage] = useState('')
+  const [extra, setExtra] = useState({ track: '', waited: '', priority: false })
   const [selected, setSelected] = useState(null)
+
+  const activeExtra = [extra.track, extra.waited, extra.priority].filter(Boolean).length
+  const passExtra = (a) =>
+    (!extra.track || a.track === extra.track) &&
+    (!extra.priority || a.is_priority) &&
+    (!extra.waited || (laneOf(a) && (Date.now() - new Date(a.created_at)) / 86400000 > Number(extra.waited)))
+
+  // Counts in the pickers reflect the other filters, so the numbers always add up
+  const forVacancy = apps.filter((a) => (!stage || stageKey(a) === stage) && passExtra(a))
+  const forStage = apps.filter((a) => (!vacancy || String(a.vacancy ?? 'general') === String(vacancy)) && passExtra(a))
+
+  const vacancyOptions = [
+    { value: '', label: 'All vacancies', count: forVacancy.length },
+    ...vacancies.map((v) => ({
+      value: String(v.id),
+      label: `${v.title}${v.branch_name ? ` · ${v.branch_name.replace(/ Branch$/, '')}` : ''}`,
+      count: forVacancy.filter((a) => String(a.vacancy) === String(v.id)).length,
+    })),
+    { value: 'general', label: 'General applications', count: forVacancy.filter((a) => !a.vacancy).length },
+  ]
+  const stageOptions = [
+    { value: '', label: 'All stages', count: forStage.length },
+    { value: 'waiting', label: 'Waiting on HR', dot: '#BA7517', count: forStage.filter((a) => stageKey(a) === 'waiting').length },
+    { value: 'hired', label: 'Hired and onboarding', dot: '#3B6D11', count: forStage.filter((a) => stageKey(a) === 'hired').length },
+    { value: 'closed', label: 'Rejected or declined', dot: '#888780', count: forStage.filter((a) => stageKey(a) === 'closed').length },
+  ]
 
   const rows = useMemo(() => {
     const t = search.trim().toLowerCase()
     return apps
-      .filter((a) => !vacancy || String(a.vacancy) === String(vacancy))
-      .filter((a) => {
-        if (!stage) return true
-        const closed = ['REJECTED', 'WITHDRAWN', 'DECLINED'].includes(a.status)
-        if (stage === 'waiting') return !!laneOf(a)
-        if (stage === 'closed') return closed
-        return !laneOf(a) && !closed
-      })
+      .filter((a) => !vacancy || String(a.vacancy ?? 'general') === String(vacancy))
+      .filter((a) => !stage || stageKey(a) === stage)
+      .filter(passExtra)
       .filter((a) => !t || [a.full_name, a.phone, a.email].some((v) => String(v || '').toLowerCase().includes(t)))
       .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
-  }, [apps, vacancy, stage, search])
+  }, [apps, vacancy, stage, search, extra])
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <input className={INPUT + ' min-w-[200px] flex-1'} placeholder="Search name, phone or email" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className={INPUT + ' w-auto'} value={vacancy} onChange={(e) => setVacancy(e.target.value)}>
-          <option value="">All vacancies</option>
-          {vacancies.map((v) => <option key={v.id} value={v.id}>{v.title}{v.branch_name ? ` · ${v.branch_name.replace(/ Branch$/, '')}` : ''}</option>)}
-        </select>
-        <select className={INPUT + ' w-auto'} value={stage} onChange={(e) => setStage(e.target.value)}>
-          {STAGE_FILTERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-      </div>
+      <FilterBar
+        search={search} setSearch={setSearch}
+        vacancy={vacancy} setVacancy={setVacancy} vacancyOptions={vacancyOptions}
+        stage={stage} setStage={setStage} stageOptions={stageOptions}
+        extra={extra} setExtra={setExtra} activeExtra={activeExtra}
+      />
+      {rows.length !== apps.length && (
+        <p className="px-1 text-xs text-[var(--text-3)]">
+          Showing {rows.length} of {apps.length}
+          {' · '}
+          <button type="button" className="font-semibold underline" onClick={() => {
+            setSearch(''); setStage(''); setVacancy(''); setExtra({ track: '', waited: '', priority: false })
+          }}>Clear all</button>
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className={PANEL + ' self-start overflow-x-auto'}>
