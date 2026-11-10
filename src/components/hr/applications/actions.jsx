@@ -20,25 +20,24 @@ function useRefresh(id) {
 const solidBtn = (bg) => ({ className: 'rounded-lg px-4 py-2 text-sm font-semibold text-white whitespace-nowrap disabled:opacity-50', style: { background: bg } })
 
 // ── CV ───────────────────────────────────────────────────────
+// PDFs show as they are. Word CVs show as a PDF the server converts once
+// (?as=pdf); Download always gives the original file.
 export function CvPanel({ app, s, tall = 460 }) {
   const isPdf = /\.pdf($|\?)/i.test(app.cv || '')
   if (!app.cv) {
     return <div className="flex items-center justify-center rounded-lg border border-dashed border-[var(--border)] p-10 text-sm text-[var(--text-3)]">No CV on file</div>
   }
+  const viewUrl = isPdf ? cvUrl(app.id) : `${cvUrl(app.id)}&as=pdf`
   return (
     <div className="flex flex-col gap-2">
-      {isPdf ? (
-        <iframe title="CV" src={cvUrl(app.id)} className="w-full rounded-lg border bg-[var(--bg)]" style={{ height: tall, borderColor: s.border }} />
-      ) : (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border bg-[var(--bg)] p-10 text-sm text-[var(--text-2)]" style={{ borderColor: s.border }}>
-          Word CVs can't show here.
-        </div>
-      )}
-      <div className="flex flex-wrap gap-4 text-sm">
-        <a href={cvUrl(app.id)} target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: STAGE.info.solid }}>
-          {isPdf ? 'Open full size' : 'Download CV'}
-        </a>
+      <iframe title="CV" src={viewUrl} className="w-full rounded-lg border bg-[var(--bg)]" style={{ height: tall, borderColor: s.border }} />
+      <div className="flex flex-wrap items-center gap-4 text-sm">
+        <a href={viewUrl} target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: STAGE.info.solid }}>Open full size</a>
+        {!isPdf && (
+          <a href={cvUrl(app.id)} target="_blank" rel="noreferrer" className="underline" style={{ color: STAGE.info.solid }}>Download original (Word)</a>
+        )}
         {app.cover_letter && <a href={app.cover_letter} target="_blank" rel="noreferrer" className="underline" style={{ color: STAGE.info.solid }}>Cover letter</a>}
+        {!isPdf && <span className="text-xs text-[var(--text-3)]">Converted from Word for viewing. The first open takes a few seconds.</span>}
       </div>
     </div>
   )
