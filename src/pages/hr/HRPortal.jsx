@@ -10,6 +10,9 @@ import Vacancies from '../../components/hr/Vacancies'
 import Applications from '../../components/hr/Applications'
 import { CLASSIC_HR_URL } from '../../api/hr'
 
+// Links and redirects use full /hr/... paths. Relative ones inside the /hr/* splat route
+// resolve against the whole address in React Router 7 (/hr/vacancies → /hr/vacancies/vacancies),
+// which sent the portal into a redirect loop.
 const PANES = [
   { path: 'vacancies', label: 'Vacancies', ready: true },
   { path: 'applications', label: 'Applications', ready: true },
@@ -26,7 +29,7 @@ function Sidebar() {
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible" aria-label="HR sections">
       {PANES.map(p => p.ready ? (
-        <NavLink key={p.path} to={p.path} className={link}>{p.label}</NavLink>
+        <NavLink key={p.path} to={`/hr/${p.path}`} className={link}>{p.label}</NavLink>
       ) : (
         <a key={p.path} href={CLASSIC_HR_URL} target="_blank" rel="noreferrer"
            className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm text-[var(--text-3)] hover:bg-[var(--panel)]">
@@ -50,7 +53,7 @@ export default function HRPortal() {
           <Routes>
             <Route path="vacancies" element={<Vacancies />} />
             <Route path="applications" element={<Applications />} />
-            <Route path="*" element={<Navigate to="vacancies" replace />} />
+            <Route path="*" element={<Navigate to="/hr/vacancies" replace />} />
           </Routes>
         </main>
       </div>
