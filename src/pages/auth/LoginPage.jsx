@@ -46,6 +46,7 @@ export default function LoginPage() {
       else if (role === 'ATTENDANT')        navigate('/attendant')
       else if (role === 'FLOW_COORDINATOR') navigate('/coordinator')
       else if (role === 'OPERATOR')         navigate('/operator')
+      else if (role === 'HQ_HR_MANAGER' || role === 'REGIONAL_HR_COORDINATOR') navigate('/hr')
       else navigate('/')
 
     } catch (err) {

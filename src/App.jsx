@@ -13,6 +13,7 @@ import AttendantPortal from './pages/attendant/AttendantPortal'
 import CoordinatorPortal from './pages/coordinator/CoordinatorPortal'
 import OperatorPortal from './pages/operator/OperatorPortal'
 import EyePortal from './pages/eye/EyePortal'
+import HRPortal from './pages/hr/HRPortal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +74,15 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['FLOW_COORDINATOR']}>
                   <CoordinatorPortal />
+                </ProtectedRoute>
+              }
+            />
+            {/* HR: moving here from the Django template one pane at a time. */}
+            <Route
+              path="/hr/*"
+              element={
+                <ProtectedRoute allowedRoles={['HQ_HR_MANAGER', 'REGIONAL_HR_COORDINATOR']}>
+                  <HRPortal />
                 </ProtectedRoute>
               }
             />
