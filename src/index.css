@@ -213,3 +213,6 @@ html.octos-desktop .octos-topbar .absolute {
 }
 .octos-pulse { animation: octos-pulse 1.8s infinite; }
 @media (prefers-reduced-motion: reduce) { .octos-pulse { animation: none; } }
+
+/* Always keep room for the scrollbar, so pages of different lengths don't shift sideways (10 Nov 2026) */
+html { scrollbar-gutter: stable; }
