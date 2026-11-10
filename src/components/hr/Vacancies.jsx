@@ -5,6 +5,7 @@
 // HR writes it in pay_text, and a blank pay_text reads "Discussed at interview".
 
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getVacancies, createVacancy, updateVacancy,
@@ -252,14 +253,19 @@ function Editor({ vacancy, branches, roles, notice, onSaved, onCancelNew, onEdit
           </div>
         </div>
         {!isNew && (
-          live ? (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Link to={`/hr/applications?mode=list&vacancy=${vacancy.id}`} className="text-xs font-semibold underline" style={{ color: TONE.blue.text }}>
+              See applicants ({vacancy.applicant_count || 0})
+            </Link>
+          {live ? (
             <a href={careersUrl(vacancy)} target="_blank" rel="noreferrer"
                className="shrink-0 text-xs font-semibold underline" style={{ color: TONE.blue.text }}>
               View on careers page
             </a>
           ) : (
             <span className="shrink-0 text-xs text-[var(--text-3)]">Not on the careers page</span>
-          )
+          )}
+          </div>
         )}
       </div>
 
