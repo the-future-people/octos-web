@@ -155,7 +155,8 @@ export default function Focus({ lane, onPickLane, counts, queue, flash, onDone, 
           {detail.error && <p className="p-10 text-center text-sm">{errorText(detail.error, "Couldn't load this applicant.")}</p>}
           {detail.data && (
             <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-              <CvPanel app={detail.data} s={s} />
+              {/* CV stays in view while the scores beside it scroll */}
+              <div className="xl:sticky xl:top-4 xl:self-start"><CvPanel app={detail.data} s={s} /></div>
               <Work key={`${detail.data.id}-${detail.data.status}`} lane={lane} app={detail.data} s={s} onDone={onDone} onSkip={queue.length > 1 ? onSkip : null} />
             </div>
           )}

@@ -22,7 +22,8 @@ const solidBtn = (bg) => ({ className: 'rounded-lg px-4 py-2 text-sm font-semibo
 // ── CV ───────────────────────────────────────────────────────
 // PDFs show as they are. Word CVs show as a PDF the server converts once
 // (?as=pdf); Download always gives the original file.
-export function CvPanel({ app, s, tall = 460 }) {
+// Default height fills most of the screen, so a one-page CV shows whole without scrolling.
+export function CvPanel({ app, s, tall = 'max(620px, calc(100vh - 230px))' }) {
   const isPdf = /\.pdf($|\?)/i.test(app.cv || '')
   if (!app.cv) {
     return <div className="flex items-center justify-center rounded-lg border border-dashed border-[var(--border)] p-10 text-sm text-[var(--text-3)]">No CV on file</div>
