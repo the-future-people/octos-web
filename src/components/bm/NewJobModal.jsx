@@ -604,12 +604,6 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </div>
       ) : (
         <>
-        {chat && !chat.phone && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl border border-black/15 bg-white text-sm">
-            <span className="font-bold">For: {chat.name}</span>
-            <span className="text-[var(--text-3)]">· WhatsApp{chat.username ? ` @${chat.username}` : ''}, number hidden</span>
-          </div>
-        )}
         {arrivals.length > 0 && !chat && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <span className="text-[12px] font-bold text-[#8A5A00] mr-1">Files received now:</span>
@@ -625,7 +619,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <div className="flex flex-wrap items-stretch gap-3">
           <div className="relative flex-1 min-w-[280px]">
             <Icon kind="person" size={18} className="absolute left-3.5 top-[13px] text-[var(--text)] pointer-events-none" />
-            <input id="job-customer" value={custSearch} onChange={e => setCustSearch(e.target.value)}
+            <input id="job-customer"
+                   value={custSearch || (chat && !chat.phone ? `${chat.name} · WhatsApp${chat.username ? ' @' + chat.username : ''}` : '')}
+                   onChange={e => setCustSearch(e.target.value)}
                    placeholder="Search by name or phone number"
                    className={`w-full h-11 pl-10 pr-4 text-[15px] font-medium rounded-xl outline-none border-2 transition-colors
                                ${jobType === 'INSTANT' ? 'border-zinc-900 bg-white' : 'border-red-600 bg-red-50/60'}`} />
@@ -1063,7 +1059,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {customerBand}
         {chatBand}
 
-        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[240px_1fr_280px] animate-unfold">
+        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[300px_1fr_280px] animate-unfold">
           <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
           <div className="p-4 overflow-y-auto min-h-0">{editor}</div>
           <div className="p-3.5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
