@@ -324,7 +324,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         .then(res => (Array.isArray(res.data) ? res.data : (res.data?.results || []))
           .find(c => c.id === r.data.customer_id)))
       .then(c => { if (c) chooseCustomer(c) })
-      .catch(() => setError('This chat has no number. Search for the customer, or register them.'))
+      .catch(() => {})   // a username chat: no record to make; the chip below names them
   }
 
   // From a chat linked to a customer: that customer, chosen already (9 Nov 2026).
@@ -332,12 +332,19 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   // Only services that count pages take a file's pages: binding is priced per set (9 Nov 2026).
   const usesPages = s => (s?.spec_template || []).some(f => f.key === 'pages')
   useEffect(() => {
-    if (!fromChat?.customerId || customer) return
-    getCustomers({ search: fromChat.phone || fromChat.name || '', page_size: 10 })
-      .then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])).find(c => c.id === fromChat.customerId))
+    if (!fromChat || customer) return
+    const load = (id, phone) => getCustomers({ search: phone || fromChat.name || '', page_size: 10 })
+      .then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])).find(c => c.id === id))
       .then(c => { if (c) setCustomer(c) })
-      .catch(() => {})
-  }, [fromChat?.customerId])   // eslint-disable-line react-hooks/exhaustive-deps
+    if (fromChat.customerId) { load(fromChat.customerId, fromChat.phone).catch(() => {}); return }
+    // Not registered, but the chat has a number: the server finds them or
+    // makes a light record from the chat (11 Nov 2026).
+    if (fromChat.conversationId && fromChat.phone) {
+      client.post(`/api/v1/communications/${fromChat.conversationId}/customer/`)
+        .then(r => load(r.data.customer_id, r.data.phone))
+        .catch(() => {})
+    }
+  }, [fromChat?.conversationId])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectService = service => {
     setSelected(service)
@@ -467,6 +474,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         ...(item.addons?.length ? { addons: item.addons } : {}),
         file_source: fileSource || 'NA',
       })),
+      // Who it was for, even with no customer record (a WhatsApp username).
+      ...(!customer && chat ? { notes: `For ${chat.name} (WhatsApp${chat.username ? ' @' + chat.username : ''})` } : {}),
       // For an organisation: its job, and the person who ordered it.
       ...(customer ? (orderFor
         ? { customer: orderFor.organisation, ordered_by: customer.id }
@@ -595,7 +604,13 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </div>
       ) : (
         <>
-        {arrivals.length > 0 && (
+        {chat && !chat.phone && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl border border-black/15 bg-white text-sm">
+            <span className="font-bold">For: {chat.name}</span>
+            <span className="text-[var(--text-3)]">· WhatsApp{chat.username ? ` @${chat.username}` : ''}, number hidden</span>
+          </div>
+        )}
+        {arrivals.length > 0 && !chat && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <span className="text-[12px] font-bold text-[#8A5A00] mr-1">Files received now:</span>
             {arrivals.map(row => (
@@ -646,6 +661,11 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           </button>
         ))}
       </div>
+      {chat?.conversationId && fileSource && fileSource !== 'WHATSAPP' && (
+        <div className="mt-1.5 px-3 py-1.5 rounded-lg bg-[#FFF4DC] border border-[#F1DFC0] text-[12.5px] font-semibold text-[#8A5A00]">
+          Their files came on WhatsApp.
+        </div>
+      )}
     </div>
   )
 
