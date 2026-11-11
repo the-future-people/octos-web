@@ -111,7 +111,7 @@ const fileUrl = m => `/api/v1/communications/messages/${m.id}/file/`
 // Inside the Octos desktop app, the app itself keeps the file in its private
 // folder and opens it (octos-desktop, open_file); in a browser, as below.
 const desktopInvoke = () => window.__TAURI__?.core?.invoke
-function openFile(m) {
+export function openFile(m) {
   client.get(fileUrl(m) + '?download=1', { responseType: 'blob' })
     .then(async r => {
       const name = m.media_name || (isPhoto(m) ? 'photo.png' : 'file')

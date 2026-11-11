@@ -16,6 +16,7 @@ import AttendantDrafts     from '../../components/attendant/AttendantDrafts'
 import AttendantServices   from '../../components/attendant/AttendantServices'
 import AttendantInbox      from '../../components/attendant/AttendantInbox'
 import AttendantCollect    from '../../components/attendant/AttendantCollect'
+import ClaimStrip          from '../../components/attendant/ClaimStrip'
 import Inbox               from '../../components/bm/Inbox'
 import NewJobModal         from '../../components/bm/NewJobModal'
 import NewCustomerModal    from '../../components/bm/NewCustomerModal'
@@ -268,6 +269,8 @@ export default function AttendantPortal() {
 
           {/* Main */}
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+            {/* Files arriving now: above every page, drawn only when someone is waiting */}
+            {!showPortalLocked && <ClaimStrip />}
             <div className="flex-1 overflow-y-auto">
               <div key={page} className="animate-pageFade">
                 {renderPage()}
