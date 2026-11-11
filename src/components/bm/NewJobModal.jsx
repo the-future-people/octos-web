@@ -302,6 +302,31 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     setCustomer(c); setOrderFor(null); setCustSearch('')
   }
 
+  // Files received now (11 Nov 2026): the customers whose WhatsApp files are
+  // waiting, offered first. One tap ties the job to that chat and to its
+  // customer, made from the chat if they never registered.
+  const [pickedChat, setPickedChat] = useState(null)
+  const chat = fromChat || pickedChat
+  // Where the files came from (JobLineItem.file_source, 11 Nov 2026): WhatsApp
+  // when a chat was picked; otherwise one tap, never forced.
+  const [fileSource, setFileSource] = useState('')
+  useEffect(() => { if (chat?.conversationId) setFileSource('WHATSAPP') }, [chat?.conversationId])
+  const { data: arrivals = [] } = useQuery({
+    queryKey: ['arrivals'],
+    queryFn: () => client.get('/api/v1/communications/arrivals/').then(r => r.data),
+    enabled: !fromChat && !customer,
+    refetchInterval: 15_000,
+  })
+  function pickArrival(row) {
+    setPickedChat({ conversationId: row.conversation_id, name: row.name, files: row.files })
+    client.post(`/api/v1/communications/${row.conversation_id}/customer/`)
+      .then(r => getCustomers({ search: r.data.phone, page_size: 10 })
+        .then(res => (Array.isArray(res.data) ? res.data : (res.data?.results || []))
+          .find(c => c.id === r.data.customer_id)))
+      .then(c => { if (c) chooseCustomer(c) })
+      .catch(() => setError('This chat has no number. Search for the customer, or register them.'))
+  }
+
   // From a chat linked to a customer: that customer, chosen already (9 Nov 2026).
   const [chatFile, setChatFile] = useState(null)
   // Only services that count pages take a file's pages: binding is priced per set (9 Nov 2026).
@@ -389,9 +414,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       invalidateAfterJobCreated(queryClient)
       setSuccessJob(res.data?.job_number || res.data?.id || '—')
       // Recorded from a chat: the job is linked to it, so the chat shows it.
-      if (fromChat?.conversationId && res.data?.id) {
-        client.post(`/api/v1/communications/${fromChat.conversationId}/link-job/`, { job: res.data.id })
-          .then(() => queryClient.invalidateQueries({ queryKey: ['conversation', fromChat.conversationId] }))
+      if (chat?.conversationId && res.data?.id) {
+        client.post(`/api/v1/communications/${chat.conversationId}/link-job/`, { job_id: res.data.id })
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: ['conversation', chat.conversationId] })
+            queryClient.invalidateQueries({ queryKey: ['arrivals'] })
+          })
           .catch(() => {})
       }
       attemptKey.current = crypto.randomUUID().replace(/-/g, '')
@@ -437,6 +465,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         ...(item.specifications && Object.keys(item.specifications).length ? { specifications: item.specifications } : {}),
         ...(item.artwork?.token ? { artwork_token: item.artwork.token } : {}),
         ...(item.addons?.length ? { addons: item.addons } : {}),
+        file_source: fileSource || 'NA',
       })),
       // For an organisation: its job, and the person who ordered it.
       ...(customer ? (orderFor
@@ -565,6 +594,19 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
                   className="ml-auto h-11 px-3 text-sm font-bold text-blue-700 shrink-0">Change customer</button>
         </div>
       ) : (
+        <>
+        {arrivals.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[12px] font-bold text-[#8A5A00] mr-1">Files received now:</span>
+            {arrivals.map(row => (
+              <button key={row.conversation_id} type="button" onClick={() => pickArrival(row)}
+                      className="h-9 px-3 rounded-full border border-[#F1DFC0] bg-[#FFF8EC] text-[13px] font-semibold hover:border-[#8A5A00]">
+                {row.name}{row.number_tail ? ` · …${row.number_tail}` : ''}
+                <span className="font-normal text-[var(--text-3)]"> · {row.files.length} file{row.files.length === 1 ? '' : 's'}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-stretch gap-3">
           <div className="relative flex-1 min-w-[280px]">
             <Icon kind="person" size={18} className="absolute left-3.5 top-[13px] text-[var(--text)] pointer-events-none" />
@@ -591,7 +633,19 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             <Icon kind="plus" size={16} />Register customer
           </button>
         </div>
+        </>
       )}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-[12px] font-bold text-[var(--text-3)] mr-1">Files came by:</span>
+        {[['WHATSAPP', 'WhatsApp'], ['USB', 'Pendrive'], ['HARDCOPY', 'Photocopy / paper'],
+          ['EMAIL', 'Email'], ['TYPING', 'Typing']].map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setFileSource(s => (s === value ? '' : value))}
+                  className={`h-8 px-3 rounded-full text-[12.5px] font-semibold border
+                              ${fileSource === value ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 
