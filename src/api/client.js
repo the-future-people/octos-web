@@ -8,7 +8,9 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const client = axios.create({
   baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
+  // No default Content-Type: axios sets it per request (JSON for objects,
+  // multipart with its boundary for FormData). A JSON default here made
+  // axios turn every FormData into JSON and silently drop the files (11 Nov 2026).
 })
 
 // ── Attach access token to every request ─────────────────────────
