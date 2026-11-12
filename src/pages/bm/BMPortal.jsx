@@ -21,6 +21,8 @@ import PersonalNotes from '../../components/shared/PersonalNotes'
 import ReminderModal from '../../components/shared/ReminderModal'
 import WeeklyFilingBlock from '../../components/bm/WeeklyFilingBlock'
 import useReminders from '../../hooks/useReminders'
+import Workload from '../../components/bm/Workload'
+
 
 const SECTIONS = [
   {
@@ -76,6 +78,11 @@ export default function BMPortal() {
   const renderContent = () => {
     switch (activeSection) {
       case 'overview': return <Overview onNavigate={handleNav} />
+      case 'pending_payment':
+      case 'in_production':
+      case 'ready_for_pickup':
+      case 'awaiting_feedback':
+      case 'overdue':   return <Workload view={activeSection} onNavigate={handleNav} />
       case 'daysheet': return <DaySheet />
       case 'jobs':       return <Jobs />
       case 'proformas':  return <ProformasTab />
@@ -87,9 +94,10 @@ export default function BMPortal() {
       case 'staff':       return <Staff />
       case 'inbox':       return <Inbox focus={focus?.section === 'inbox' ? focus : null} />
       case 'notes':       return <PersonalNotes onIdleRedirect={() => setActiveSection('overview')} />
-      default:
+      default: {
         const label = SECTIONS.flatMap(s => s.items).find(i => i.id === activeSection)?.label
         return <Placeholder label={label} />
+      }
     }
   }
 
