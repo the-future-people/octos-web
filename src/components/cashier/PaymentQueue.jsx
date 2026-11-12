@@ -1,41 +1,43 @@
 // src/components/cashier/PaymentQueue.jsx
-// Lists jobs waiting for payment. Polls every 15s.
+// The cashier's queue (redesigned 12 Nov 2026): who each job is for (the
+// record, else the WhatsApp chat, else walk-in: jobs/services/labels.py), what
+// it is, who recorded it and when, how long they have waited, and one action.
+// Counter sales are paid in full now; production takes a deposit now and the
+// balance at pickup. Polls every 15s.
 
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { getPaymentQueue } from '../../api/cashier'
 import PaymentModal from './PaymentModal'
 
-function fmt(amount) {
-  return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
+const fmt = amount => `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
+
+function waited(dateStr) {
+  const minutes = dateStr ? Math.max(0, Math.floor((Date.now() - new Date(dateStr)) / 60000)) : 0
+  const label = minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`
+  // Amber after 5 minutes, red after 15: colour means "look at this".
+  const tone = minutes >= 15 ? 'text-red-600' : minutes >= 5 ? 'text-amber-700' : 'text-[var(--text-2)]'
+  return { label, tone }
 }
+const clock = iso => (iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '')
 
-function timeAgo(dateStr) {
-  if (!dateStr) return ''
-  const diff = Math.floor((Date.now() - new Date(dateStr)) / 60000)
-  if (diff < 1)  return 'just now'
-  if (diff < 60) return `${diff}m ago`
-  return `${Math.floor(diff / 60)}h ago`
+// Outline icons, in the sidebar's style.
+const Icon = ({ d, size = 17 }) => (
+  <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">{d}</svg>
+)
+const ICON = {
+  counter: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /></>,
+  production: <><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></>,
+  hourglass: <><path d="M5 22h14M5 2h14" /><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22" /><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2" /></>,
+  chat: <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />,
+  coins: <><circle cx="8" cy="8" r="6" /><path d="M18.09 10.37A6 6 0 1 1 10.34 18" /><path d="M7 6h1v4" /></>,
+  clear: <><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></>,
 }
-
-const BoltIcon = () => (
-  <svg className="w-[17px] h-[17px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-  </svg>
-)
-
-const PrinterIcon = () => (
-  <svg className="w-[17px] h-[17px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round"
-      d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v4" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7 15h10v4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-4z" />
-  </svg>
-)
 
 const KINDS = [
-  { id: 'instant',   label: 'Instant',   Icon: BoltIcon },
-  { id: 'processed', label: 'Processed', Icon: PrinterIcon },
+  { id: 'instant',   label: 'Counter sales', icon: 'counter' },
+  { id: 'processed', label: 'Production',    icon: 'production' },
 ]
 
 export default function PaymentQueue() {
@@ -47,149 +49,94 @@ export default function PaymentQueue() {
     refetchInterval: 15_000,
   })
 
-  const jobs   = Array.isArray(data) ? data : (data?.results || [])
-  // Counts cover both queues, so the tab you aren't looking at still
-  // shows a truthful badge without a second request.
+  const jobs = Array.isArray(data) ? data : (data?.results || [])
+  // Counts cover both queues, so the other tab's badge stays true.
   const counts = data?.counts || {}
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4 animate-pulse">
-            <div className="h-4 bg-[var(--border)] rounded w-2/3 mb-2" />
-            <div className="h-3 bg-[var(--border)] rounded w-1/3" />
-          </div>
-        ))}
-      </div>
-    )
-  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-end gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-bold text-[var(--text)]">Payment Queue</h2>
-          <p className="text-xs text-[var(--text-3)] mt-0.5">
-            Jobs waiting for payment confirmation — oldest first
-          </p>
+          <h2 className="text-[22px] font-extrabold text-[var(--text)]">Payment queue</h2>
+          <p className="text-sm text-[var(--text-3)] mt-0.5">Oldest first. Tap a customer to take their payment.</p>
         </div>
-              </div>
-
-                  <div className="inline-flex gap-1 bg-[var(--bg)] p-1 rounded-full mb-4">
-        {KINDS.map(({ id, label, Icon }) => {
-          const active = kind === id
-          const count  = counts[id] ?? 0
-          return (
-            <button
-              key={id}
-              onClick={() => setKind(id)}
-              className={`flex items-center gap-2 px-[18px] py-2.5 rounded-full text-sm transition-colors
-                ${active
-                  ? 'bg-[var(--text)] text-white font-bold'
-                  : 'font-medium text-[var(--text-3)] hover:text-[var(--text-2)]'}`}
-            >
-              <Icon />
-              {label}
-              <span className={`text-xs rounded-full
-                ${active
-                  ? 'px-2 py-0.5 bg-white/20 text-white'
-                  : 'text-[var(--text-3)]'}`}>
-                {count}
-              </span>
-            </button>
-          )
-        })}
+        <div className="ml-auto flex gap-2">
+          {KINDS.map(({ id, label, icon }) => {
+            const active = kind === id
+            return (
+              <button key={id} type="button" onClick={() => setKind(id)} aria-pressed={active}
+                      className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm transition-colors
+                        ${active ? 'bg-[var(--text)] text-white font-bold' : 'bg-[var(--panel)] border border-[var(--border)] font-semibold text-[var(--text-2)]'}`}>
+                <Icon d={ICON[icon]} size={16} />
+                {label}
+                <span className={`text-xs rounded-full ${active ? 'px-2 py-0.5 bg-white/20' : 'text-[var(--text-3)]'}`}>
+                  {counts[id] ?? 0}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {jobs.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-full bg-[var(--bg)] flex items-center justify-center mb-3">
-            <svg className="w-5 h-5 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-28 bg-[var(--panel)] border border-[var(--border)] rounded-2xl animate-pulse" />)}
+        </div>
+      ) : jobs.length === 0 ? (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-12 h-12 rounded-full bg-[var(--bg)] grid place-items-center mb-3 text-[var(--text-3)]">
+            <Icon d={ICON.clear} size={22} />
           </div>
-            <p className="text-sm font-semibold text-[var(--text-2)]">
-            {kind === 'processed' ? 'No processed jobs yet' : 'Queue is clear'}
+          <p className="text-sm font-semibold text-[var(--text-2)]">
+            {kind === 'processed' ? 'No production deposits waiting' : 'Queue is clear'}
           </p>
-          <p className="text-xs text-[var(--text-3)] mt-1 max-w-[340px]">
-            {kind === 'processed'
-              ? 'Banners, business cards and ID cards appear here once the branch starts taking them.'
-              : 'No jobs waiting for payment right now'}
-          </p>
+          <p className="text-xs text-[var(--text-3)] mt-1">Nobody is waiting to pay right now.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {jobs.map((job, idx) => (
-            <div
-              key={job.id}
-              className="bg-[var(--panel)] border border-[var(--border)] rounded-xl p-4"
-            >
-              {/* Top row — position + job info */}
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-[var(--border)]
-                  flex items-center justify-center text-xs font-bold text-[var(--text-3)] shrink-0 mt-0.5">
-                  {String(idx + 1).padStart(2, '0')}
+          {jobs.map(job => {
+            const w = waited(job.created_at)
+            const production = kind === 'processed'
+            return (
+              <button key={job.id} type="button" onClick={() => setActiveJob(job)}
+                      className="w-full text-left grid grid-cols-[84px_minmax(0,1fr)_auto] gap-4 items-center
+                                 bg-[var(--panel)] border border-[var(--border)] rounded-2xl px-5 py-4 hover:border-black/30 transition-colors">
+                <div className="text-center">
+                  <div className={`flex justify-center ${w.tone}`}><Icon d={ICON.hourglass} size={15} /></div>
+                  <div className={`font-mono text-lg font-bold ${w.tone}`}>{w.label}</div>
+                  <div className="text-[11px] font-semibold text-[var(--text-3)]">waiting</div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-[var(--text)] break-words leading-snug">
-                    {job.services_summary || job.job_number}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-xs text-[var(--text-3)] font-mono whitespace-nowrap">
-                      {job.job_number}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5
-                      rounded bg-[var(--blue-bg)] text-[var(--blue-text)] border border-[var(--blue-border)]
-                      whitespace-nowrap">
-                      {job.job_type}
-                    </span>
-                    <span className="text-xs text-[var(--text-3)] whitespace-nowrap">
-                      by {job.attendant_name || '—'}
-                    </span>
-                    <span className="text-xs text-[var(--text-3)] whitespace-nowrap">
-                      {timeAgo(job.created_at)}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[16.5px] font-extrabold text-[var(--text)]">{job.for_whom || job.customer_name || 'Walk-in'}</span>
+                    {job.from_chat && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800">
+                        <Icon d={ICON.chat} size={12} />WhatsApp
+                      </span>
+                    )}
+                    <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md
+                                      ${production ? 'bg-amber-50 text-amber-800' : 'bg-indigo-50 text-indigo-800'}`}>
+                      {production ? `PRODUCTION · ${job.deposit_percentage || 70}% DEPOSIT` : 'COUNTER SALE'}
                     </span>
                   </div>
-                  {job.customer_name && (
-                    <div className="text-xs font-medium text-[var(--text-2)] mt-1">
-                      {job.customer_name}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Bottom row — amount + button */}
-              <div className="flex items-center justify-between mt-3 pt-3
-                border-t border-[var(--border)]">
-                <div>
-                  <div className="font-mono font-black text-lg text-[var(--text)]">
-                    {fmt(job.estimated_cost)}
+                  <div className="text-sm text-[var(--text-2)] mt-0.5 truncate">{job.services_summary || job.title || ''}</div>
+                  <div className="text-[12.5px] text-[var(--text-3)] mt-0.5">
+                    {job.job_number} · recorded by {job.recorded_by || job.intake_by_name || '—'} at {clock(job.created_at)}
                   </div>
-                  {!job.customer_name && (
-                    <div className="text-[10px] text-[var(--text-3)]">Walk-in</div>
-                  )}
                 </div>
-                <button
-                  className="px-5 py-2.5 bg-[var(--text)] text-white text-sm font-bold
-                    rounded-xl hover:opacity-90 transition-opacity whitespace-nowrap"
-                  onClick={() => setActiveJob(job)}
-                >
-                  Collect Payment
-                </button>
-              </div>
-            </div>
-          ))}
+                <div className="text-right">
+                  <div className="font-mono text-xl font-bold text-[var(--text)]">{fmt(job.estimated_cost)}</div>
+                  <span className="inline-flex items-center gap-2 mt-2 h-10 px-4 rounded-xl bg-[var(--text)] text-white text-sm font-bold">
+                    <Icon d={ICON.coins} size={16} />Take payment
+                  </span>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
-    {activeJob && (
-        <PaymentModal
-          job={activeJob}
-          onClose={() => setActiveJob(null)}
-        />
-      )}
+
+      {activeJob && <PaymentModal job={activeJob} onClose={() => setActiveJob(null)} />}
     </div>
   )
 }
