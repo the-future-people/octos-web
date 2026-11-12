@@ -11,6 +11,14 @@ export default function LoginPage() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
+  // Signed out by a refused request: say which, once (12 Nov 2026).
+  useEffect(() => {
+    const why = sessionStorage.getItem('signed_out_because')
+    if (why) {
+      sessionStorage.removeItem('signed_out_because')
+      setError(`You were signed out: ${why}. Sign in again.`)
+    }
+  }, [])
   const [loading,  setLoading]  = useState(false)
 
   const handleSubmit = async (e) => {

@@ -43,6 +43,12 @@ client.interceptors.response.use(
       } catch {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        // Why, for the login page to say (12 Nov 2026): the desktop app has no
+        // inspector, so an unexplained sign-out was a mystery to chase.
+        try {
+          sessionStorage.setItem('signed_out_because',
+            `${(original.method || 'get').toUpperCase()} ${original.url} was refused`)
+        } catch { /* storage unavailable: sign out anyway */ }
         window.location.href = '/login'
       }
     }
