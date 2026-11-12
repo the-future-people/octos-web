@@ -289,7 +289,7 @@ export default function Overview({ onNavigate }) {
               sub={workload?.oldest_pending_mins != null
                 ? `Oldest: ${fmtMins(workload.oldest_pending_mins)}`
                 : null}
-              onClick={() => onNavigate('jobs')}
+              onClick={() => onNavigate('pending_payment')}
             />
             <WorkloadTile
               icon={
@@ -304,7 +304,7 @@ export default function Overview({ onNavigate }) {
               color="bg-blue-50"
               glow={productionGlow}
               sub="Confirmed + In Progress"
-              onClick={() => onNavigate('jobs')}
+              onClick={() => onNavigate('in_production')}
             />
             <WorkloadTile
               icon={
@@ -321,7 +321,7 @@ export default function Overview({ onNavigate }) {
               color={pickupGlow === 'amber' ? 'bg-amber-50' : 'bg-emerald-50'}
               glow={pickupGlow}
               sub="Awaiting collection"
-              onClick={() => onNavigate('jobs')}
+              onClick={() => onNavigate('ready_for_pickup')}
             />
             <WorkloadTile
               icon={
@@ -335,7 +335,7 @@ export default function Overview({ onNavigate }) {
               color="bg-violet-50"
               glow={feedbackGlow}
               sub="Sample sent · Revision"
-              onClick={() => onNavigate('jobs')}
+              onClick={() => onNavigate('awaiting_feedback')}
             />
             <WorkloadTile
               icon={
@@ -354,7 +354,7 @@ export default function Overview({ onNavigate }) {
               glow={overdueGlow}
               pulse={overduePulse}
               sub="Past deadline"
-              onClick={() => onNavigate('jobs')}
+              onClick={() => onNavigate('overdue')}
             />
           </div>
         )}
