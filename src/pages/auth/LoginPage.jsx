@@ -1,5 +1,5 @@
 // src/pages/auth/LoginPage.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login as apiLogin, getMe } from '../../api/auth'
 import { useAuth } from '../../context/AuthContext'
