@@ -140,6 +140,20 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
  *        Manager only; the server checks). held: no cashier on duty, so
  *        the job waits for the morning handover.
  */
+// Where a job's files came from (JobLineItem.file_source), as icons in their colours.
+const SOURCES = [
+  { value: 'WHATSAPP', label: 'WhatsApp', colour: '#25D366',
+    path: <><path d="M21 11.5a8.4 8.4 0 0 1-12.5 7.3L3 21l2.2-5.3A8.5 8.5 0 1 1 21 11.5z" /><path d="M9 10c.5 2 2 3.5 4 4l1.2-1.2 2 1-.5 1.7c-3.5.3-7.5-3.7-7.2-7.2l1.7-.5 1 2z" /></> },
+  { value: 'USB', label: 'Pendrive', colour: '#2563EB',
+    path: <><rect x="7" y="2" width="10" height="7" rx="1" /><path d="M5 9h14v8a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5z" /><path d="M10 5h.01M14 5h.01" /></> },
+  { value: 'HARDCOPY', label: 'Photocopy / paper', colour: '#EA580C',
+    path: <><path d="M8 3h9l3 3v12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M4 7v13a1 1 0 0 0 1 1h11" /><path d="M10 9h6M10 13h6" /></> },
+  { value: 'EMAIL', label: 'Email', colour: '#EA4335',
+    path: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></> },
+  { value: 'TYPING', label: 'Typing', colour: '#7C3AED',
+    path: <><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></> },
+]
+
 export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -648,14 +662,19 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       )}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span className="text-[12px] font-bold text-[var(--text-3)] mr-1">Files came by:</span>
-        {[['WHATSAPP', 'WhatsApp'], ['USB', 'Pendrive'], ['HARDCOPY', 'Photocopy / paper'],
-          ['EMAIL', 'Email'], ['TYPING', 'Typing']].map(([value, label]) => (
-          <button key={value} type="button" onClick={() => setFileSource(s => (s === value ? '' : value))}
-                  className={`h-8 px-3 rounded-full text-[12.5px] font-semibold border
-                              ${fileSource === value ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15 text-[var(--text-2)]'}`}>
-            {label}
-          </button>
-        ))}
+        {SOURCES.map(({ value, label, colour, path }) => {
+          const on = fileSource === value
+          return (
+            <button key={value} type="button" title={label} aria-label={label} aria-pressed={on}
+                    onClick={() => setFileSource(s => (s === value ? '' : value))}
+                    className={`w-10 h-9 rounded-xl grid place-items-center border transition
+                                ${on ? 'ring-2 ring-zinc-900 border-transparent' : 'border-black/15 bg-white hover:border-black/30'}`}
+                    style={on ? { background: colour + '22' } : undefined}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colour} strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+            </button>
+          )
+        })}
       </div>
       {chat?.conversationId && fileSource && fileSource !== 'WHATSAPP' && (
         <div className="mt-1.5 px-3 py-1.5 rounded-lg bg-[#FFF4DC] border border-[#F1DFC0] text-[12.5px] font-semibold text-[#8A5A00]">

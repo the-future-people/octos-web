@@ -819,7 +819,12 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
               fromChat={{
                 conversationId: conv.id, customerId: conv.customer || null, name: nameOf(conv),
                 phone: conv.contact_phone, username: conv.contact_username,
-                files: messages.filter(x => x.direction === 'INBOUND' && x.media_file && !isPhoto(x)).slice(-8).reverse()
+                // This visit's files only, photos included (12 Nov 2026).
+                files: messages
+                  .filter(x => x.direction === 'INBOUND' && x.media_file
+                    && (!conv.visit_started_at || new Date(x.created_at) >= new Date(conv.visit_started_at)))
+                  .map(x => (isPhoto(x) && !x.media_name ? { ...x, media_name: 'Photo' } : x))
+                  .slice(-12).reverse()
                   .map(x => ({ id: x.id, name: x.media_name || 'File', pages: x.media_pages, info: fileInfo(x) })),
               }} />
           )}
