@@ -152,8 +152,8 @@ export default function CashierPortal() {
   // Fetch pending job count for sign-off step 1
   useEffect(() => {
     if (showSignOff && shiftData?.sheet_id) {
-      import('../../api/cashier').then(({ getCashierQueue }) => {
-        getCashierQueue().then(r => {
+      import('../../api/cashier').then(({ getPaymentQueue }) => {
+        getPaymentQueue().then(r => {
           const data = r.data
           const items = Array.isArray(data) ? data : (data?.results || [])
           setPendingJobs(items.length)
