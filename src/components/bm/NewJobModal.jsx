@@ -323,8 +323,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const chat = fromChat || pickedChat
   // Where the files came from (JobLineItem.file_source, 11 Nov 2026): WhatsApp
   // when a chat was picked; otherwise one tap, never forced.
-  const [fileSource, setFileSource] = useState('')
-  useEffect(() => { if (chat?.conversationId) setFileSource('WHATSAPP') }, [chat?.conversationId])
+  // The attendant's choice, if they made one; otherwise the default from the
+  // chat. Worked out while drawing, not set by an effect (derived state).
+  const [chosenSource, setChosenSource] = useState(null)
+  const fileSource = chosenSource ?? (chat?.conversationId ? 'WHATSAPP' : '')
+  const setFileSource = update =>
+    setChosenSource(update instanceof Function ? update(fileSource) : update)
   const { data: arrivals = [] } = useQuery({
     queryKey: ['arrivals'],
     queryFn: () => client.get('/api/v1/communications/arrivals/').then(r => r.data),

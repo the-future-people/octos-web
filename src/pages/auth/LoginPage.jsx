@@ -10,15 +10,13 @@ export default function LoginPage() {
 
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error,    setError]    = useState('')
-  // Signed out by a refused request: say which, once (12 Nov 2026).
-  useEffect(() => {
+  // Signed out by a refused request: say which, once (12 Nov 2026). Read as
+  // the state starts; the effect only clears it from storage afterwards.
+  const [error,    setError]    = useState(() => {
     const why = sessionStorage.getItem('signed_out_because')
-    if (why) {
-      sessionStorage.removeItem('signed_out_because')
-      setError(`You were signed out: ${why}. Sign in again.`)
-    }
-  }, [])
+    return why ? `You were signed out: ${why}. Sign in again.` : ''
+  })
+  useEffect(() => { sessionStorage.removeItem('signed_out_because') }, [])
   const [loading,  setLoading]  = useState(false)
 
   const handleSubmit = async (e) => {
