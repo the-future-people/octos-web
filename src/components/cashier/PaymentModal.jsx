@@ -42,6 +42,7 @@ const quickCash = due => [due, ...NOTES.filter(n => n > due).slice(0, 3)]
 // Each choice keeps one colour everywhere (13 Nov 2026).
 const TAG_TONES = {
   'Colour': 'bg-pink-50 text-pink-800 border-pink-200',
+  'B&W': 'bg-zinc-100 text-zinc-800 border-zinc-300',
   'One side': 'bg-indigo-50 text-indigo-800 border-indigo-200',
   'Two sides': 'bg-sky-50 text-sky-800 border-sky-200',
 }
@@ -197,23 +198,31 @@ export default function PaymentModal({ job, onClose }) {
           <div className="border border-[var(--border)] rounded-2xl overflow-hidden">
             {/* Items, numbered and described one way everywhere: jobs/services/item_lines.py
                 gives the same lines the printed and WhatsApp receipts use (13 Nov 2026). */}
-            {(job.items_display || []).map((it, i) => (
-              <div key={i} className={`flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] ${it.is_addon ? 'pl-10 bg-[var(--bg)]/40' : ''}`}>
-                {it.is_addon
-                  ? <span className="text-[var(--text-3)] text-sm font-bold w-5 text-center shrink-0" aria-hidden="true">+</span>
-                  : <span className="w-5 h-5 rounded-full bg-[var(--bg)] text-[var(--text-2)] grid place-items-center text-[11px] font-extrabold shrink-0">{it.number}</span>}
-                <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[13.5px] font-bold text-[var(--text)]">{it.name}</span>
-                  {it.count && it.count !== '1' && <span className="text-[13px] text-[var(--text-2)]">· {it.count}</span>}
-                  {it.tags.map(t => (
-                    <span key={t} className={`inline-flex items-center h-5 px-1.5 rounded-md border text-[11px] font-bold whitespace-nowrap ${tagTone(t)}`}>{t}</span>
-                  ))}
+            {(job.items_display || []).map((it, i) => {
+              const detail = it.sum || (it.count && it.count !== '1' ? it.count : '')
+              return (
+                <div key={i} className={`flex items-start gap-2.5 px-3 py-2.5 border-b border-[var(--border)] ${it.is_addon ? 'pl-10 bg-[var(--bg)]/40' : ''}`}>
+                  {it.is_addon
+                    ? <span className="text-[var(--text-3)] text-sm font-bold w-5 text-center shrink-0 leading-5" aria-hidden="true">+</span>
+                    : <span className="w-5 h-5 rounded-full bg-[var(--bg)] text-[var(--text-2)] grid place-items-center text-[11px] font-extrabold shrink-0">{it.number}</span>}
+                  <div className="min-w-0 flex-1">
+                    {/* 1. the item alone  2. its breakdown  3. its choices, side by side */}
+                    <div className="text-[13.5px] font-bold text-[var(--text)] leading-5">{it.name}</div>
+                    {detail && <div className="text-[12.5px] text-[var(--text-2)] mt-0.5">{detail}</div>}
+                    {it.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {it.tags.map(t => (
+                          <span key={t} className={`inline-flex items-center h-5 px-1.5 rounded-md border text-[11px] font-bold whitespace-nowrap ${tagTone(t)}`}>{t}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <span className="inline-flex items-center h-6 px-2 rounded-md bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono text-[12.5px] font-bold whitespace-nowrap">
+                    GHS {it.amount}
+                  </span>
                 </div>
-                <span className="inline-flex items-center h-6 px-2 rounded-md bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono text-[12.5px] font-bold whitespace-nowrap">
-                  GHS {it.amount}
-                </span>
-              </div>
-            ))}
+              )
+            })}
             {/* Older servers send no items_display: the plain list, as before. */}
             {!job.items_display && (job.line_items || []).map((li, i) => (
               <div key={i} className="flex justify-between gap-3 px-4 py-2.5 border-b border-[var(--border)] text-sm">
