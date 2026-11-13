@@ -21,7 +21,7 @@ function timeAgo(iso) {
 
 function toTitleCase(str) {
   if (!str) return str
-  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+  return (str || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
 /**
@@ -662,7 +662,7 @@ function JobDetailPanel({ jobId, onClose }) {
                       disabled={isPending}
                       className="px-3 py-2 text-xs font-bold bg-[var(--text)] text-white
                         rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40">
-                      {t.label || t.to_status.replace(/_/g, ' ')}
+                      {t.label || (t.to_status || t.to_state || '').replace(/_/g, ' ')}
                     </button>
                   ))}
                 </div>

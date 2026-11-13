@@ -22,7 +22,7 @@ import ReminderModal from '../../components/shared/ReminderModal'
 import WeeklyFilingBlock from '../../components/bm/WeeklyFilingBlock'
 import useReminders from '../../hooks/useReminders'
 import Workload from '../../components/bm/Workload'
-
+import ErrorBoundary from '../../components/shared/ErrorBoundary'
 
 const SECTIONS = [
   {
@@ -132,7 +132,7 @@ export default function BMPortal() {
             <BMInfoStrip user={user} />
             <div className="flex-1 overflow-y-auto">
               <div key={activeSection} className="animate-pageFade">
-                {renderContent()}
+<ErrorBoundary key={activeSection} onBack={() => setActiveSection('overview')}>{renderContent()}</ErrorBoundary>
               </div>
             </div>
           </main>
