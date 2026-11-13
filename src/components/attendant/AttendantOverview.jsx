@@ -33,7 +33,7 @@ const STATUS_CONFIG = {
   IN_PROGRESS:     { label: 'In Progress', bg: 'bg-violet-100',  text: 'text-violet-700'  },
 }
 
-export default function AttendantOverview({ sheet, onNavigate, onNewJob, onRegisterCustomer }) {
+export default function AttendantOverview({ sheet, onNavigate, onNewJob, onRegisterCustomer, recordingClosed = false }) {
   const { user } = useAuth()
   const sheetId  = sheet?.id
 
@@ -80,9 +80,11 @@ export default function AttendantOverview({ sheet, onNavigate, onNewJob, onRegis
 
       {/* Hero action buttons */}
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={onNewJob}
+        <button onClick={onNewJob} disabled={recordingClosed}
+          title={recordingClosed ? 'Recording has closed for today' : undefined}
           className="flex items-center gap-3 px-5 py-4 bg-[var(--text)] text-white
-            rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
+            rounded-xl font-bold text-sm hover:opacity-90 transition-opacity
+            disabled:opacity-40 disabled:cursor-not-allowed">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.5">
             <line x1="12" y1="5" x2="12" y2="19"/>
@@ -90,7 +92,7 @@ export default function AttendantOverview({ sheet, onNavigate, onNewJob, onRegis
           </svg>
           New Job
           <span className="text-white/60 text-xs font-normal ml-auto hidden sm:block">
-            Instant, production or design
+            {recordingClosed ? 'Recording closed for today' : 'Instant, production or design'}
           </span>
         </button>
         <button onClick={onRegisterCustomer}

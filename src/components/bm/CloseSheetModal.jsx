@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { closeSheet } from '../../api/bm'
+import { resolveSignOffItem } from '../../api/attendant'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -54,6 +55,46 @@ function SectionEmpty({ text }) {
   )
 }
 
+// ── An attendant's flagged answer, resolved by the BM ─────────────────────────
+// Left unpaid: the job is written off (cancelled with the reason on its log),
+// unless it has been paid since. Missing from the shelf: the BM records what
+// was found. Nothing is voided.
+function AttendantItem({ item, sheetId }) {
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => resolveSignOffItem(item.id, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['eod-summary', sheetId] }),
+    onError: (err) => setError(err.response?.data?.detail || "Couldn't resolve this. Try again."),
+  })
+  const leftUnpaid = item.answer === 'LEFT_UNPAID'
+  return (
+    <div className="px-3 py-2.5 bg-white border border-red-200 rounded-xl">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-[var(--text)] truncate">{item.job_number} · {item.title}</div>
+          <div className="text-[10px] text-red-600 font-bold">{item.answer_label}</div>
+        </div>
+        <div className="font-mono text-xs font-black text-[var(--text)] shrink-0">{fmt(item.amount)}</div>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input value={note} onChange={e => { setNote(e.target.value); setError('') }}
+          placeholder={leftUnpaid ? 'What happened' : 'Where it was found, or what was done'}
+          aria-label={`Note for ${item.job_number}`}
+          className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-white border border-[var(--border)] rounded-lg outline-none
+            focus:border-[var(--border-dark)]" />
+        <button onClick={() => { if (!note.trim()) { setError('Add a short note first.'); return } mutate() }}
+          disabled={isPending}
+          className="px-3 py-1.5 text-xs font-bold bg-[var(--text)] text-white rounded-lg disabled:opacity-40">
+          {isPending ? 'Saving…' : leftUnpaid ? 'Write off' : 'Resolve'}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-[10px] font-semibold text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
   const queryClient = useQueryClient()
   const [floats, setFloats] = useState({})
@@ -77,6 +118,8 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
   const meta           = eod?.meta               || {}
 
   const allSignedOff = cashierActivity.length === 0 || cashierActivity.every(c => c.is_signed_off)
+  const attendantSignoffs  = eod?.attendant_signoffs?.attendants || []
+  const attendantsSignedOff = eod?.attendant_signoffs ? eod.attendant_signoffs.all_signed_off : true
   const getFloat = (id) => floats[id] !== undefined ? floats[id] : '100'
   const setFloat = (id, v) => setFloats(f => ({ ...f, [id]: v }))
 
@@ -85,7 +128,7 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
     return !isNaN(v) && v >= 20 && v <= 100 && v % 5 === 0
   })
 
-  const allMet  = allSignedOff && floatsValid && ack
+  const allMet  = allSignedOff && attendantsSignedOff && floatsValid && ack
   const canClose = allMet && !isLoading
 
   const { mutate, isPending } = useMutation({
@@ -114,6 +157,7 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
 
   const handleClose = () => {
     if (!allSignedOff) { setError('Cashier must sign off before closing.'); return }
+    if (!attendantsSignedOff) { setError('Attendants must sign off before closing.'); return }
     if (!floatsValid)  { setError('Opening floats must be GHS 20–100 in multiples of GHS 5.'); return }
     if (!ack)          { setError('Please check the acknowledgement box.'); return }
     setError('')
@@ -255,6 +299,56 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </Section>
+
+            {/* ── Attendant Sign-off ── */}
+            <Section icon="🧾" title="Attendant Sign-off" color={attendantsSignedOff ? 'green' : 'red'}
+              badge={attendantsSignedOff ? '✓ All Signed Off' : 'SIGN-OFF PENDING'}
+              badgeGreen={attendantsSignedOff}>
+              {attendantSignoffs.length === 0 ? (
+                <SectionEmpty text="No attendant recorded jobs today." />
+              ) : (
+                <div className="space-y-3">
+                  {attendantSignoffs.map(a => {
+                    const b = a.buckets || {}
+                    return (
+                      <div key={a.attendant_id}
+                        className={`rounded-xl border overflow-hidden ${a.is_signed_off ? 'border-emerald-200 bg-white' : 'border-red-200 bg-red-50'}`}>
+                        <div className="flex items-center justify-between px-4 py-3">
+                          <div>
+                            <div className="text-sm font-bold text-[var(--text)]">{a.attendant_name}</div>
+                            {a.is_signed_off && (
+                              <div className="text-[10px] text-[var(--text-3)]">
+                                {b.recorded_total ?? 0} recorded · {b.paid ?? 0} paid · {b.handed_to_production ?? 0} to production · {b.unpaid_instant ?? 0} unpaid
+                              </div>
+                            )}
+                          </div>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full
+                            ${!a.is_signed_off ? 'bg-red-100 text-red-600'
+                              : a.is_auto ? 'bg-amber-100 text-amber-700'
+                              : 'bg-emerald-100 text-emerald-700'}`}>
+                            {!a.is_signed_off ? '⚠ Not signed off'
+                              : a.is_auto ? `Signed off by Octos at ${fmtTime(a.signed_off_at)}`
+                              : `✓ Signed off at ${fmtTime(a.signed_off_at)}`}
+                          </span>
+                        </div>
+                        {a.handover_note && (
+                          <div className="px-4 py-2 border-t border-[var(--border)] text-xs text-[var(--text-2)] bg-white/60">
+                            Handover: {a.handover_note}
+                          </div>
+                        )}
+                        {a.open_items?.length > 0 && (
+                          <div className="px-4 py-3 border-t border-[var(--border)] space-y-2 bg-white/40">
+                            {a.open_items.map(item => (
+                              <AttendantItem key={item.id} item={item} sheetId={sheetId} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </Section>
@@ -438,6 +532,7 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
             <div className="mb-3 flex flex-wrap gap-2">
               {[
                 { label: 'Cashier signed off', met: allSignedOff },
+                { label: 'Attendants signed off', met: attendantsSignedOff },
                 { label: 'Float set',          met: floatsValid  },
                 { label: 'BM acknowledged',    met: ack          },
               ].map(cond => (

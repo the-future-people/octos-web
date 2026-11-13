@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
  * Props:
  *   lockData   — the full lock-status response object
  *   isLocked   — boolean, role-specific "should this render at all" check
- *                (Cashier: cashier_signed_off; Attendant: !can_create_jobs)
+ *                (Cashier: cashier_signed_off; Attendant: signed off for the day)
  */
 export default function PortalLockedOverlay({ lockData, isLocked }) {
   if (!lockData) return null

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
 import useBranchSocket from '../../hooks/useBranchSocket'
 import { getLockStatus } from '../../api/bm'
+import { getSignOffStatus } from '../../api/attendant'
 import PortalLockedOverlay from '../../components/shared/PortalLockedOverlay'
 import ReminderModal from '../../components/shared/ReminderModal'
 import useReminders from '../../hooks/useReminders'
@@ -17,6 +18,8 @@ import AttendantServices   from '../../components/attendant/AttendantServices'
 import AttendantInbox      from '../../components/attendant/AttendantInbox'
 import AttendantCollect    from '../../components/attendant/AttendantCollect'
 import ClaimStrip          from '../../components/attendant/ClaimStrip'
+import SignOffBanner       from '../../components/attendant/SignOffBanner'
+import AttendantSignOffWizard from '../../components/attendant/AttendantSignOffWizard'
 import Inbox               from '../../components/bm/Inbox'
 import NewJobModal         from '../../components/bm/NewJobModal'
 import NewCustomerModal    from '../../components/bm/NewCustomerModal'
@@ -87,6 +90,7 @@ export default function AttendantPortal() {
   const [mobileOpen,    setMobileOpen]    = useState(false)
   const [showNewJob,    setShowNewJob]    = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
+  const [showSignOff,   setShowSignOff]   = useState(false)
 
   const { data: sheet } = useQuery({
     queryKey: ['sheet-today'],
@@ -95,9 +99,8 @@ export default function AttendantPortal() {
     retry: false,
   })
 
-  // Poll branch lock status — drives the Sunday/holiday/shift-locked overlay.
-  // Attendants have no sign-off action yet, so their lock is purely
-  // time-based: can_create_jobs flips false once job_lock_at passes.
+  // Poll branch lock status — drives the Sunday/holiday overlay and tells us
+  // when recording has closed (can_create_jobs flips at job_lock_at).
   const { data: lockData } = useQuery({
     queryKey: ['lockStatus'],
     queryFn:  () => getLockStatus().then(r => r.data),
@@ -105,8 +108,20 @@ export default function AttendantPortal() {
     staleTime: 0,
   })
 
-  const isTimeLocked = lockData ? !lockData.can_create_jobs : false
-  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isTimeLocked
+  // The attendant's end of day (13 Nov 2026): phase, times, and whether she
+  // has signed off. Recording closing no longer locks the portal; only
+  // signing off does, so she can still answer customers and sign off.
+  const { data: signOff } = useQuery({
+    queryKey: ['attendantSignoff'],
+    queryFn:  () => getSignOffStatus().then(r => r.data),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  })
+
+  const recordingClosed  = lockData ? !lockData.can_create_jobs : false
+  const isSignedOff      = !!signOff?.is_signed_off
+  const canSignOff       = !!signOff?.can_sign_off
+  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff
   const reminder = useReminders()
   // The inbox's badge on the menu: unread chats, and chats that need a person.
   const badge = useInboxBadge()
@@ -126,6 +141,7 @@ export default function AttendantPortal() {
           onNavigate={handleNav}
           onNewJob={() => setShowNewJob(true)}
           onRegisterCustomer={() => setShowNewCustomer(true)}
+          recordingClosed={recordingClosed}
         />
       )
       case 'collect':     return <AttendantCollect />
@@ -140,6 +156,7 @@ export default function AttendantPortal() {
           onNavigate={handleNav}
           onNewJob={() => setShowNewJob(true)}
           onRegisterCustomer={() => setShowNewCustomer(true)}
+          recordingClosed={recordingClosed}
         />
       )
     }
@@ -271,6 +288,9 @@ export default function AttendantPortal() {
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             {/* Files arriving now: above every page, drawn only when someone is waiting */}
             {!showPortalLocked && <ClaimStrip />}
+            {!showPortalLocked && (
+              <SignOffBanner status={signOff} onStart={() => setShowSignOff(true)} />
+            )}
             <div className="flex-1 overflow-y-auto">
               <div key={page} className="animate-pageFade">
                 {renderPage()}
@@ -281,25 +301,40 @@ export default function AttendantPortal() {
         </div>
       </div>
 
-      {/* Portal lock — Sunday, holiday, or past job_lock_at. Takes
+      {/* Portal lock — Sunday, holiday, or signed off for the day. Takes
           priority over everything else on this portal. */}
       {showPortalLocked && (
-        <PortalLockedOverlay lockData={lockData} isLocked={isTimeLocked} />
+        <PortalLockedOverlay lockData={lockData} isLocked={isSignedOff} />
       )}
 
       {/* Harmonized reminder system — same hook/component as every
-          other portal. Attendants get shift-ending reminders (7pm)
-          and personal-notes checkpoints, nothing bespoke needed here. */}
-      {!showPortalLocked && reminder.hasReminder && (
+          other portal. Attendants get the half-hour shift-ending
+          reminders, then "minutes left to sign off" with a way into
+          sign-off, and personal-notes checkpoints. */}
+      {!showPortalLocked && !showSignOff && reminder.hasReminder && (
         <ReminderModal
           reminder={reminder.current}
           onDismiss={reminder.dismiss}
           isDismissing={reminder.isDismissing}
+          onSignOff={
+            reminder.current?.link === 'signoff' && canSignOff
+              ? () => setShowSignOff(true)
+              : undefined
+          }
         />
       )}
 
-      {/* Modals — lifted to portal level */}
-      {!showPortalLocked && showNewJob && (
+      {!showPortalLocked && showSignOff && canSignOff && (
+        <AttendantSignOffWizard
+          firstName={user?.first_name}
+          onClose={() => setShowSignOff(false)}
+          onLogout={logout}
+        />
+      )}
+
+      {/* Modals — lifted to portal level. No new job once recording has
+          closed; the server refuses it too. */}
+      {!showPortalLocked && !recordingClosed && showNewJob && (
         <NewJobModal
           onClose={() => setShowNewJob(false)}
           onSuccess={() => setShowNewJob(false)}
