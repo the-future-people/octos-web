@@ -35,6 +35,10 @@ const ICON = {
   check: <path d="M20 6 9 17l-5-5" />,
   x: <><path d="M18 6 6 18" /><path d="M6 6l12 12" /></>,
 }
+// Exact, then the next three cedi notes a customer is likely to hand over.
+const NOTES = [5, 10, 20, 50, 100, 200]
+const quickCash = due => [due, ...NOTES.filter(n => n > due).slice(0, 3)]
+
 const MAIN = [{ id: 'CASH', label: 'Cash' }, { id: 'MOMO', label: 'MoMo' }, { id: 'POS', label: 'Card (POS)' }]
 const WORD = { CASH: 'cash', MOMO: 'MoMo', POS: 'by card', WALLET: 'from their wallet', SPLIT: 'split' }
 
@@ -144,6 +148,7 @@ export default function PaymentModal({ job, onClose }) {
   if (receipt) return <ReceiptModal result={receipt} onClose={onClose} waStatus={waStatus} />
 
   const confirmText = (() => {
+    if (method === 'CASH' && cash === '') return 'Enter the cash received'
     if (method === 'CASH' && short) return `${fmt(amountDue - given)} short of the amount`
     let t = `Confirm ${fmt(amountDue)} ${WORD[method]}`
     if (method === 'CASH' && change > 0) t += changeAction === 'WALLET' ? ` · ${fmt(change)} to their wallet` : ` · give ${fmt(change)} change`
@@ -186,7 +191,8 @@ export default function PaymentModal({ job, onClose }) {
               <div key={i} className="flex justify-between gap-3 px-4 py-2.5 border-b border-[var(--border)] text-sm">
                 <span className="min-w-0 truncate">
                   {li.quantity} × {li.label || li.service_name}
-                  <span className="text-[var(--text-3)]"> · {li.pages}pp, {li.is_color ? 'colour' : 'B&W'}</span>
+                  {/* The label already carries pages and colour; add them only when there is none. */}
+                  {!li.label && li.pages ? <span className="text-[var(--text-3)]"> · {li.pages}pp, {li.is_color ? 'colour' : 'B&W'}</span> : null}
                 </span>
                 <span className="font-mono font-bold">{fmt(li.line_total)}</span>
               </div>
@@ -242,10 +248,10 @@ export default function PaymentModal({ job, onClose }) {
                        onChange={e => setCash(e.target.value)} placeholder="0.00"
                        className="w-full h-[52px] px-3.5 border-2 border-[var(--text)] rounded-xl font-mono text-[22px] font-bold outline-none" />
                 <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {[['Exact', amountDue], ['50', 50], ['100', 100], ['200', 200]].filter(([, v]) => v >= amountDue).map(([t, v]) => (
-                    <button key={t} type="button" onClick={() => setCash(Number(v).toFixed(2))}
+                  {quickCash(amountDue).map(v => (
+                    <button key={v} type="button" onClick={() => setCash(Number(v).toFixed(2))}
                             className="h-8 px-3 rounded-full border border-black/15 bg-white font-mono text-[13px] font-bold">
-                      {t === 'Exact' ? 'Exact' : `GHS ${t}`}
+                      {v === amountDue ? 'Exact' : `GHS ${v}`}
                     </button>
                   ))}
                 </div>
