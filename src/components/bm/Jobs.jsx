@@ -1,4 +1,5 @@
 ﻿// src/components/bm/Jobs.jsx
+import JobFile from './JobFile'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
@@ -556,7 +557,8 @@ function ReceiptInvoiceSection({ job }) {
   )
 }
 
-function JobDetailPanel({ jobId, onClose }) {
+// Replaced by JobFile (13 Nov 2026); kept for one release, then removed.
+export function JobDetailPanel({ jobId, onClose }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
 
@@ -996,7 +998,7 @@ const TYPE_FILTERS = [
   { value: 'DESIGN',     label: 'Design'     },
 ]
 
-export default function Jobs({ focus = null } = {}) {
+export default function Jobs({ focus = null, onOpenChat } = {}) {
   const [tab, setTab] = useState('jobs')
   const [queue, setQueue] = useState('ALL')
   const [jobType, setJobType] = useState('ALL')
@@ -1224,7 +1226,7 @@ export default function Jobs({ focus = null } = {}) {
             </>
           )}
           {selectedId && (
-            <JobDetailPanel jobId={selectedId} onClose={() => setSelectedId(null)} />
+            <JobFile jobId={selectedId} onClose={() => setSelectedId(null)} onOpenChat={onOpenChat} />
           )}
         </div>
       )}

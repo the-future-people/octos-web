@@ -85,7 +85,8 @@ export default function BMPortal() {
       case 'overdue':   return <Workload view={activeSection} onNavigate={handleNav}
                                  onOpenJob={id => { setFocus({ section: 'jobs', id, at: Date.now() }); setActiveSection('jobs') }} />
       case 'daysheet': return <DaySheet />
-      case 'jobs':       return <Jobs focus={focus?.section === 'jobs' ? focus : null} />
+      case 'jobs':       return <Jobs focus={focus?.section === 'jobs' ? focus : null}
+                                 onOpenChat={id => { setFocus({ section: 'inbox', id, at: Date.now() }); setActiveSection('inbox') }} />
       case 'proformas':  return <ProformasTab />
       case 'customers':  return <Customers />
       case 'reports':    return <Reports />
