@@ -9,6 +9,7 @@ import InfoStrip from '../../components/cashier/InfoStrip'
 import SummaryStrip from '../../components/cashier/SummaryStrip'
 import PaymentQueue from '../../components/cashier/PaymentQueue'
 import MyShift from '../../components/cashier/MyShift'
+import ErrorBoundary from '../../components/shared/ErrorBoundary'
 import Balances from '../../components/cashier/Balances'
 import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
@@ -250,9 +251,11 @@ export default function CashierPortal() {
               </div>
             )}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-              {activeTab === 'queue'    && <PaymentQueue />}
-              {activeTab === 'shift'    && <MyShift onSignOff={floatId && !isSignedOff ? () => setShowSignOff(true) : undefined} />}
-              {activeTab === 'credit'   && <Balances />}
+              <ErrorBoundary key={activeTab} onBack={() => setActiveTab('queue')}>
+                {activeTab === 'queue'    && <PaymentQueue />}
+                {activeTab === 'shift'    && <MyShift onSignOff={floatId && !isSignedOff ? () => setShowSignOff(true) : undefined} />}
+                {activeTab === 'credit'   && <Balances />}
+              </ErrorBoundary>
             </div>
           </div>
 
