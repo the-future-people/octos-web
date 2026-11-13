@@ -9,7 +9,7 @@ import InfoStrip from '../../components/cashier/InfoStrip'
 import SummaryStrip from '../../components/cashier/SummaryStrip'
 import PaymentQueue from '../../components/cashier/PaymentQueue'
 import MyShift from '../../components/cashier/MyShift'
-import CreditAccounts from '../../components/cashier/CreditAccounts'
+import Balances from '../../components/cashier/Balances'
 import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
 import SignOffWizard from '../../components/cashier/SignOffWizard'
@@ -37,8 +37,8 @@ const TABS = [
     icon: tabIcon(<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>),
   },
   {
-    id: 'credit', label: 'Credit Accounts', section: 'COLLECTIONS',
-    icon: tabIcon(<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />),
+    id: 'credit', label: 'Balances', section: 'COLLECTIONS',
+    icon: tabIcon(<><path d="M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z" /><path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z" /><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" /></>),
   },
 ]
 
@@ -252,7 +252,7 @@ export default function CashierPortal() {
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {activeTab === 'queue'    && <PaymentQueue />}
               {activeTab === 'shift'    && <MyShift onSignOff={floatId && !isSignedOff ? () => setShowSignOff(true) : undefined} />}
-              {activeTab === 'credit'   && <CreditAccounts />}
+              {activeTab === 'credit'   && <Balances />}
             </div>
           </div>
 

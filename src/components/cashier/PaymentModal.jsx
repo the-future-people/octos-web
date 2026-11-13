@@ -54,9 +54,11 @@ const WORD = { CASH: 'cash', MOMO: 'MoMo', POS: 'by card', WALLET: 'from their w
 const label = 'block text-[11px] font-extrabold tracking-wider text-[var(--text-2)] mb-1.5'
 const field = 'w-full h-10 px-3 bg-white border border-black/20 rounded-xl text-[14px] outline-none focus:border-black'
 
-export default function PaymentModal({ job, onClose }) {
+export default function PaymentModal({ job, onClose, mode = 'payment' }) {
   const queryClient = useQueryClient()
   const production = job?.job_type === 'PRODUCTION' || job?.job_type === 'DESIGN'
+  // 'balance': the rest of a deposit-paid job, taken at pickup (13 Nov 2026).
+  const balanceMode = mode === 'balance'
 
   // Fresh state for every job: the queue mounts one modal per job opened.
   const [deposit, setDeposit] = useState(production ? (job?.deposit_percentage || 70) : 100)
@@ -80,7 +82,7 @@ export default function PaymentModal({ job, onClose }) {
   const [waStatus, setWaStatus] = useState(null)
 
   const total = parseFloat(job?.estimated_cost || 0)
-  const amountDue = total * deposit / 100
+  const amountDue = balanceMode ? parseFloat(job?.balance_due || 0) : total * deposit / 100
   const given = parseFloat(cash || 0)
   const change = method === 'CASH' ? Math.max(0, given - amountDue) : 0
   const short = method === 'CASH' && cash !== '' && given < amountDue
@@ -93,7 +95,9 @@ export default function PaymentModal({ job, onClose }) {
   const split2Amount = Math.max(0, amountDue - parseFloat(splitAmount1 || 0)).toFixed(2)
 
   const { mutate, isPending } = useMutation({
-    mutationFn: payload => confirmPayment(job.id, payload),
+    mutationFn: payload => (balanceMode
+      ? client.post(`/api/v1/jobs/${job.id}/cashier/balance/`, payload)
+      : confirmPayment(job.id, payload)),
     onSuccess: res => {
       invalidateAfterPaymentConfirmed(queryClient)
       setReceipt(res.data)
@@ -127,7 +131,7 @@ export default function PaymentModal({ job, onClose }) {
   const submit = () => {
     setError('')
     const body = {
-      deposit_percentage: deposit,
+      ...(balanceMode ? {} : { deposit_percentage: deposit }),
       payment_method: method,
       company_name: company || undefined,
       customer_phone: phone || undefined,
@@ -181,7 +185,7 @@ export default function PaymentModal({ job, onClose }) {
                 </span>
               )}
               <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${production ? 'bg-amber-50 text-amber-800' : 'bg-indigo-50 text-indigo-800'}`}>
-                {production ? 'PRODUCTION' : 'COUNTER SALE'}
+                {balanceMode ? 'BALANCE AT PICKUP' : production ? 'PRODUCTION' : 'COUNTER SALE'}
               </span>
             </div>
             <div className="text-[13px] text-[var(--text-3)] mt-1">
@@ -233,10 +237,12 @@ export default function PaymentModal({ job, onClose }) {
             <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[var(--bg)]">
               <div>
                 <div className="text-[11.5px] font-extrabold tracking-wider text-[var(--text-2)]">TO COLLECT</div>
-                {production && <div className="text-xs text-[var(--text-3)]">{deposit}% of {fmt(total)} · balance {fmt(total - amountDue)} at pickup</div>}
+                {balanceMode
+                  ? <div className="text-xs text-[var(--text-3)]">{fmt(job.amount_paid)} deposit paid of {fmt(total)} · this settles it</div>
+                  : production && <div className="text-xs text-[var(--text-3)]">{deposit}% of {fmt(total)} · balance {fmt(total - amountDue)} at pickup</div>}
               </div>
               <div className="flex items-center gap-3">
-                {production && (
+                {production && !balanceMode && (
                   <div className="flex gap-1.5">
                     {[70, 100].map(pct => (
                       <button key={pct} type="button" onClick={() => setDeposit(pct)} aria-pressed={deposit === pct}
