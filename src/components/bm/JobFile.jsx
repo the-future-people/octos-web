@@ -5,9 +5,11 @@
 // who and when. Built on GET /jobs/<id>/file/ (apps/jobs/services/job_file.py).
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
-import { createInvoice, getJobInvoices, getInvoicePdfUrl, sendInvoice } from '../../api/bm'
+import { createInvoice, getInvoicePdfUrl, sendInvoice } from '../../api/bm'
+import { fileQuery, invoicesQuery } from './jobFileQuery'
 
 const fmt = v => `GHS ${parseFloat(v || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 const when = iso => (iso ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) : '—')
@@ -83,16 +85,8 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
   const [note, setNote] = useState({ text: '', bad: false })
   const say = (text, bad = false) => setNote({ text, bad })
 
-  const { data: file, isLoading, error } = useQuery({
-    queryKey: ['job-file', jobId],
-    queryFn: () => client.get(`/api/v1/jobs/${jobId}/file/`).then(r => r.data),
-    enabled: !!jobId,
-  })
-  const { data: invData } = useQuery({
-    queryKey: ['job-invoices', jobId],
-    queryFn: () => getJobInvoices(jobId).then(r => r.data),
-    enabled: !!jobId,
-  })
+  const { data: file, isLoading, error } = useQuery({ ...fileQuery(jobId), enabled: !!jobId })
+  const { data: invData } = useQuery({ ...invoicesQuery(jobId), enabled: !!jobId })
   const invoices = Array.isArray(invData) ? invData : (invData?.results || [])
   const invoice = invoices[0] || null
 
@@ -132,10 +126,12 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
   const promised = f.promised || f.deadline
   const onTime = promised && f.ready_at ? (new Date(f.ready_at) <= new Date(promised) ? 'on time' : 'late') : ''
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+  // Drawn at the top of the page (a portal), so the overlay covers everything,
+  // the top bar included; a fixed height, so switching tabs never resizes it.
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <section aria-label="Job" onClick={e => e.stopPropagation()}
-               className="w-full max-w-[760px] max-h-[94vh] bg-[var(--bg)] rounded-[22px] shadow-2xl flex flex-col overflow-hidden">
+               className="w-full max-w-[760px] h-[min(820px,94vh)] bg-[var(--bg)] rounded-[22px] shadow-2xl flex flex-col overflow-hidden">
         <div className="bg-[var(--panel)] px-5 py-4 border-b border-[var(--border)] flex gap-3 items-start">
           <div className="flex-1 min-w-0">
             <div className="font-mono text-[13px] text-[var(--text-3)]">{file?.job_number || '…'}</div>
@@ -157,6 +153,16 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3.5">
           {error && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">{error?.response?.data?.detail || 'This job could not be loaded.'}</div>}
+          {isLoading && (
+            // Placeholder shapes at the real sizes: clearly loading, never frozen.
+            <div className="space-y-3.5 animate-pulse" aria-hidden="true">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[0, 1, 2, 3, 4, 5].map(i => <div key={i} className="h-[66px] rounded-xl bg-black/[0.06]" />)}
+              </div>
+              <div className="h-12 rounded-xl bg-black/[0.06]" />
+              <div className="h-40 rounded-2xl bg-black/[0.06]" />
+            </div>
+          )}
           {file && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -281,6 +287,7 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
           {note.text && <span className={`text-[12.5px] font-semibold ${note.bad ? 'text-red-600' : 'text-emerald-700'}`}>{note.text}</span>}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

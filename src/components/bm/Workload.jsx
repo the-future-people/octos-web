@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
+import { usePrefetchJobFile } from './jobFileQuery'
 
 const VIEWS = [
   { id: 'pending_payment',   label: 'Pending payment',   blurb: 'Recorded and waiting for the cashier. Oldest first.' },
@@ -61,6 +62,7 @@ export default function Workload({ view = 'pending_payment', onNavigate, onOpenJ
   const [type, setType] = useState('All')
   const meta = VIEWS.find(v => v.id === view) || VIEWS[0]
   const queryClient = useQueryClient()
+  const prefetchJob = usePrefetchJobFile()
 
   // Marking collected (Ready for pickup only): one row open at a time, with a reason.
   const [marking, setMarking] = useState(null)      // { id, reason, note, error }
@@ -185,7 +187,8 @@ export default function Workload({ view = 'pending_payment', onNavigate, onOpenJ
                           className="h-8 px-3 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">Mark collected</button>
                 )}
                 {/* Open goes to this job, not the list (13 Nov 2026). */}
-                <button type="button" onClick={() => (onOpenJob ? onOpenJob(r.id) : onNavigate?.('jobs'))}
+                <button type="button" onMouseEnter={() => prefetchJob(r.id)} onFocus={() => prefetchJob(r.id)}
+                        onClick={() => (onOpenJob ? onOpenJob(r.id) : onNavigate?.('jobs'))}
                         className="h-8 px-3 rounded-lg border border-[var(--border)] text-[12.5px] font-semibold hover:border-black/30">Open</button>
               </span>
             </div>

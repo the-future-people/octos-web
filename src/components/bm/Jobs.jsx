@@ -1,5 +1,6 @@
 ﻿// src/components/bm/Jobs.jsx
 import JobFile from './JobFile'
+import { usePrefetchJobFile } from './jobFileQuery'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
@@ -1006,6 +1007,7 @@ export default function Jobs({ focus = null, onOpenChat } = {}) {
   const [page, setPage] = useState(1)
   // Opened from a workload page: start with that job's panel open (13 Nov 2026).
   const [selectedId, setSelectedId] = useState(focus?.id ?? null)
+  const prefetchJob = usePrefetchJobFile()
 
   const { data: statsData } = useQuery({
     queryKey: ['jobStats', period, jobType],
@@ -1159,7 +1161,7 @@ export default function Jobs({ focus = null, onOpenChat } = {}) {
               <div className="space-y-1.5">
                 {jobs.map(job => (
                   <div key={job.id}
-                    onClick={() => setSelectedId(job.id)}
+                    onMouseEnter={() => prefetchJob(job.id)} onClick={() => setSelectedId(job.id)}
                     className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
                       px-4 py-3 cursor-pointer hover:border-[var(--border-dark)] transition-colors">
                     <div className="flex items-center justify-between sm:hidden">
