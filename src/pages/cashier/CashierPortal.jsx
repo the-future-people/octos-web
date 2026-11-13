@@ -1,15 +1,14 @@
 // src/pages/cashier/CashierPortal.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import useBranchSocket from '../../hooks/useBranchSocket'
-import { getShiftStatus } from '../../api/cashier'
+import { getShiftStatus, getPaymentQueue } from '../../api/cashier'
 import CashierTopbar from '../../components/cashier/CashierTopbar'
 import InfoStrip from '../../components/cashier/InfoStrip'
 import SummaryStrip from '../../components/cashier/SummaryStrip'
 import PaymentQueue from '../../components/cashier/PaymentQueue'
-import Receipts from '../../components/cashier/Receipts'
-import TodaysLog from '../../components/cashier/TodaysLog'
+import MyShift from '../../components/cashier/MyShift'
 import CreditAccounts from '../../components/cashier/CreditAccounts'
 import FloatAcknowledgeModal from '../../components/cashier/FloatAcknowledgeModal'
 import IntakeHeldModal from '../../components/cashier/IntakeHeldModal'
@@ -20,48 +19,26 @@ import DailyGreeting from '../../components/layout/DailyGreeting'
 import useReminders from '../../hooks/useReminders'
 import { getLockStatus } from '../../api/bm'
 
+// Outline icons, in the redesign's style (13 Nov 2026).
+const tabIcon = d => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+)
+
+// Receipts and Today's Log were two views of the same thing: both now live in
+// My shift, with the drawer and the cashier's own numbers (13 Nov 2026).
 const TABS = [
   {
-    id: 'queue', label: 'Payment Queue', section: 'STATION',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="2" y="3" width="20" height="14" rx="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="17" x2="12" y2="21"/>
-      </svg>
-    ),
+    id: 'queue', label: 'Payment queue', section: 'STATION',
+    icon: tabIcon(<><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01" /></>),
   },
   {
-    id: 'receipts', label: 'Receipts', section: 'STATION',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'log', label: "Today's Log", section: 'STATION',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <line x1="8" y1="6" x2="21" y2="6"/>
-        <line x1="8" y1="12" x2="21" y2="12"/>
-        <line x1="8" y1="18" x2="21" y2="18"/>
-        <line x1="3" y1="6" x2="3.01" y2="6"/>
-        <line x1="3" y1="12" x2="3.01" y2="12"/>
-        <line x1="3" y1="18" x2="3.01" y2="18"/>
-      </svg>
-    ),
+    id: 'shift', label: 'My shift', section: 'STATION',
+    icon: tabIcon(<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>),
   },
   {
     id: 'credit', label: 'Credit Accounts', section: 'COLLECTIONS',
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-    ),
+    icon: tabIcon(<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />),
   },
 ]
 
@@ -75,7 +52,7 @@ export default function CashierPortal() {
   const [deferUntil,         setDeferUntil]          = useState(0)
   const reminder = useReminders()
 
-  // Poll shift status every 60s
+  // Poll shift status every 30s
   const { data: shiftData } = useQuery({
     queryKey: ['shiftStatus'],
     queryFn:  () => getShiftStatus().then(r => r.data),
@@ -116,26 +93,19 @@ export default function CashierPortal() {
   // Show intake-held modal — only after float is acknowledged, per
   // business rule: float comes first (near-certain, daily), intake-held
   // resolution second (conditional, only when overnight jobs exist).
-  // Must also respect showPortalLocked — otherwise a job left unresolved
-  // in the morning keeps rendering this modal all the way into an
-  // active evening lock, since intakeHeldPending never resets on its own.
-  // Starts false. Assuming a handover exists until proven otherwise blocks
-  // the sign-off wizard (which requires !showIntakeHeld) for as long as
-  // IntakeHeldModal's fetch takes, and flashes the modal on every mount.
-  // IntakeHeldModal reports what it actually finds via onPendingChange.
+  // Must also respect showPortalLocked. Starts false: IntakeHeldModal
+  // reports what it actually finds via onPendingChange.
   const [intakeHeldPending, setIntakeHeldPending] = useState(false)
   const showIntakeHeld = !showFloatAck && !showPortalLocked && intakeHeldPending
 
-    // Auto-trigger sign-off when time is up (shouldLock) or PENDING_SIGNOFF.
-  // should_lock stays true for the rest of the evening, so without
-  // deferUntil the wizard reopens the moment she closes it.
-  useEffect(() => {
-    if ((shouldLock || floatStatus === 'PENDING_SIGNOFF') && !showSignOff && floatId && !isSignedOff && !deferUntil) {
-      setShowSignOff(true)
-    }
-  }, [shouldLock, floatStatus, floatId, showSignOff, isSignedOff, deferUntil])
+  // Sign-off opens when she asks for it, or by itself when time is up
+  // (shouldLock) or the float awaits sign-off. Worked out while drawing,
+  // not set by an effect (13 Nov 2026). should_lock stays true all evening,
+  // so "later" (deferUntil) hides it for 15 minutes, then it comes back.
+  const signOffDue = (shouldLock || floatStatus === 'PENDING_SIGNOFF') && !!floatId && !isSignedOff && !deferUntil
+  const signOffOpen = showSignOff || signOffDue
 
-  // Clearing the deferral re-runs the effect above, which reopens the wizard.
+  // Clearing the deferral makes sign-off due again, which reopens the wizard.
   // The shift reminder keeps firing every five minutes in the meantime, so
   // sign-off can be postponed but not forgotten.
   useEffect(() => {
@@ -151,16 +121,14 @@ export default function CashierPortal() {
 
   // Fetch pending job count for sign-off step 1
   useEffect(() => {
-    if (showSignOff && shiftData?.sheet_id) {
-      import('../../api/cashier').then(({ getPaymentQueue }) => {
-        getPaymentQueue().then(r => {
-          const data = r.data
-          const items = Array.isArray(data) ? data : (data?.results || [])
-          setPendingJobs(items.length)
-        }).catch(() => setPendingJobs(0))
-      })
+    if (signOffOpen && shiftData?.sheet_id) {
+      getPaymentQueue().then(r => {
+        const data = r.data
+        const items = Array.isArray(data) ? data : (data?.results || [])
+        setPendingJobs(items.length)
+      }).catch(() => setPendingJobs(0))
     }
-  }, [showSignOff, shiftData?.sheet_id])
+  }, [signOffOpen, shiftData?.sheet_id])
 
   const handleTabClick = (id) => {
     setActiveTab(id)
@@ -283,8 +251,7 @@ export default function CashierPortal() {
             )}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {activeTab === 'queue'    && <PaymentQueue />}
-              {activeTab === 'receipts' && <Receipts />}
-              {activeTab === 'log'      && <TodaysLog />}
+              {activeTab === 'shift'    && <MyShift onSignOff={floatId && !isSignedOff ? () => setShowSignOff(true) : undefined} />}
               {activeTab === 'credit'   && <CreditAccounts />}
             </div>
           </div>
@@ -321,7 +288,7 @@ export default function CashierPortal() {
           Backend Celery task generates these; this just displays whatever
           useReminders() surfaces, identically across all three portals. */}
       {!showPortalLocked && reminder.hasReminder && (
-                <ReminderModal
+        <ReminderModal
           reminder={reminder.current}
           onDismiss={reminder.dismiss}
           isDismissing={reminder.isDismissing}
@@ -341,7 +308,7 @@ export default function CashierPortal() {
       {/* Sign-off wizard — triggered at shift end or PENDING_SIGNOFF.
           Owns its own success message, countdown, and real logout
           internally — no separate overlay or bridging state needed. */}
-      {!showPortalLocked && showSignOff && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
+      {!showPortalLocked && signOffOpen && !showFloatAck && !showIntakeHeld && floatId && !isSignedOff && (
         <SignOffWizard
           floatId={floatId}
           expectedCash={expectedCash}
