@@ -42,8 +42,8 @@ const quickCash = due => [due, ...NOTES.filter(n => n > due).slice(0, 3)]
 const MAIN = [{ id: 'CASH', label: 'Cash' }, { id: 'MOMO', label: 'MoMo' }, { id: 'POS', label: 'Card (POS)' }]
 const WORD = { CASH: 'cash', MOMO: 'MoMo', POS: 'by card', WALLET: 'from their wallet', SPLIT: 'split' }
 
-const label = 'block text-[11.5px] font-extrabold tracking-wider text-[var(--text-2)] mb-2'
-const field = 'w-full h-12 px-3.5 bg-white border border-black/20 rounded-xl text-[15px] outline-none focus:border-black'
+const label = 'block text-[11px] font-extrabold tracking-wider text-[var(--text-2)] mb-1.5'
+const field = 'w-full h-10 px-3 bg-white border border-black/20 rounded-xl text-[14px] outline-none focus:border-black'
 
 export default function PaymentModal({ job, onClose }) {
   const queryClient = useQueryClient()
@@ -160,12 +160,12 @@ export default function PaymentModal({ job, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
-      <section aria-label="Take payment" className="bg-[var(--panel)] rounded-[22px] shadow-2xl w-full max-w-[580px] max-h-[94vh] flex flex-col overflow-hidden">
+      <section aria-label="Take payment" className="bg-[var(--panel)] rounded-[22px] shadow-2xl w-full max-w-[500px] max-h-[94vh] flex flex-col overflow-hidden">
 
-        <div className="px-6 pt-5 pb-4 border-b border-[var(--border)] flex gap-3 items-start">
+        <div className="px-5 pt-4 pb-3 border-b border-[var(--border)] flex gap-3 items-start">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-[21px] font-extrabold text-[var(--text)]">{job.for_whom || job.customer_name || 'Walk-in'}</h2>
+              <h2 className="text-[18px] font-extrabold text-[var(--text)]">{job.for_whom || job.customer_name || 'Walk-in'}</h2>
               {job.from_chat && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800">
                   <Icon d={ICON.chat} size={12} width={2} />WhatsApp
@@ -180,12 +180,12 @@ export default function PaymentModal({ job, onClose }) {
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close"
-                  className="w-11 h-11 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--text-2)] hover:bg-[var(--bg)]">
+                  className="w-10 h-10 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--text-2)] hover:bg-[var(--bg)]">
             <Icon d={ICON.x} size={18} />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+        <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
           <div className="border border-[var(--border)] rounded-2xl overflow-hidden">
             {(job.line_items || []).map((li, i) => (
               <div key={i} className="flex justify-between gap-3 px-4 py-2.5 border-b border-[var(--border)] text-sm">
@@ -197,7 +197,7 @@ export default function PaymentModal({ job, onClose }) {
                 <span className="font-mono font-bold">{fmt(li.line_total)}</span>
               </div>
             ))}
-            <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-[var(--bg)]">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[var(--bg)]">
               <div>
                 <div className="text-[11.5px] font-extrabold tracking-wider text-[var(--text-2)]">TO COLLECT</div>
                 {production && <div className="text-xs text-[var(--text-3)]">{deposit}% of {fmt(total)} · balance {fmt(total - amountDue)} at pickup</div>}
@@ -207,11 +207,11 @@ export default function PaymentModal({ job, onClose }) {
                   <div className="flex gap-1.5">
                     {[70, 100].map(pct => (
                       <button key={pct} type="button" onClick={() => setDeposit(pct)} aria-pressed={deposit === pct}
-                              className={`h-9 px-3 rounded-lg text-sm font-bold border ${on(deposit === pct)}`}>{pct}%</button>
+                              className={`h-8 px-2.5 rounded-lg text-[13px] font-bold border ${on(deposit === pct)}`}>{pct}%</button>
                     ))}
                   </div>
                 )}
-                <span className="font-mono text-[26px] font-bold text-[var(--text)]">{fmt(amountDue)}</span>
+                <span className="font-mono text-[21px] font-bold text-[var(--text)]">{fmt(amountDue)}</span>
               </div>
             </div>
           </div>
@@ -221,20 +221,20 @@ export default function PaymentModal({ job, onClose }) {
             <div className="grid grid-cols-3 gap-2">
               {MAIN.map(m => (
                 <button key={m.id} type="button" onClick={() => setMethod(m.id)} aria-pressed={method === m.id}
-                        className={`h-16 rounded-2xl border font-bold text-[14.5px] flex flex-col items-center justify-center gap-1 transition-colors ${on(method === m.id)}`}>
-                  <Icon d={ICON[m.id]} size={22} />{m.label}
+                        className={`h-[52px] rounded-xl border font-bold text-[13px] flex flex-col items-center justify-center gap-1 transition-colors ${on(method === m.id)}`}>
+                  <Icon d={ICON[m.id]} size={18} />{m.label}
                 </button>
               ))}
             </div>
             <div className="flex gap-2 mt-2 flex-wrap">
               <button type="button" onClick={() => canRedeemWallet && setMethod('WALLET')} disabled={!canRedeemWallet} aria-pressed={method === 'WALLET'}
-                      className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[13px] font-semibold border
+                      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold border
                         ${method === 'WALLET' ? 'bg-[var(--text)] text-white border-[var(--text)]'
                           : canRedeemWallet ? 'bg-white border-black/15' : 'bg-white border-dashed border-black/20 text-[var(--text-3)]'}`}>
                 <Icon d={ICON.WALLET} size={15} />Wallet{canRedeemWallet ? ` · ${fmt(walletBalance)}` : ` · ${walletWhy}`}
               </button>
               <button type="button" onClick={() => setMethod('SPLIT')} aria-pressed={method === 'SPLIT'}
-                      className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[13px] font-semibold border ${on(method === 'SPLIT')}`}>
+                      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold border ${on(method === 'SPLIT')}`}>
                 <Icon d={ICON.SPLIT} size={15} />Split
               </button>
             </div>
@@ -246,21 +246,21 @@ export default function PaymentModal({ job, onClose }) {
                 <label htmlFor="cash-in" className={label}>CASH RECEIVED</label>
                 <input id="cash-in" type="number" min="0" step="0.01" inputMode="decimal" value={cash}
                        onChange={e => setCash(e.target.value)} placeholder="0.00"
-                       className="w-full h-[52px] px-3.5 border-2 border-[var(--text)] rounded-xl font-mono text-[22px] font-bold outline-none" />
+                       className="w-full h-11 px-3 border-2 border-[var(--text)] rounded-xl font-mono text-[18px] font-bold outline-none" />
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {quickCash(amountDue).map(v => (
                     <button key={v} type="button" onClick={() => setCash(Number(v).toFixed(2))}
-                            className="h-8 px-3 rounded-full border border-black/15 bg-white font-mono text-[13px] font-bold">
+                            className="h-7 px-2.5 rounded-full border border-black/15 bg-white font-mono text-[12px] font-bold">
                       {v === amountDue ? 'Exact' : `GHS ${v}`}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className={`rounded-2xl px-4 py-3.5 ${short ? 'bg-red-50' : 'bg-emerald-50'}`}>
+              <div className={`rounded-xl px-4 py-3 ${short ? 'bg-red-50' : 'bg-emerald-50'}`}>
                 <div className={`text-[11.5px] font-extrabold tracking-wider ${short ? 'text-red-800' : 'text-emerald-800'}`}>
                   {short ? 'STILL TO PAY' : 'CHANGE TO GIVE'}
                 </div>
-                <div className={`font-mono text-[28px] font-bold mt-1 ${short ? 'text-red-800' : 'text-emerald-800'}`}>
+                <div className={`font-mono text-[22px] font-bold mt-0.5 ${short ? 'text-red-800' : 'text-emerald-800'}`}>
                   {fmt(short ? amountDue - given : change)}
                 </div>
               </div>
@@ -268,9 +268,9 @@ export default function PaymentModal({ job, onClose }) {
                 <div className="col-span-2 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => { setChangeAction('CASH'); setWalletConsented(false) }}
-                            className={`h-10 rounded-xl text-sm font-bold border ${on(changeAction === 'CASH')}`}>Give as cash</button>
+                            className={`h-9 rounded-xl text-[13px] font-bold border ${on(changeAction === 'CASH')}`}>Give as cash</button>
                     <button type="button" onClick={() => setChangeAction('WALLET')}
-                            className={`h-10 rounded-xl text-sm font-bold border ${on(changeAction === 'WALLET')}`}>Add to their wallet</button>
+                            className={`h-9 rounded-xl text-[13px] font-bold border ${on(changeAction === 'WALLET')}`}>Add to their wallet</button>
                   </div>
                   {changeAction === 'WALLET' && (
                     <label className="flex items-start gap-2 px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-xl text-xs text-[var(--text-2)] cursor-pointer">
@@ -332,7 +332,7 @@ export default function PaymentModal({ job, onClose }) {
                   <select aria-label="Second payment method" value={splitMethod2} onChange={e => setSplitMethod2(e.target.value)} className={field}>
                     <option value="CASH">Cash</option><option value="MOMO">MoMo</option>
                   </select>
-                  <div className="h-12 px-3.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex items-center font-mono font-bold">{fmt(split2Amount)}</div>
+                  <div className="h-10 px-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex items-center font-mono font-bold">{fmt(split2Amount)}</div>
                 </div>
               </div>
             </div>
@@ -342,14 +342,14 @@ export default function PaymentModal({ job, onClose }) {
             <div className={label}>RECEIPT</div>
             <div className="flex gap-2 flex-wrap items-center">
               <button type="button" onClick={() => setSendWa(v => !v)} aria-pressed={sendWa}
-                      className={`inline-flex items-center gap-2 h-11 px-4 rounded-xl text-sm font-bold border ${on(sendWa)}`}>
+                      className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl text-[13px] font-bold border ${on(sendWa)}`}>
                 <Icon d={ICON.chat} size={17} />Send on WhatsApp
               </button>
               <div className="flex-1 min-w-[180px]">
                 <label htmlFor="rcpt-phone" className="sr-only">Receipt phone</label>
                 <input id="rcpt-phone" type="tel" value={phone} maxLength={10} inputMode="numeric"
                        onChange={e => setPhone(e.target.value.replace(/\D/g, ''))} placeholder="0244123456"
-                       className="w-full h-11 px-3 bg-white border border-black/20 rounded-xl font-mono text-sm outline-none focus:border-black" />
+                       className="w-full h-10 px-3 bg-white border border-black/20 rounded-xl font-mono text-[13px] outline-none focus:border-black" />
               </div>
             </div>
             <div className="text-xs text-[var(--text-3)] mt-1.5">
@@ -369,14 +369,14 @@ export default function PaymentModal({ job, onClose }) {
           {error && <div className="px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>}
         </div>
 
-        <div className="px-6 pt-3 pb-5 border-t border-[var(--border)] space-y-1.5">
+        <div className="px-5 pt-3 pb-4 border-t border-[var(--border)] space-y-1.5">
           <button type="button" onClick={submit} disabled={!ready || isPending}
-                  className={`w-full min-h-14 px-4 py-2 rounded-2xl text-white text-[15.5px] font-extrabold flex items-center justify-center gap-2
+                  className={`w-full min-h-12 px-4 py-2 rounded-xl text-white text-[14px] font-extrabold flex items-center justify-center gap-2
                               ${ready ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-zinc-400'} disabled:cursor-not-allowed`}>
-            <Icon d={ICON.check} size={19} width={2.5} />
+            <Icon d={ICON.check} size={17} width={2.5} />
             {isPending ? 'Confirming…' : confirmText}
           </button>
-          <button type="button" onClick={onClose} className="w-full py-2 text-sm font-semibold text-[var(--text-3)] hover:text-[var(--text)]">Cancel</button>
+          <button type="button" onClick={onClose} className="w-full py-1.5 text-[13px] font-semibold text-[var(--text-3)] hover:text-[var(--text)]">Cancel</button>
         </div>
       </section>
     </div>,
