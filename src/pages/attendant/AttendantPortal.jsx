@@ -11,11 +11,9 @@ import ReminderModal from '../../components/shared/ReminderModal'
 import useReminders from '../../hooks/useReminders'
 import AttendantTopbar     from '../../components/attendant/AttendantTopbar'
 import AttendantOverview   from '../../components/attendant/AttendantOverview'
-import AttendantMyJobs     from '../../components/attendant/AttendantMyJobs'
-import AttendantBranchJobs from '../../components/attendant/AttendantBranchJobs'
-import AttendantDrafts     from '../../components/attendant/AttendantDrafts'
+import AttendantJobs       from '../../components/attendant/AttendantJobs'
 import AttendantServices   from '../../components/attendant/AttendantServices'
-import AttendantInbox      from '../../components/attendant/AttendantInbox'
+import HandoverNotes       from '../../components/attendant/HandoverNotes'
 import AttendantCollect    from '../../components/attendant/AttendantCollect'
 import ClaimStrip          from '../../components/attendant/ClaimStrip'
 import SignOffBanner       from '../../components/attendant/SignOffBanner'
@@ -29,40 +27,29 @@ import useInboxBadge      from '../../hooks/useInboxBadge'
 
 const getSheetToday = () => client.get('/api/v1/finance/sheets/today/').then(r => r.data)
 
+// Sidebar (13 Nov 2026): Today, Pickup, Jobs, Inbox, Price list.
+// My Jobs, Branch Jobs and Drafts became one Jobs tab; Collect became Pickup
+// (it will grow to every ready job, not only online orders); Services is
+// what the counter uses it for, a price list.
 const NAV = [
   {
-    key: 'overview', label: 'Overview', section: 'WORKSPACE',
+    key: 'overview', label: 'Today', section: 'WORKSPACE',
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
       <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
     </svg>,
   },
   {
-    key: 'collect', label: 'Collect', section: 'WORKSPACE',
+    key: 'collect', label: 'Pickup', section: 'WORKSPACE',
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>
     </svg>,
   },
   {
-    key: 'my-jobs', label: 'My Jobs', section: 'WORKSPACE',
+    key: 'jobs', label: 'Jobs', section: 'WORKSPACE',
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
-    </svg>,
-  },
-  {
-    key: 'branch-jobs', label: 'Branch Jobs', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="2" y1="12" x2="22" y2="12"/>
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-    </svg>,
-  },
-  {
-    key: 'drafts', label: 'Drafts', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 20h9"/>
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
     </svg>,
   },
   {
@@ -73,7 +60,7 @@ const NAV = [
     </svg>,
   },
   {
-    key: 'services', label: 'Services', section: 'BRANCH',
+    key: 'services', label: 'Price list', section: 'BRANCH',
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3"/>
       <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
@@ -91,6 +78,7 @@ export default function AttendantPortal() {
   const [showNewJob,    setShowNewJob]    = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [showSignOff,   setShowSignOff]   = useState(false)
+  const [jobsView,      setJobsView]      = useState('mine')
 
   const { data: sheet } = useQuery({
     queryKey: ['sheet-today'],
@@ -119,16 +107,22 @@ export default function AttendantPortal() {
   })
 
   const recordingClosed  = lockData ? !lockData.can_create_jobs : false
-  const isSignedOff      = !!signOff?.is_signed_off
   const canSignOff       = !!signOff?.can_sign_off
-  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isSignedOff
+  // Locked once she has signed off, the day sheet has closed, or the deadline
+  // has passed with nothing for her to sign off (the server decides).
+  const isLocked         = !!signOff?.is_locked
+  const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isLocked
+  const morning          = signOff?.phase === 'OPEN' || signOff?.phase === 'CLOSING_SOON'
   const reminder = useReminders()
   // The inbox's badge on the menu: unread chats, and chats that need a person.
   const badge = useInboxBadge()
 
   const sections = [...new Set(NAV.map(n => n.section))]
 
+  // Older links (from Today's cards) still say my-jobs, branch-jobs or drafts.
   const handleNav = (id) => {
+    const legacy = { 'my-jobs': 'mine', 'drafts': 'mine', 'branch-jobs': 'branch' }
+    if (legacy[id]) { setJobsView(legacy[id]); id = 'jobs' }
     setPage(id)
     setMobileOpen(false)
   }
@@ -136,6 +130,8 @@ export default function AttendantPortal() {
   const renderPage = () => {
     switch (page) {
       case 'overview':    return (
+        <>
+        {morning && <HandoverNotes notes={signOff?.handover_notes} />}
         <AttendantOverview
           sheet={sheet}
           onNavigate={handleNav}
@@ -143,11 +139,10 @@ export default function AttendantPortal() {
           onRegisterCustomer={() => setShowNewCustomer(true)}
           recordingClosed={recordingClosed}
         />
+        </>
       )
       case 'collect':     return <AttendantCollect />
-      case 'my-jobs':     return <AttendantMyJobs sheet={sheet} />
-      case 'branch-jobs': return <AttendantBranchJobs sheet={sheet} />
-      case 'drafts':      return <AttendantDrafts sheet={sheet} onNavigate={handleNav} />
+      case 'jobs':        return <AttendantJobs key={jobsView} sheet={sheet} initialView={jobsView} />
       case 'inbox':       return <Inbox />
       case 'services':    return <AttendantServices />
       default:            return (
@@ -171,7 +166,7 @@ export default function AttendantPortal() {
         onLogout={logout}
         onMenuToggle={() => setMobileOpen(o => !o)}
         showMenu={mobileOpen}
-        sheet={sheet}
+        signOff={signOff}
       />
 
       {/* Body */}
@@ -304,7 +299,7 @@ export default function AttendantPortal() {
       {/* Portal lock — Sunday, holiday, or signed off for the day. Takes
           priority over everything else on this portal. */}
       {showPortalLocked && (
-        <PortalLockedOverlay lockData={lockData} isLocked={isSignedOff} />
+        <PortalLockedOverlay lockData={lockData} isLocked={isLocked} />
       )}
 
       {/* Harmonized reminder system — same hook/component as every

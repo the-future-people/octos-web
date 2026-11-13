@@ -20,7 +20,7 @@ const STATUS_CONFIG = {
   IN_PROGRESS:    {label:'In Progress',bg:'bg-violet-100', text:'text-violet-700' },
 }
 
-export default function AttendantBranchJobs({ sheet }) {
+export default function AttendantBranchJobs({ sheet, heading }) {
   const [period, setPeriod] = useState('day')
   const [page,   setPage]   = useState(1)
 
@@ -42,7 +42,7 @@ export default function AttendantBranchJobs({ sheet }) {
   return (
     <div className="p-5 sm:p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-[var(--text)]">Branch Jobs</h2>
+        {heading || <h2 className="text-lg font-bold text-[var(--text)]">Branch Jobs</h2>}
         <p className="text-xs text-[var(--text-3)] mt-0.5">All jobs at this branch · {count} jobs · read-only</p>
       </div>
 

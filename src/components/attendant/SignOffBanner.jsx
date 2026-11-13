@@ -8,8 +8,9 @@
 //   FINAL_CALL     the last 15 minutes before the deadline
 //   OVERDUE        past the deadline: Octos will sign off within minutes
 //
-// Nothing locks before sign-off. The portal is only covered once she has
-// signed off (or Octos has, for her).
+// The rail and the dot on the top bar carry the 7:00 warning, so CLOSING_SOON
+// shows nothing here: there is nothing to press yet. The portal is covered
+// once the server says is_locked (signed off, day closed, or nothing to sign).
 
 function clock(iso) {
   if (!iso) return ''
@@ -18,14 +19,9 @@ function clock(iso) {
 
 export default function SignOffBanner({ status, onStart }) {
   if (!status) return null
-  const { phase, can_sign_off, shift_end, deadline, minutes_to_shift_end, minutes_to_deadline } = status
+  const { phase, can_sign_off, is_due, deadline, minutes_to_deadline } = status
 
   const content = {
-    CLOSING_SOON: {
-      tone: 'amber',
-      title: `${Math.max(minutes_to_shift_end, 0)} minutes to close`,
-      body: `Finish with the customers at the counter. Recording stops at ${clock(shift_end)}.`,
-    },
     SIGN_OFF_OPEN: {
       tone: 'amber',
       title: 'Recording closed',
@@ -34,7 +30,10 @@ export default function SignOffBanner({ status, onStart }) {
     FINAL_CALL: {
       tone: 'red',
       title: `${Math.max(minutes_to_deadline, 0)} minutes left to sign off`,
-      body: `Sign off before ${clock(deadline)}, or Octos will do it for you and tell the branch manager.`,
+      // Octos only signs off for someone who recorded jobs today.
+      body: is_due
+        ? `Sign off before ${clock(deadline)}, or Octos will do it for you and tell the branch manager.`
+        : `Sign off before ${clock(deadline)}.`,
     },
     OVERDUE: {
       tone: 'red',

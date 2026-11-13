@@ -1,74 +1,79 @@
 // src/components/attendant/AttendantTopbar.jsx
+//
+// The attendant's top bar (redesigned 13 Nov 2026), in the BM's form:
+// identity and actions in the bar, nothing else.
+//
+//   left   menu toggle · Octos · Attendant / branch
+//   right  sheet pill (status dot · sheet number · shift end) · bell · you
+//
+// The red line under the bar is the shift rail: it fills from the start of
+// the shift to the sign-off deadline, with marks at the warning, the shift
+// end and the deadline. Red through the day, amber once recording has
+// closed, green once she has signed off. Times come from the server.
+
 import OctosBrand from '../shared/OctosBrand'
 import WindowControls from '../shared/WindowControls'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
 
-function InfoStripScroll({ items }) {
-  const scrollRef = useRef(null)
-  const [canLeft,  setCanLeft]  = useState(false)
-  const [canRight, setCanRight] = useState(false)
+const BRAND_RED = '#E3000F'
+const AMBER     = '#F59E0B'
+const GREEN     = '#10B981'
 
-  const checkScroll = () => {
-    const el = scrollRef.current
-    if (!el) return
-    setCanLeft(el.scrollLeft > 0)
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
-  }
+const DONE_PHASES = new Set(['SIGNED_OFF', 'DAY_CLOSED', 'ENDED'])
 
+function clock(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
+}
+
+function useNow(intervalMs = 60_000) {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    checkScroll()
-    window.addEventListener('resize', checkScroll)
-    return () => window.removeEventListener('resize', checkScroll)
-  }, [])
+    const t = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(t)
+  }, [intervalMs])
+  return now
+}
 
-  const scroll = (dir) => {
-    scrollRef.current?.scrollBy({ left: dir * 150, behavior: 'smooth' })
-  }
+function dotFor(phase) {
+  if (phase === 'OPEN') return 'bg-emerald-500 animate-pulse'
+  if (phase === 'CLOSING_SOON' || phase === 'SIGN_OFF_OPEN') return 'bg-amber-400'
+  if (phase === 'FINAL_CALL' || phase === 'OVERDUE') return 'bg-red-500 animate-pulse'
+  return 'bg-zinc-400'
+}
+
+function ShiftRail({ status }) {
+  const now = useNow()
+  if (!status?.shift_start || !status?.deadline) return null
+
+  const start    = new Date(status.shift_start).getTime()
+  const deadline = new Date(status.deadline).getTime()
+  const span     = Math.max(deadline - start, 1)
+  const at       = (iso) => Math.min(100, Math.max(0, ((new Date(iso).getTime() - start) / span) * 100))
+
+  const finished = DONE_PHASES.has(status.phase)
+  const fill     = finished ? 100 : Math.min(100, Math.max(0, ((now - start) / span) * 100))
+  const color    = status.phase === 'SIGNED_OFF' ? GREEN
+                 : finished ? '#71717a'
+                 : now >= new Date(status.shift_end).getTime() ? AMBER
+                 : BRAND_RED
 
   return (
-    <div className="border-t border-[var(--border)]">
-      <div className="max-w-6xl mx-auto flex items-center">
-        {canLeft && (
-          <button onClick={() => scroll(-1)}
-            className="px-2 py-2.5 text-[var(--text-3)] hover:text-[var(--text)]
-              transition-colors shrink-0">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-          </button>
-        )}
-        <div ref={scrollRef} onScroll={checkScroll}
-          className="flex-1 flex items-center gap-5 px-4 py-2.5 text-xs
-            overflow-x-auto whitespace-nowrap
-            [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {items.map((item, i) => (
-            <div key={i} className="flex items-center gap-1.5 shrink-0">
-              <span className="font-bold text-[var(--text-3)] uppercase tracking-wider">
-                {item.label}
-              </span>
-              <span className="font-semibold text-[var(--text)]">{item.value}</span>
-            </div>
-          ))}
-        </div>
-        {canRight && (
-          <button onClick={() => scroll(1)}
-            className="px-2 py-2.5 text-[var(--text-3)] hover:text-[var(--text)]
-              transition-colors shrink-0">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
-        )}
-      </div>
+    <div className="absolute left-0 right-0 bottom-0 h-[5px] bg-[#4a0a0f] pointer-events-none"
+      role="progressbar" aria-label="Shift progress" aria-valuemin={0} aria-valuemax={100}
+      aria-valuenow={Math.round(fill)}>
+      <div className="h-full transition-[width] duration-700" style={{ width: `${fill}%`, background: color }} />
+      {[status.warning_at, status.shift_end].map(iso => (
+        <span key={iso} className="absolute top-[-3px] w-px h-[11px] bg-white/50"
+          style={{ left: `${at(iso)}%` }} />
+      ))}
     </div>
   )
 }
 
-export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu, sheet }) {
+export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu, signOff }) {
   const { theme, toggle } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -86,26 +91,29 @@ export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu
     ? `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase()
     : '??'
 
+  const sheetNumber = signOff?.sheet_number
+
   return (
-    <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
+    <header className="octos-topbar relative bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between" data-tauri-drag-region>
 
         {/* Left */}
         <div className="flex items-center gap-3">
           <button
             onClick={onMenuToggle}
+            aria-label={showMenu ? 'Close menu' : 'Open menu'}
             className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg
               hover:bg-[var(--bg)] text-[var(--text-2)] transition-colors"
           >
             {showMenu ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5">
+                stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             ) : (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2">
+                stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <line x1="3" y1="6" x2="21" y2="6"/>
                 <line x1="3" y1="12" x2="21" y2="12"/>
                 <line x1="3" y1="18" x2="21" y2="18"/>
@@ -128,11 +136,21 @@ export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu
         {/* Right */}
         <div className="flex items-center gap-3">
 
-          {/* Active indicator */}
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--green-text)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--green-text)] animate-pulse" />
-            <span className="hidden sm:inline">Active</span>
-          </div>
+          {/* Sheet pill: the sheet, then when the shift ends. The dot carries the phase. */}
+          {sheetNumber && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1
+              bg-[var(--panel)] border border-[var(--border)] rounded-full text-xs font-semibold
+              text-[var(--text-2)] whitespace-nowrap">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotFor(signOff?.phase)}`} />
+              <span className="font-mono font-bold text-[var(--text)] hidden sm:inline">{sheetNumber}</span>
+              <span className="font-mono font-bold text-[var(--text)] sm:hidden text-[10px]">
+                {sheetNumber.split('-').pop()}
+              </span>
+              <span className="w-px h-3 bg-[var(--border)] hidden sm:block" />
+              <span className="hidden sm:inline text-[var(--text-3)]">Shift ends</span>
+              <span className="hidden sm:inline text-[var(--text)]">{clock(signOff?.shift_end)}</span>
+            </div>
+          )}
 
           {/* Notification bell */}
           <NotificationBell />
@@ -143,9 +161,12 @@ export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu
               onClick={() => setDropdownOpen(o => !o)}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              <div className="w-7 h-7 rounded-full bg-[var(--text)] text-[var(--panel)]
+              <div className="relative w-7 h-7 rounded-full bg-[var(--text)] text-[var(--panel)]
                 flex items-center justify-center text-[10px] font-bold shrink-0">
                 {initials}
+                {/* On shift: replaces the separate "Active" label */}
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500
+                  border-2 border-[var(--panel)]" aria-label="On shift" />
               </div>
               <span className="hidden md:inline text-sm font-semibold text-[var(--text)]">
                 {user?.full_name || '—'}
@@ -219,17 +240,7 @@ export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu
           </div>
         </div>
       </div>
-    <InfoStripScroll items={[
-        { label: 'BRANCH',     value: user?.branch_detail?.name || user?.branch_name || '—' },
-        { label: 'DATE',       value: new Date().toLocaleDateString('en-GH', {
-            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
-          })
-        },
-        ...(sheet ? [
-          { label: 'SHEET',      value: sheet?.sheet_number || '—' },
-          { label: 'SHIFT ENDS', value: sheet?.closing_time || '—' },
-        ] : []),
-      ]} />
+      <ShiftRail status={signOff} />
       <WindowControls />
     </header>
   )

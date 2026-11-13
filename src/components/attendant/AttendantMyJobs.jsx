@@ -95,7 +95,7 @@ function JobDetailModal({ job, onClose }) {
   )
 }
 
-export default function AttendantMyJobs({ sheet }) {
+export default function AttendantMyJobs({ sheet, heading }) {
   const [period, setPeriod] = useState('day')
   const [status, setStatus] = useState('')
   const [page,   setPage]   = useState(1)
@@ -121,7 +121,7 @@ export default function AttendantMyJobs({ sheet }) {
   return (
     <div className="p-5 sm:p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-[var(--text)]">My Jobs</h2>
+        {heading || <h2 className="text-lg font-bold text-[var(--text)]">My Jobs</h2>}
         <p className="text-xs text-[var(--text-3)] mt-0.5">{count} jobs</p>
       </div>
 
