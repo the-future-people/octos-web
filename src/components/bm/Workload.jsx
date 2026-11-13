@@ -8,7 +8,7 @@
 // rule: the customer record, else the WhatsApp chat, else Walk-in.
 
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 
 const VIEWS = [
@@ -49,10 +49,33 @@ const KEY_HEAD = { pending_payment: 'Waiting', in_production: 'Stage', ready_for
                    awaiting_feedback: 'Waiting for', overdue: 'Late by' }
 const TONE = { red: 'text-red-600 font-bold', amber: 'text-amber-600 font-bold', '': 'text-[var(--text-2)]' }
 
-export default function Workload({ view = 'pending_payment', onNavigate }) {
+// Why a job is being marked collected from this page: every clean-up says why.
+const REASONS = [
+  ['COLLECTED_EARLIER', 'Collected earlier'],
+  ['TEST_JOB', 'Test job'],
+  ['OTHER', 'Other'],
+]
+
+export default function Workload({ view = 'pending_payment', onNavigate, onOpenJob }) {
   const [search, setSearch] = useState('')
   const [type, setType] = useState('All')
   const meta = VIEWS.find(v => v.id === view) || VIEWS[0]
+  const queryClient = useQueryClient()
+
+  // Marking collected (Ready for pickup only): one row open at a time, with a reason.
+  const [marking, setMarking] = useState(null)      // { id, reason, note, error }
+  const markCollected = useMutation({
+    mutationFn: ({ id, reason, note }) => client.post(`/api/v1/jobs/${id}/mark-collected/`, { reason, note }),
+    onSuccess: () => {
+      setMarking(null)
+      queryClient.invalidateQueries({ queryKey: ['workload-list', view] })
+      queryClient.invalidateQueries({ queryKey: ['workload'] })
+    },
+    onError: err => setMarking(m => ({ ...m, error: err?.response?.data?.detail || 'That did not save. Try again.' })),
+  })
+  const pickup = view === 'ready_for_pickup'
+  const cols = pickup ? 'grid-cols-[110px_minmax(0,1.6fr)_minmax(0,1fr)_110px_190px]'
+                      : 'grid-cols-[110px_minmax(0,1.6fr)_minmax(0,1fr)_110px_80px]'
 
   // The tiles' counts: the same query and key the Overview uses, so they share it.
   const { data: counts } = useQuery({
@@ -124,8 +147,8 @@ export default function Workload({ view = 'pending_payment', onNavigate }) {
       </div>
 
       <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[110px_minmax(0,1.6fr)_minmax(0,1fr)_110px_80px] gap-3 px-4 py-2.5 border-b border-[var(--border)]
-                        text-[10.5px] font-bold uppercase tracking-wider text-[var(--text-3)]">
+        <div className={`grid ${cols} gap-3 px-4 py-2.5 border-b border-[var(--border)]
+                        text-[10.5px] font-bold uppercase tracking-wider text-[var(--text-3)]`}>
           <span>{KEY_HEAD[view]}</span><span>Job and customer</span><span>Recorded</span>
           <span className="text-right">Amount</span><span />
         </div>
@@ -136,8 +159,8 @@ export default function Workload({ view = 'pending_payment', onNavigate }) {
         {rows.map(r => {
           const k = keyCell(view, r)
           return (
-            <div key={r.id} className="grid grid-cols-[110px_minmax(0,1.6fr)_minmax(0,1fr)_110px_80px] gap-3 px-4 py-3 items-center
-                                       border-b border-[var(--border)] last:border-0 hover:bg-black/[0.015]">
+            <div key={r.id} className="border-b border-[var(--border)] last:border-0">
+            <div className={`grid ${cols} gap-3 px-4 py-3 items-center hover:bg-black/[0.015]`}>
               <span className={`text-[13px] capitalize ${TONE[k.tone]}`}>{k.label}</span>
               <div className="min-w-0">
                 <div className="text-[13.5px] font-bold">{r.job_number}</div>
@@ -155,8 +178,39 @@ export default function Workload({ view = 'pending_payment', onNavigate }) {
               </div>
               <span className="text-[12.5px] text-[var(--text-2)] truncate">{r.recorded_by} · {clock(r.recorded_at)}</span>
               <span className="text-[13.5px] font-bold tabular-nums text-right">{money(r.amount)}</span>
-              <button type="button" onClick={() => onNavigate?.('jobs')}
-                      className="h-8 px-3 rounded-lg border border-[var(--border)] text-[12.5px] font-semibold hover:border-black/30">Open</button>
+              <span className="flex gap-1.5 justify-end">
+                {pickup && (
+                  <button type="button"
+                          onClick={() => setMarking(m => (m?.id === r.id ? null : { id: r.id, reason: '', note: '', error: '' }))}
+                          className="h-8 px-3 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">Mark collected</button>
+                )}
+                {/* Open goes to this job, not the list (13 Nov 2026). */}
+                <button type="button" onClick={() => (onOpenJob ? onOpenJob(r.id) : onNavigate?.('jobs'))}
+                        className="h-8 px-3 rounded-lg border border-[var(--border)] text-[12.5px] font-semibold hover:border-black/30">Open</button>
+              </span>
+            </div>
+            {pickup && marking?.id === r.id && (
+              <div className="px-4 pb-3 -mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="text-[12px] font-bold text-[var(--text-3)] mr-1">Why?</span>
+                {REASONS.map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setMarking(m => ({ ...m, reason: value, error: '' }))}
+                          className={`h-8 px-3 rounded-full text-[12.5px] font-semibold border
+                                      ${marking.reason === value ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
+                    {label}
+                  </button>
+                ))}
+                {marking.reason === 'OTHER' && (
+                  <input value={marking.note} onChange={e => setMarking(m => ({ ...m, note: e.target.value }))}
+                         placeholder="Briefly, why" className="h-8 px-2.5 rounded-lg border border-black/15 text-[12.5px] min-w-[200px]" />
+                )}
+                <button type="button" disabled={!marking.reason || markCollected.isPending}
+                        onClick={() => markCollected.mutate({ id: r.id, reason: marking.reason, note: marking.note })}
+                        className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[12.5px] font-semibold disabled:opacity-40">
+                  Confirm collected
+                </button>
+                {marking.error && <span className="w-full text-[12.5px] font-semibold text-red-600">{marking.error}</span>}
+              </div>
+            )}
             </div>
           )
         })}

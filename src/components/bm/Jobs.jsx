@@ -1,10 +1,9 @@
 ﻿// src/components/bm/Jobs.jsx
-import { useState, useEffect, useMemo } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
-import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl, getServices, calculatePrice, getCustomers } from '../../api/bm'
+import { getJobs, getJobStats, getJobDetail, transitionJob, getJobReceipt, sendReceiptWhatsApp, getJobInvoices, createInvoice, sendInvoice, getInvoicePdfUrl } from '../../api/bm'
 import { invalidateAfterJobTransitioned } from '../../api/invalidations'
-import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 
 function fmt(n) {
@@ -997,13 +996,14 @@ const TYPE_FILTERS = [
   { value: 'DESIGN',     label: 'Design'     },
 ]
 
-export default function Jobs() {
+export default function Jobs({ focus = null } = {}) {
   const [tab, setTab] = useState('jobs')
   const [queue, setQueue] = useState('ALL')
   const [jobType, setJobType] = useState('ALL')
   const [period, setPeriod] = useState('day')
   const [page, setPage] = useState(1)
-  const [selectedId, setSelectedId] = useState(null)
+  // Opened from a workload page: start with that job's panel open (13 Nov 2026).
+  const [selectedId, setSelectedId] = useState(focus?.id ?? null)
 
   const { data: statsData } = useQuery({
     queryKey: ['jobStats', period, jobType],
