@@ -15,6 +15,9 @@ import AttendantJobs       from '../../components/attendant/AttendantJobs'
 import AttendantServices   from '../../components/attendant/AttendantServices'
 import HandoverNotes       from '../../components/attendant/HandoverNotes'
 import AttendantCollect    from '../../components/attendant/AttendantCollect'
+import AttendantWork       from '../../components/attendant/AttendantWork'
+import DeskArrival         from '../../components/attendant/DeskArrival'
+import { deskQuery }       from '../../api/desk'
 import ClaimStrip          from '../../components/attendant/ClaimStrip'
 import SignOffBanner       from '../../components/attendant/SignOffBanner'
 import AttendantSignOffWizard from '../../components/attendant/AttendantSignOffWizard'
@@ -28,6 +31,7 @@ import useInboxBadge      from '../../hooks/useInboxBadge'
 const getSheetToday = () => client.get('/api/v1/finance/sheets/today/').then(r => r.data)
 
 // Sidebar (13 Nov 2026): Today, Pickup, Jobs, Inbox, Price list.
+// Work joined on 14 Nov 2026: front-desk jobs that come to the attendants.
 // My Jobs, Branch Jobs and Drafts became one Jobs tab; Collect became Pickup
 // (it will grow to every ready job, not only online orders); Services is
 // what the counter uses it for, a price list.
@@ -37,6 +41,12 @@ const NAV = [
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
       <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+    </svg>,
+  },
+  {
+    key: 'work', label: 'Work', section: 'WORKSPACE',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
     </svg>,
   },
   {
@@ -68,6 +78,17 @@ const NAV = [
     </svg>,
   },
 ]
+
+// Front-desk jobs nobody has taken yet: a red count on Work, so the menu
+// says it even when the arrival alert is waiting behind a modal.
+function WorkCount({ n, dot }) {
+  if (!n) return null
+  if (dot) return <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#D92D20]" />
+  return (
+    <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[#D92D20] text-white
+      text-[11px] font-bold flex items-center justify-center">{n}</span>
+  )
+}
 
 export default function AttendantPortal() {
   const { user, logout } = useAuth()
@@ -114,6 +135,9 @@ export default function AttendantPortal() {
   const showPortalLocked = lockData?.is_today_sunday || lockData?.is_today_holiday || isLocked
   const morning          = signOff?.phase === 'OPEN' || signOff?.phase === 'CLOSING_SOON'
   const reminder = useReminders()
+  // Front-desk work: shared with the Work tab and the arrival alert.
+  const { data: desk } = useQuery(deskQuery)
+  const waitingWork = (desk?.jobs || []).filter(j => !j.taken_by).length
   // The inbox's badge on the menu: unread chats, and chats that need a person.
   const badge = useInboxBadge()
 
@@ -141,6 +165,7 @@ export default function AttendantPortal() {
         />
         </>
       )
+      case 'work':        return <AttendantWork />
       case 'collect':     return <AttendantCollect />
       case 'jobs':        return <AttendantJobs key={jobsView} sheet={sheet} initialView={jobsView} />
       case 'inbox':       return <Inbox />
@@ -214,6 +239,7 @@ export default function AttendantPortal() {
                           <span className="shrink-0">{item.icon}</span>
                           {item.label}
                           {item.key === 'inbox' && <NavBadge {...badge} />}
+                          {item.key === 'work' && <WorkCount n={waitingWork} />}
                         </button>
                       ))}
                     </div>
@@ -245,6 +271,7 @@ export default function AttendantPortal() {
                         <span className="shrink-0">{item.icon}</span>
                         {item.label}
                         {item.key === 'inbox' && <NavBadge {...badge} />}
+                        {item.key === 'work' && <WorkCount n={waitingWork} />}
                       </button>
                     </div>
                   ))}
@@ -272,6 +299,7 @@ export default function AttendantPortal() {
                         }`}>
                       {item.icon}
                       {item.key === 'inbox' && <NavDot {...badge} />}
+                      {item.key === 'work' && <WorkCount n={waitingWork} dot />}
                     </button>
                   ))}
                 </div>
@@ -295,6 +323,17 @@ export default function AttendantPortal() {
 
         </div>
       </div>
+
+      {/* A front-desk job has landed: the full alert when she's free, a bar
+          above everything while New Job, Register Customer or sign-off is
+          open, so her work is never covered. Taking it opens Work, unless
+          she took it from the bar mid-task. */}
+      {!showPortalLocked && (
+        <DeskArrival
+          busy={showNewJob || showNewCustomer || showSignOff}
+          onTaken={({ fromBar }) => { if (!fromBar) handleNav('work') }}
+        />
+      )}
 
       {/* Portal lock — Sunday, holiday, or signed off for the day. Takes
           priority over everything else on this portal. */}
