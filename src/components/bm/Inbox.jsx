@@ -8,6 +8,14 @@
 // mint is Octos, soft red is a person, dashed yellow is a note only staff
 // see. Photos are shown, documents are cards with what Octos read from them,
 // and replies can carry files (paperclip, drag, or paste a screenshot).
+//
+// Each channel looks like its own app (15 Nov 2026): a WhatsApp chat on a
+// beige doodle wallpaper with green bubbles, Telegram with its blue and soft
+// green, SMS like a phone's Messages, and email as a mail thread, not bubbles.
+// The tabs are the channels' marks (no "All"), each with its own unread count.
+// The app logos are the official files in public/brand/ (whatsapp.svg,
+// telegram.svg), from each company's brand resources; until they are there, a
+// plain coloured disc stands in.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -26,14 +34,14 @@ const C = {
   amberSoft: '#FFF4E5', amberText: '#8A4B08', read: '#2563A8',
 }
 const MAX_FILE = 16 * 1024 * 1024
-// Each voice has its ring (8 Nov 2026): the customer soft grey, Octos a red-into-
-// black gradient, staff black. On a faint wallpaper of Octos's own doodles.
-const RING = {
-  octos: { border: '1.5px solid transparent', background: 'linear-gradient(#F5F5F5, #F5F5F5) padding-box, linear-gradient(135deg, #CC0000, #080808 70%) border-box' },
-  staff: { border: '1.5px solid #080808', background: '#FFFFFF' },
-  customer: { border: '1.5px solid #E2E2E2', background: '#FFFFFF' },
-}
-const WALL = { backgroundColor: '#F2F2F1', backgroundImage: 'url(data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22260%22%20height%3D%22260%22%20viewBox%3D%220%200%20260%20260%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234a4a4a%22%20stroke-opacity%3D%22.07%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20transform%3D%22translate%2818%2020%29%20rotate%28-8%29%22%3E%3Crect%20x%3D%224%22%20y%3D%2212%22%20width%3D%2234%22%20height%3D%2218%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M10%2012V3h22v9M10%2024h22v13H10z%22%2F%3E%3Cpath%20d%3D%22M14%2030h14M14%2034h9%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28150%2014%29%20rotate%2810%29%22%3E%3Cpath%20d%3D%22M3%202h20l7%207v29H3z%22%2F%3E%3Cpath%20d%3D%22M23%202v7h7M8%2016h16M8%2022h16M8%2028h10%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28212%2092%29%20rotate%28-12%29%22%3E%3Cpath%20d%3D%22M14%202c6%209%2011%2015%2011%2021a11%2011%200%200%201-22%200c0-6%205-12%2011-21z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2892%2098%29%20rotate%2818%29%22%3E%3Cpath%20d%3D%22M20%2026%208%2014a6%206%200%200%201%208.5-8.5l13%2013a3.5%203.5%200%200%201-5%205L12.5%2011.5%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2826%20120%29%20rotate%286%29%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2234%22%20height%3D%2224%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22m2%207%2017%2012L36%207%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28176%20170%29%20rotate%280%29%22%3E%3Cpath%20d%3D%22M12%202v8M12%2016v8M2%2013h8M16%2013h8%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28120%20186%29%20rotate%28-20%29%22%3E%3Cpath%20d%3D%22M4%2030c-2-12%206-20%2016-20%208%200%2012%206%209%2011-2%204-8%204-9%200-1-3%202-5%204-4%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2828%20206%29%20rotate%2814%29%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3Cpath%20d%3D%22M12%206v6l4%203%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28222%20222%29%20rotate%28-6%29%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2216%22%20height%3D%2226%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M8%2024h4%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20fill%3D%22%234a4a4a%22%20fill-opacity%3D%22.07%22%3E%3Ccircle%20cx%3D%2264%22%20cy%3D%2272%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%22200%22%20cy%3D%2256%22%20r%3D%222.4%22%2F%3E%3Ccircle%20cx%3D%22246%22%20cy%3D%22160%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2274%22%20cy%3D%22168%22%20r%3D%222.2%22%2F%3E%3Ccircle%20cx%3D%22160%22%20cy%3D%22124%22%20r%3D%221.8%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22250%22%20r%3D%222%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E)', backgroundSize: '260px 260px' }
+// Octos's own print-shop doodles, drawn for Octos; each channel tints them.
+const DOODLES = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22260%22%20height%3D%22260%22%20viewBox%3D%220%200%20260%20260%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%234a4a4a%22%20stroke-opacity%3D%22.07%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20transform%3D%22translate%2818%2020%29%20rotate%28-8%29%22%3E%3Crect%20x%3D%224%22%20y%3D%2212%22%20width%3D%2234%22%20height%3D%2218%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M10%2012V3h22v9M10%2024h22v13H10z%22%2F%3E%3Cpath%20d%3D%22M14%2030h14M14%2034h9%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28150%2014%29%20rotate%2810%29%22%3E%3Cpath%20d%3D%22M3%202h20l7%207v29H3z%22%2F%3E%3Cpath%20d%3D%22M23%202v7h7M8%2016h16M8%2022h16M8%2028h10%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28212%2092%29%20rotate%28-12%29%22%3E%3Cpath%20d%3D%22M14%202c6%209%2011%2015%2011%2021a11%2011%200%200%201-22%200c0-6%205-12%2011-21z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2892%2098%29%20rotate%2818%29%22%3E%3Cpath%20d%3D%22M20%2026%208%2014a6%206%200%200%201%208.5-8.5l13%2013a3.5%203.5%200%200%201-5%205L12.5%2011.5%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2826%20120%29%20rotate%286%29%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2234%22%20height%3D%2224%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22m2%207%2017%2012L36%207%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28176%20170%29%20rotate%280%29%22%3E%3Cpath%20d%3D%22M12%202v8M12%2016v8M2%2013h8M16%2013h8%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28120%20186%29%20rotate%28-20%29%22%3E%3Cpath%20d%3D%22M4%2030c-2-12%206-20%2016-20%208%200%2012%206%209%2011-2%204-8%204-9%200-1-3%202-5%204-4%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%2828%20206%29%20rotate%2814%29%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3Cpath%20d%3D%22M12%206v6l4%203%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate%28222%20222%29%20rotate%28-6%29%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2216%22%20height%3D%2226%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M8%2024h4%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20fill%3D%22%234a4a4a%22%20fill-opacity%3D%22.07%22%3E%3Ccircle%20cx%3D%2264%22%20cy%3D%2272%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%22200%22%20cy%3D%2256%22%20r%3D%222.4%22%2F%3E%3Ccircle%20cx%3D%22246%22%20cy%3D%22160%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2274%22%20cy%3D%22168%22%20r%3D%222.2%22%2F%3E%3Ccircle%20cx%3D%22160%22%20cy%3D%22124%22%20r%3D%221.8%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22250%22%20r%3D%222%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E'
+const doodles = (bg, ink, alpha) => ({
+  backgroundColor: bg,
+  backgroundImage: `url(${DOODLES.replaceAll('%234a4a4a', encodeURIComponent(ink)).replaceAll('.07', String(alpha))})`,
+  backgroundSize: '260px 260px',
+})
+const WALL = doodles('#F2F2F1', '#4a4a4a', 0.07)
 // The emojis a print shop's chats actually use.
 const EMOJIS = ['🙏', '👍', '😊', '🙂', '😀', '😂', '❤️', '👌', '✅', '❌', '⚠️', '📄', '🖨️', '📎', '📸', '📦',
   '⏰', '📍', '💳', '💯', '🎉', '👏', '🤝', '🙌', '😅', '🤔', '😢', '😍', '🔥', '⭐', '👋', '📞']
@@ -187,13 +195,80 @@ const I = {
   reply: p => <Svg {...p}><path d="M9 17 4 12l5-5" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></Svg>,
   lock: p => <Svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>,
   smile: p => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Svg>,
+  mail: p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></Svg>,
+  sms: p => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></Svg>,
 }
 const CHANNEL = {
-  WHATSAPP: { label: 'WhatsApp', colour: '#1E7A4C' },
-  SMS: { label: 'SMS', colour: '#A15C07' },
-  EMAIL: { label: 'Email', colour: '#2563A8' },
+  WHATSAPP: { label: 'WhatsApp', colour: '#25D366', logo: '/brand/whatsapp.svg' },
+  TELEGRAM: { label: 'Telegram', colour: '#2AABEE', logo: '/brand/telegram.svg' },
+  SMS: { label: 'SMS', colour: '#0B57D0', icon: 'sms' },
+  EMAIL: { label: 'Email', colour: '#5F6368', icon: 'mail' },
 }
 const channelOf = c => CHANNEL[c?.channel] || CHANNEL.SMS
+
+// How each channel's chat looks, after its own app (15 Nov 2026). Fixed
+// colours, as the apps have: the chat is the customer's app, not Octos's page.
+// tail: the first bubble of a run has its own corner, as in each app.
+const THEME = {
+  WHATSAPP: {
+    header: { background: '#F0F2F5', borderColor: '#E9EDEF', title: '#111B21', sub: '#667781' },
+    wall: doodles('#EFEAE2', '#8A7F70', 0.09),
+    bubble: { customer: { background: '#FFFFFF', color: '#111B21' }, octos: { background: '#D9FDD3', color: '#111B21' }, staff: { background: '#D9FDD3', color: '#111B21' } },
+    radius: { mine: '7.5px', theirs: '7.5px', mineTail: '7.5px 0 7.5px 7.5px', theirsTail: '0 7.5px 7.5px 7.5px' },
+    shadow: '0 1px 0.5px rgba(11,20,26,.13)', meta: '#667781', read: '#53BDEB', who: '#667781',
+    day: { background: '#FFFFFF', color: '#54656F', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)' },
+    composer: { background: '#F0F2F5', input: '#FFFFFF', border: '1px solid transparent', radius: 8 },
+    send: '#00A884', accent: '#00A884',
+  },
+  TELEGRAM: {
+    header: { background: '#FFFFFF', borderColor: '#E7E7E7', title: '#000000', sub: '#3390EC' },
+    wall: doodles('#C9DDB4', '#4F7A36', 0.12),
+    bubble: { customer: { background: '#FFFFFF', color: '#000000' }, octos: { background: '#EEFFDE', color: '#000000' }, staff: { background: '#EEFFDE', color: '#000000' } },
+    radius: { mine: '16px', theirs: '16px', mineTail: '16px 16px 4px 16px', theirsTail: '16px 16px 16px 4px' },
+    shadow: '0 1px 1px rgba(0,0,0,.12)', meta: '#6B8F5B', read: '#4FAE4E', who: '#3D6B2C',
+    day: { background: 'rgba(0,0,0,.2)', color: '#FFFFFF' },
+    composer: { background: '#FFFFFF', input: '#FFFFFF', border: '1px solid #E7E7E7', radius: 12 },
+    send: '#3390EC', accent: '#3390EC',
+  },
+  SMS: {
+    header: { background: '#FFFFFF', borderColor: '#E1E3E1', title: '#1F1F1F', sub: '#444746' },
+    wall: { backgroundColor: '#FFFFFF' },
+    bubble: { customer: { background: '#E9EEF6', color: '#1F1F1F' }, octos: { background: '#D3E3FD', color: '#041E49' }, staff: { background: '#D3E3FD', color: '#041E49' } },
+    radius: { mine: '20px', theirs: '20px', mineTail: '20px 20px 4px 20px', theirsTail: '20px 20px 20px 4px' },
+    shadow: 'none', meta: '#444746', read: '#0B57D0', who: '#444746',
+    day: { background: 'transparent', color: '#444746' },
+    composer: { background: '#FFFFFF', input: '#E9EEF6', border: '1px solid transparent', radius: 24 },
+    send: '#0B57D0', accent: '#0B57D0',
+  },
+  EMAIL: {
+    header: { background: '#FFFFFF', borderColor: '#E0E0E0', title: '#1F1F1F', sub: '#444746' },
+    wall: { backgroundColor: '#FFFFFF' },
+    bubble: { customer: { background: '#FFFFFF', color: '#1F1F1F' }, octos: { background: '#FFFFFF', color: '#1F1F1F' }, staff: { background: '#FFFFFF', color: '#1F1F1F' } },
+    radius: { mine: '12px', theirs: '12px', mineTail: '12px', theirsTail: '12px' },
+    shadow: 'none', meta: '#444746', read: '#0B57D0', who: '#444746',
+    day: { background: 'transparent', color: '#444746' },
+    composer: { background: '#FFFFFF', input: '#FFFFFF', border: '1px solid #C4C7C5', radius: 12 },
+    send: '#0B57D0', accent: '#0B57D0',
+  },
+}
+const themeOf = c => THEME[c?.channel] || THEME.SMS
+
+// The channel's mark: the app's official logo file for WhatsApp and Telegram
+// (public/brand/), a plain envelope or speech bubble for email and SMS. A
+// plain coloured disc stands in for a logo file that isn't there yet.
+function ChannelMark({ ch, s = 20 }) {
+  const meta = CHANNEL[ch] || CHANNEL.SMS
+  const [missing, setMissing] = useState(false)
+  if (meta.logo && !missing) {
+    return <img src={meta.logo} alt="" width={s} height={s} className="block shrink-0" onError={() => setMissing(true)} />
+  }
+  const Icon = meta.icon === 'mail' ? I.mail : meta.icon === 'sms' ? I.sms : null
+  return (
+    <span className="shrink-0 rounded-full grid place-items-center text-white font-bold" style={{ width: s, height: s, background: meta.colour, fontSize: s * 0.5 }} aria-hidden="true">
+      {Icon ? <Icon size={Math.round(s * 0.6)} /> : meta.label[0]}
+    </span>
+  )
+}
 
 function Avatar({ c, s = 36 }) {
   return (
@@ -202,14 +277,14 @@ function Avatar({ c, s = 36 }) {
   )
 }
 
-function Ticks({ msg }) {
+function Ticks({ msg, read = C.read }) {
   const marks = {
     QUEUED: ['🕓', 'Sending'], SENT: ['✓', 'Sent'], DELIVERED: ['✓✓', 'Delivered'], READ: ['✓✓', 'Read'],
     FAILED: ['Not delivered', msg.error || 'Not delivered'],
   }
   const mark = marks[msg.status]
-  if (!mark || msg.channel !== 'WHATSAPP') return null
-  const style = msg.status === 'READ' ? { color: C.read } : msg.status === 'FAILED' ? { color: C.redText, fontWeight: 700 } : {}
+  if (!mark || !['WHATSAPP', 'TELEGRAM'].includes(msg.channel)) return null
+  const style = msg.status === 'READ' ? { color: read } : msg.status === 'FAILED' ? { color: C.redText, fontWeight: 700 } : {}
   return <span title={mark[1]} style={{ letterSpacing: mark[0] === '✓✓' ? -2 : 0, ...style }}>{mark[0]}</span>
 }
 
@@ -239,7 +314,6 @@ function Row({ c, selected, onOpen }) {
             </span>
           )}
           {c.job && <span className="text-[10.5px] text-[var(--text-3)] truncate">Job {c.job.ref}</span>}
-          <span className="text-[10.5px] font-semibold" style={{ color: channelOf(c).colour }}>{channelOf(c).label}</span>
           {c.unread_count > 0 && !selected && <span className="ml-auto w-2 h-2 rounded-full" style={{ background: C.red }} aria-label="Unread" />}
         </span>
       </span>
@@ -330,7 +404,7 @@ function FileCard({ m, tint }) {
   )
 }
 
-function Bubble({ m, who, first, initials, onReply, reports }) {
+function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATSAPP }) {
   const kind = kindOf(m)
   if (kind === 'event') {
     return <div className="self-center text-[11px] text-[var(--text-3)] py-1 text-center">{(m.body || '').replace(/\.$/, '')}, {clock(m.created_at)}</div>
@@ -363,10 +437,11 @@ function Bubble({ m, who, first, initials, onReply, reports }) {
           : <span className="w-[30px] h-[30px] rounded-full bg-[#080808] text-white text-[10.5px] font-bold grid place-items-center">{initials}</span>)}
       </span>
       <div className={`max-w-[66%] min-w-0 flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`}>
-        {first && <span className="text-[11px] font-bold text-[var(--text-3)] px-1.5">{who}</span>}
+        {first && <span className="text-[11px] font-bold px-1.5" style={{ color: theme.who }}>{who}</span>}
         <div className={`flex items-center gap-1.5 min-w-0 max-w-full ${mine ? 'flex-row-reverse' : ''}`}>
-          <div className={`min-w-0 flex flex-col gap-1.5 ${photo ? 'p-1.5' : 'px-3.5 py-2.5'}`}
-            style={{ ...RING[kind], borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', boxShadow: '0 1px 2px rgba(8,8,8,.05)' }}>
+          <div className={`min-w-0 flex flex-col gap-1 ${photo ? 'p-1' : 'px-2.5 py-1.5'}`}
+            style={{ ...theme.bubble[kind], boxShadow: theme.shadow,
+              borderRadius: first ? (mine ? theme.radius.mineTail : theme.radius.theirsTail) : (mine ? theme.radius.mine : theme.radius.theirs) }}>
             {q && (
               <div className="flex flex-col gap-px px-2.5 py-1.5 rounded-md text-xs text-[var(--text-2)] bg-black/[0.045] max-w-[360px]"
                 style={{ borderLeft: `3px solid ${q.who === 'Octos' ? '#CC0000' : '#080808'}` }}>
@@ -377,8 +452,8 @@ function Bubble({ m, who, first, initials, onReply, reports }) {
             {photo && <Photo m={m} />}
             {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
             {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
-            <span className={`self-end text-[10.5px] text-[var(--text-3)] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`}>
-              {clock(m.created_at)} <Ticks msg={m} />
+            <span className={`self-end text-[10.5px] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`} style={{ color: theme.meta }}>
+              {clock(m.created_at)} <Ticks msg={m} read={theme.read} />
             </span>
           </div>
           {onReply && (
@@ -523,7 +598,7 @@ function Thumb({ m }) {
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
 }
 
-function Album({ ms, conv, who, first, initials }) {
+function Album({ ms, conv, who, first, initials, theme = THEME.WHATSAPP }) {
   const [at, setAt] = useState(null)
   const [making, setMaking] = useState(false)
   const shown = ms.slice(0, 4)
@@ -543,8 +618,8 @@ function Album({ ms, conv, who, first, initials }) {
         {first && <span className="w-[30px] h-[30px] rounded-full bg-[#080808] text-white text-[10.5px] font-bold grid place-items-center">{initials}</span>}
       </span>
       <div className="flex flex-col gap-1 items-start min-w-0">
-        {first && <span className="text-[11px] font-bold text-[var(--text-3)] px-1.5">{who}</span>}
-        <div className="flex flex-col gap-1.5 p-1.5" style={{ ...RING.customer, borderRadius: '18px 18px 18px 6px', boxShadow: '0 1px 2px rgba(8,8,8,.05)' }}>
+        {first && <span className="text-[11px] font-bold px-1.5" style={{ color: theme.who }}>{who}</span>}
+        <div className="flex flex-col gap-1.5 p-1.5" style={{ ...theme.bubble.customer, borderRadius: first ? theme.radius.theirsTail : theme.radius.theirs, boxShadow: theme.shadow }}>
           <div className="grid grid-cols-2 gap-1 rounded-xl overflow-hidden" style={{ width: 'min(344px, 60vw)' }}>
             {shown.map((m, i) => (
               <button key={m.id} type="button" onClick={() => setAt(i)} aria-label={`Photo ${i + 1} of ${ms.length}`}
@@ -562,7 +637,7 @@ function Album({ ms, conv, who, first, initials }) {
               {making ? 'Making the PDF…' : 'Open as one PDF'}
             </button>
           </div>
-          <span className="self-end text-[10.5px] text-[var(--text-3)] px-1">{clock(ms[ms.length - 1].created_at)}</span>
+          <span className="self-end text-[10.5px] px-1" style={{ color: theme.meta }}>{clock(ms[ms.length - 1].created_at)}</span>
         </div>
       </div>
       {at !== null && <PhotoViewer ms={ms} at={at} setAt={setAt} title={nameOf(conv)} onPdf={makePdf} making={making} />}
@@ -617,6 +692,46 @@ function PhotoViewer({ ms, at, setAt, title, onPdf, making }) {
       </div>
     </div>,
     document.body
+  )
+}
+
+// ── An email: a card with who, to whom and when, then the letter ─────────
+// Folded to one line until opened, as mail apps fold the older ones.
+function EmailMessage({ m, conv, open, onToggle, reports }) {
+  const kind = kindOf(m)
+  const from = kind === 'customer' ? nameOf(conv) : kind === 'octos' ? 'Octos at Farhat' : `${m.sent_by_name || 'Staff'}, Farhat`
+  const address = kind === 'customer' ? conv.contact_email : 'Farhat Printing Press'
+  const to = kind === 'customer' ? 'to Farhat' : `to ${nameOf(conv)}`
+  const text = m.body && m.body !== m.media_name ? m.body : ''
+  const when = `${dayLabel(m.created_at)}, ${clock(m.created_at)}`
+  const avatar = kind === 'octos'
+    ? <img src="/octos-tile.svg" alt="" width={32} height={32} className="block rounded-full shrink-0" />
+    : <span className="w-8 h-8 shrink-0 rounded-full grid place-items-center text-white text-[12px] font-bold" style={{ background: kind === 'customer' ? '#E37400' : '#080808' }}>
+        {kind === 'customer' ? initialsOf(conv) : initialsOf({ display_name: m.sent_by_name || 'Staff' })}
+      </span>
+  if (!open) {
+    return (
+      <button type="button" onClick={onToggle} className="w-full flex items-center gap-2.5 px-5 py-2.5 border-b border-[#F1F3F4] text-left hover:bg-[#F8F9FA]">
+        {avatar}
+        <span className="flex-1 min-w-0 truncate text-[13px] text-[#444746]"><b className="text-[#1F1F1F]">{from}</b> · {(text || m.media_name || 'A file').replace(/\n+/g, ' ')}</span>
+        <span className="shrink-0 text-xs text-[#444746]">{when}</span>
+      </button>
+    )
+  }
+  return (
+    <article className="px-5 py-4 border-b border-[#F1F3F4] text-[#1F1F1F]">
+      <div className="flex items-start gap-2.5">
+        {avatar}
+        <button type="button" onClick={onToggle} className="flex-1 min-w-0 text-left">
+          <span className="block text-[13.5px] truncate"><b>{from}</b>{address && <span className="text-xs text-[#444746]"> &lt;{address}&gt;</span>}</span>
+          <span className="block text-xs text-[#444746]">{to}</span>
+        </button>
+        <span className="shrink-0 text-xs text-[#444746] flex items-center gap-1">{when}</span>
+      </div>
+      {text && <div className="mt-3 pl-[42px] text-[13.5px] leading-relaxed whitespace-pre-line">{text}</div>}
+      {hasFile(m) && <div className="mt-3 pl-[42px]">{isPhoto(m) && m.media_file ? <Photo m={m} /> : <FileCard m={m} tint="#FFFFFF" />}</div>}
+      {reports && m.report && <div className="mt-2 pl-[42px]"><Report report={m.report} /></div>}
+    </article>
   )
 }
 
@@ -712,6 +827,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const filePick = useRef(null)
   const box = useRef(null)
   const [emojis, setEmojis] = useState(false)
+  // Email: which messages are unfolded; the newest always is.
+  const [unfolded, setUnfolded] = useState(() => new Set())
   // An emoji goes where the cursor is, and the box keeps its focus.
   const addEmoji = e => {
     const el = box.current
@@ -778,6 +895,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   }
 
   const whatsapp = conv.channel === 'WHATSAPP'
+  const email = conv.channel === 'EMAIL'
+  const theme = themeOf(conv)
   const resolved = conv.status === 'RESOLVED'
   const closes = conv.window_closes_at
   const windowOpen = whatsapp && closes && new Date(closes) > new Date()
@@ -787,31 +906,33 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const mainButton = (
     <button type="button" onClick={() => (taken ? handBack : takeOver).mutate()} disabled={takeOver.isPending || handBack.isPending}
       className="w-full h-[34px] px-3.5 rounded-lg text-[12.5px] font-semibold disabled:opacity-40"
-      style={taken ? { background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: C.mintIcon } : { background: '#16181D', color: '#fff' }}>
+      style={taken ? { background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: C.mintIcon } : { background: '#FFFFFF', border: '1px solid #D1D7DB', color: theme.header.title }}>
       {taken ? 'Hand back to Octos' : 'Take over'}
     </button>
   )
   const files = messages.filter(m => hasFile(m) && m.media_file)
+  // Email: the newest real message is always unfolded.
+  const lastMail = [...messages].reverse().find(x => !['note', 'event'].includes(kindOf(x)))?.id
   const submit = () => { if ((reply.trim() || chips.length) && !send.isPending) send.mutate() }
 
   let lastWho = '', lastDay = ''
   return (
     <div className="flex-1 min-w-0 flex relative">
-      <section aria-label="Conversation" className="flex-1 min-w-0 flex flex-col bg-[#FBFBFA]"
+      <section aria-label="Conversation" className="flex-1 min-w-0 flex flex-col" style={{ background: theme.wall.backgroundColor }}
         onDragOver={e => { e.preventDefault(); if (!resolved) setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); if (!resolved) addFiles(e.dataTransfer.files) }}>
-        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
+        <div className="flex items-center gap-2.5 px-4 py-2.5 border-b" style={{ background: theme.header.background, borderColor: theme.header.borderColor }}>
           <button type="button" onClick={onBack} aria-label="All conversations" className="lg:hidden w-8 h-8 -ml-1 grid place-items-center rounded-lg"><I.back size={18} /></button>
           <Avatar c={conv} s={38} />
           <div className="flex-1 min-w-0 flex flex-col">
-            <h2 className="m-0 text-[14.5px] font-bold truncate">{nameOf(conv)}</h2>
-            <span className="text-[11.5px] text-[var(--text-3)] truncate">{channelOf(conv).label}, {conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
+            <h2 className="m-0 text-[14.5px] font-bold truncate" style={{ color: theme.header.title }}>{email ? (conv.subject || nameOf(conv)) : nameOf(conv)}</h2>
+            <span className="text-[11.5px] truncate" style={{ color: theme.header.sub }}>{email && conv.subject ? `${nameOf(conv)}, ` : `${channelOf(conv).label}, `}{conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
           </div>
           {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
           {/* Record the job without leaving the chat (9 Nov 2026). */}
           <button type="button" onClick={() => setRecording(true)}
-            className="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-lg text-[13px] font-semibold bg-[#CC0000] text-white">
+            className="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: theme.accent }}>
             <I.plus size={14} />Record a job
           </button>
           {recording && (
@@ -838,10 +959,16 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
             style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
         </div>
 
-        <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-3 flex flex-col gap-1 relative" style={WALL}>
+        <div ref={scroller} className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col relative ${email ? '' : 'px-5 py-3 gap-1'}`} style={theme.wall}>
           {dragging && <div className="absolute inset-2 z-10 rounded-xl border-2 border-dashed border-zinc-900 bg-white/80 grid place-items-center text-sm font-semibold">Drop to attach</div>}
           {messages.length === 0 && <div className="text-center text-sm text-[var(--text-3)] py-8">No messages yet</div>}
-          {groupPhotos(messages).map(({ m, album }) => {
+          {email && messages.map(m => (['note', 'event'].includes(kindOf(m))
+            ? <div key={m.id} className="px-5 py-1 flex flex-col"><Bubble m={m} theme={theme} /></div>
+            : <EmailMessage key={m.id} m={m} conv={conv} reports={reports}
+                open={m.id === lastMail || unfolded.has(m.id)}
+                onToggle={() => setUnfolded(s => { const n = new Set(s); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })} />
+          ))}
+          {!email && groupPhotos(messages).map(({ m, album }) => {
             const kind = kindOf(m)
             const who = kind === 'octos' ? 'Octos' : kind === 'staff' ? `${m.sent_by_name || 'Staff'}, staff`
               : kind === 'customer' ? nameOf(conv) : ''
@@ -853,12 +980,12 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
             return (
               <div key={m.id} className="flex flex-col">
                 {newDay && (
-                  <div className="self-center my-2 px-3 py-0.5 rounded-full bg-white/90 shadow-[0_1px_1px_rgba(0,0,0,.05)] text-[11px] font-semibold text-[var(--text-3)]">{day}</div>
+                  <div className="self-center my-2 px-3 py-0.5 rounded-lg text-[11px] font-semibold" style={theme.day}>{day}</div>
                 )}
                 {album ? (
-                  <Album ms={album} conv={conv} who={who} first={!!who && first} initials={initialsOf(conv)} />
+                  <Album ms={album} conv={conv} who={who} first={!!who && first} initials={initialsOf(conv)} theme={theme} />
                 ) : (
-                <Bubble m={m} who={who} first={!!who && first} reports={reports}
+                <Bubble m={m} who={who} first={!!who && first} reports={reports} theme={theme}
                   initials={kind === 'customer' ? initialsOf(conv) : initialsOf({ display_name: m.sent_by_name || 'Staff' })}
                   onReply={!resolved && conv.channel === 'WHATSAPP' && m.id && (kind === 'customer' || kind === 'octos' || kind === 'staff') ? setReplyTo : null} />
                 )}
@@ -869,7 +996,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
           {conv.octos_writing && (
             <div className="flex flex-row-reverse items-center gap-2.5 mt-2" role="status">
               <img src="/octos-tile.svg" alt="" width={30} height={30} className="block rounded-full shrink-0" />
-              <span className="inline-flex gap-1 px-3.5 py-3 rounded-[18px_18px_6px_18px]" style={RING.octos}>
+              <span className="inline-flex gap-1 px-3.5 py-3" style={{ ...theme.bubble.octos, borderRadius: theme.radius.mineTail, boxShadow: theme.shadow }}>
                 {[0, 1, 2].map(i => (
                   <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#9B9B9B] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
@@ -880,7 +1007,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
         </div>
 
         {!resolved && (
-          <div className="bg-[var(--panel)] border-t border-[var(--border)] px-4 pt-2 pb-2.5 flex flex-col gap-2">
+          <div className="border-t px-4 pt-2 pb-2.5 flex flex-col gap-2" style={{ background: theme.composer.background, borderColor: theme.header.borderColor }}>
             {replyTo && (
               <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 rounded-[10px] bg-black/[0.04]">
                 <span className="w-[3px] self-stretch rounded bg-[#080808] shrink-0" />
@@ -898,7 +1025,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                     className={`h-7 px-3 rounded-md text-xs ${asNote === note ? 'bg-white shadow-sm font-bold' : 'font-semibold text-[var(--text-3)]'}`}>{label}</button>
                 ))}
               </div>
-              <span className="text-[11.5px]" style={{ color: asNote ? C.noteMeta : windowOpen ? '#1E7A4C' : 'var(--text-3)' }}>
+              <span className="text-[11.5px]" style={{ color: asNote ? C.noteMeta : windowOpen ? '#1E7A4C' : theme.meta }}>
                 {asNote ? 'Only staff see notes.' : `${!taken && whatsapp ? 'Sending takes this chat over from Octos. ' : ''}${windowLine}`}
               </span>
             </div>
@@ -958,10 +1085,10 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                 onPaste={e => { if (e.clipboardData?.files?.length) { e.preventDefault(); addFiles(e.clipboardData.files) } }}
                 placeholder={asNote ? 'Write a note only staff see' : `Reply to ${nameOf(conv)}`}
                 className="flex-1 min-h-[38px] max-h-32 px-3 py-2 text-[13.5px] leading-snug rounded-lg outline-none resize-none"
-                style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: '#fff', border: '1px solid var(--border)' }} />
+                style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: theme.composer.input, border: theme.composer.border, borderRadius: theme.composer.radius }} />
               <button type="button" onClick={submit} disabled={(!reply.trim() && !chips.length) || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
                 className="w-[42px] h-[38px] shrink-0 rounded-lg grid place-items-center text-white disabled:opacity-40"
-                style={{ background: asNote ? C.noteMeta : C.red }}>{asNote ? <I.check size={18} /> : <I.send size={17} />}</button>
+                style={{ background: asNote ? C.noteMeta : theme.send, borderRadius: theme.composer.radius >= 20 ? 999 : 8 }}>{asNote ? <I.check size={18} /> : <I.send size={17} />}</button>
             </div>
             )}
             {error && <p className="m-0 text-xs" style={{ color: C.redText }}>{error}</p>}
@@ -983,7 +1110,10 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
 }
 
 // ── The page ────────────────────────────────────────────────────────────
-const TABS = ['ALL', 'WHATSAPP', 'SMS', 'EMAIL']
+// The channels, as their marks (15 Nov 2026). No "All": each tab carries its
+// own count, so a chat on another channel is never missed.
+const TABS = ['WHATSAPP', 'TELEGRAM', 'SMS', 'EMAIL']
+const savedChannel = () => { try { const v = localStorage.getItem('octos.inbox.channel'); return TABS.includes(v) ? v : 'WHATSAPP' } catch { return 'WHATSAPP' } }
 const FILTERS = [
   { key: 'needs', label: 'Needs you', test: needsYou },
   { key: 'octos', label: 'Octos', test: c => c.handled_by === 'OCTOS' && c.channel === 'WHATSAPP' },
@@ -992,7 +1122,8 @@ const FILTERS = [
 
 export default function Inbox({ focus = null } = {}) {
   const queryClient = useQueryClient()
-  const [channel, setChannel] = useState('ALL')
+  const [channel, setChannelState] = useState(savedChannel)
+  const setChannel = t => { setChannelState(t); try { localStorage.setItem('octos.inbox.channel', t) } catch { /* private */ } }
   const [filter, setFilter] = useState(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -1014,13 +1145,23 @@ export default function Inbox({ focus = null } = {}) {
     placeholderData: prev => prev,
   })
 
+  // Opened from a notification: show the tab the chat is on.
+  const focused = useRef(null)
+  useEffect(() => {
+    if (!focus?.id || focused.current === focus.id) return
+    const c = conversations.find(x => x.id === Number(focus.id))
+    if (c && TABS.includes(c.channel)) { focused.current = focus.id; setChannelState(c.channel) }
+  }, [focus, conversations])
+
+  // Per channel: chats with unread messages or waiting for a person.
+  const waitingOn = t => conversations.filter(c => c.channel === t && (c.unread_count > 0 || needsYou(c))).length
   const needsCount = conversations.filter(needsYou).length
   const unread = conversations.filter(c => c.unread_count > 0).length
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     const f = FILTERS.find(x => x.key === filter)
     return conversations
-      .filter(c => channel === 'ALL' || c.channel === channel)
+      .filter(c => c.channel === channel)
       .filter(c => !f || f.test(c))
       .filter(c => !q || [nameOf(c), c.contact_phone, c.last_message_preview, c.job?.ref, c.job?.what].some(v => (v || '').toLowerCase().includes(q)))
       .sort((a, b) => (needsYou(b) - needsYou(a)) || (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
@@ -1045,13 +1186,22 @@ export default function Inbox({ focus = null } = {}) {
             placeholder="Search names, numbers, messages or jobs"
             className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
         </div>
-        <div role="tablist" aria-label="Channel" className="flex shrink-0 gap-0.5 p-[3px] rounded-[10px] bg-black/[0.05]">
-          {TABS.map(t => (
-            <button key={t} type="button" role="tab" aria-selected={channel === t} onClick={() => setChannel(t)}
-              className={`h-7 px-3 rounded-md text-xs ${channel === t ? 'bg-white shadow-sm font-bold' : 'font-semibold text-[var(--text-3)]'}`}>
-              {t === 'ALL' ? 'All' : CHANNEL[t].label}
-            </button>
-          ))}
+        <div role="tablist" aria-label="Channel" className="flex shrink-0 gap-1 p-[3px] rounded-[10px] bg-black/[0.05]">
+          {TABS.map(t => {
+            const n = waitingOn(t)
+            return (
+              <button key={t} type="button" role="tab" aria-selected={channel === t} onClick={() => setChannel(t)}
+                aria-label={`${CHANNEL[t].label}${n ? `, ${n} waiting` : ''}`} title={CHANNEL[t].label}
+                className={`relative w-11 h-8 rounded-md grid place-items-center transition-opacity ${channel === t ? 'bg-white shadow-sm' : 'opacity-50 hover:opacity-90'}`}>
+                <ChannelMark ch={t} s={22} />
+                {n > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white grid place-items-center" style={{ background: C.red }}>
+                    {n > 99 ? '99+' : n}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
         <button type="button" onClick={() => setStarting(s => !s)}
           className="ml-auto shrink-0 inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
@@ -1080,7 +1230,9 @@ export default function Inbox({ focus = null } = {}) {
             {isLoading ? [1, 2, 3].map(i => <div key={i} className="h-16 m-3 bg-[var(--bg)] rounded-xl animate-pulse" />)
               : shown.length === 0 ? (
                 <div className="p-8 text-center text-sm text-[var(--text-3)]">
-                  {query || filter ? 'Nothing matches. Clear the search or filter to see everything.' : 'Messages from customers will appear here.'}
+                  {query || filter ? 'Nothing matches. Clear the search or filter to see everything.'
+                    : channel === 'TELEGRAM' ? 'No Telegram chats yet. They will appear here once Telegram is connected.'
+                    : `${CHANNEL[channel].label} messages from customers will appear here.`}
                 </div>
               ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
           </div>
