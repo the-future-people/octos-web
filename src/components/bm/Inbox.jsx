@@ -13,9 +13,9 @@
 // beige doodle wallpaper with green bubbles, Telegram with its blue and soft
 // green, SMS like a phone's Messages, and email as a mail thread, not bubbles.
 // The tabs are the channels' marks (no "All"), each with its own unread count.
-// The app logos are the official files in public/brand/ (whatsapp.svg,
-// telegram.svg), from each company's brand resources; until they are there, a
-// plain coloured disc stands in.
+// The marks are files in public/brand/ (whatsapp.png, telegram.png,
+// wechat.svg, email.png); a plain coloured disc stands in for a missing one. Telegram and WeChat are ready
+// in the inbox; their connections come later.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -202,10 +202,11 @@ const I = {
   sms: p => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></Svg>,
 }
 const CHANNEL = {
-  WHATSAPP: { label: 'WhatsApp', colour: '#25D366', logo: '/brand/whatsapp.svg' },
-  TELEGRAM: { label: 'Telegram', colour: '#2AABEE', logo: '/brand/telegram.svg' },
-  SMS: { label: 'SMS', colour: '#0B57D0', icon: 'sms' },
-  EMAIL: { label: 'Email', colour: '#5F6368', icon: 'mail' },
+  WHATSAPP: { label: 'WhatsApp', colour: '#25D366', tint: '#E7FCEB', text: '#0B5F2A', logo: '/brand/whatsapp.png' },
+  TELEGRAM: { label: 'Telegram', colour: '#2AABEE', tint: '#E3F2FD', text: '#0F5E99', logo: '/brand/telegram.png' },
+  WECHAT: { label: 'WeChat', colour: '#07C160', tint: '#E6F9EE', text: '#06783C', logo: '/brand/wechat.svg' },
+  SMS: { label: 'SMS', colour: '#0B57D0', tint: '#E8F0FE', text: '#0B57D0', icon: 'sms' },
+  EMAIL: { label: 'Email', colour: '#5F6368', tint: '#F1F3F4', text: '#3C4043', icon: 'mail', logo: '/brand/email.png' },
 }
 const channelOf = c => CHANNEL[c?.channel] || CHANNEL.SMS
 
@@ -232,6 +233,16 @@ const THEME = {
     day: { background: 'rgba(0,0,0,.2)', color: '#FFFFFF' },
     composer: { background: '#FFFFFF', input: '#FFFFFF', border: '1px solid #E7E7E7', radius: 12 },
     send: '#3390EC', accent: '#3390EC',
+  },
+  WECHAT: {
+    header: { background: '#EDEDED', borderColor: '#DADADA', title: '#191919', sub: '#7F7F7F' },
+    wall: { backgroundColor: '#EDEDED' },
+    bubble: { customer: { background: '#FFFFFF', color: '#191919' }, octos: { background: '#95EC69', color: '#191919' }, staff: { background: '#95EC69', color: '#191919' } },
+    radius: { mine: '4px', theirs: '4px', mineTail: '4px', theirsTail: '4px' },
+    shadow: 'none', meta: '#7F7F7F', read: '#07C160', who: '#7F7F7F',
+    day: { background: 'transparent', color: '#9A9A9A' },
+    composer: { background: '#F7F7F7', input: '#FFFFFF', border: '1px solid transparent', radius: 6 },
+    send: '#07C160', accent: '#07C160',
   },
   SMS: {
     header: { background: '#FFFFFF', borderColor: '#E1E3E1', title: '#1F1F1F', sub: '#444746' },
@@ -1156,9 +1167,13 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
 }
 
 // ── The page ────────────────────────────────────────────────────────────
-// The channels, as their marks (15 Nov 2026). No "All": each tab carries its
-// own count, so a chat on another channel is never missed.
-const TABS = ['WHATSAPP', 'TELEGRAM', 'SMS', 'EMAIL']
+// The channels, as their marks (15 Nov 2026). No "All": each carries its own
+// count, so a chat on another channel is never missed.
+const TABS = ['WHATSAPP', 'TELEGRAM', 'WECHAT', 'SMS', 'EMAIL']
+const SOON = ['TELEGRAM', 'WECHAT']   // in the inbox, not yet connected
+const Count = ({ n }) => (
+  <span className="min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white grid place-items-center" style={{ background: C.red }}>{n > 99 ? '99+' : n}</span>
+)
 const savedChannel = () => { try { const v = localStorage.getItem('octos.inbox.channel'); return TABS.includes(v) ? v : 'WHATSAPP' } catch { return 'WHATSAPP' } }
 const FILTERS = [
   { key: 'needs', label: 'Needs you', test: needsYou },
@@ -1172,6 +1187,9 @@ export default function Inbox({ focus = null } = {}) {
   const setChannel = t => { setChannelState(t); try { localStorage.setItem('octos.inbox.channel', t) } catch { /* private */ } }
   const [filter, setFilter] = useState(null)
   const [query, setQuery] = useState('')
+  // Search folds into a button until it's wanted (15 Nov 2026, layout C).
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searching = searchOpen || !!query
   const [selectedId, setSelectedId] = useState(null)
   const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
@@ -1218,41 +1236,56 @@ export default function Inbox({ focus = null } = {}) {
   return (
     <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-2"
       style={{ height: 'calc(100vh - 100px)', minHeight: 560 }}>
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)]">
-        <div className="flex flex-col shrink-0">
-          <span className="text-base font-bold">Inbox</span>
-          <span className="text-[11.5px] text-[var(--text-2)]">
-            {needsCount > 0 && <b style={{ color: C.redText }}>{needsCount} need{needsCount === 1 ? 's' : ''} you, </b>}
-            {unread} unread. Octos is answering the rest.
-          </span>
-        </div>
-        <div className="relative flex-[1_1_220px] max-w-[320px] min-w-[140px]">
-          <I.search size={15} className="absolute left-2.5 top-[9px] text-[var(--text-3)]" />
-          <input type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
-            placeholder="Search names, numbers, messages or jobs"
-            className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
-        </div>
-        <div role="tablist" aria-label="Channel" className="flex shrink-0 gap-1 p-[3px] rounded-[10px] bg-black/[0.05]">
+      {/* One row (15 Nov 2026): the chosen channel opens into a pill with its
+          name and count; the others are their marks, with counts of their own. */}
+      <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)] flex-wrap">
+        <span className="text-base font-bold shrink-0 mr-1">Inbox</span>
+        <div role="tablist" aria-label="Channel" className="flex items-center gap-1 p-[3px] rounded-full bg-black/[0.05] shrink-0">
           {TABS.map(t => {
             const n = waitingOn(t)
-            return (
-              <button key={t} type="button" role="tab" aria-selected={channel === t} onClick={() => setChannel(t)}
-                aria-label={`${CHANNEL[t].label}${n ? `, ${n} waiting` : ''}`} title={CHANNEL[t].label}
-                className={`relative w-11 h-8 rounded-md grid place-items-center transition-opacity ${channel === t ? 'bg-white shadow-sm' : 'opacity-50 hover:opacity-90'}`}>
-                <ChannelMark ch={t} s={22} />
-                {n > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white grid place-items-center" style={{ background: C.red }}>
-                    {n > 99 ? '99+' : n}
-                  </span>
-                )}
+            const meta = CHANNEL[t]
+            const label = `${meta.label}${n ? `, ${n} waiting` : ''}${SOON.includes(t) ? ', not connected yet' : ''}`
+            return channel === t ? (
+              <button key={t} type="button" role="tab" aria-selected="true" aria-label={label}
+                className="inline-flex items-center gap-1.5 h-[30px] pl-1.5 pr-3 rounded-full text-[12.5px] font-semibold"
+                style={{ background: meta.tint, color: meta.text }}>
+                <ChannelMark ch={t} s={20} />{meta.label}{n > 0 && <Count n={n} />}
+              </button>
+            ) : (
+              <button key={t} type="button" role="tab" aria-selected="false" aria-label={label} title={meta.label} onClick={() => setChannel(t)}
+                className="relative w-[30px] h-[30px] rounded-full grid place-items-center opacity-60 hover:opacity-100 hover:bg-white/70 transition-opacity">
+                <ChannelMark ch={t} s={20} />
+                {n > 0 && <span className="absolute -top-1 -right-1"><Count n={n} /></span>}
               </button>
             )
           })}
         </div>
-        <button type="button" onClick={() => setStarting(s => !s)}
-          className="ml-auto shrink-0 inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
-          <I.plus size={14} />New message
-        </button>
+        <span className="text-[11.5px] text-[var(--text-2)] truncate min-w-0">
+          {needsCount > 0
+            ? <b style={{ color: C.redText }}>{needsCount} need{needsCount === 1 ? 's' : ''} you</b>
+            : `${unread} unread. Octos is answering the rest.`}
+        </span>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {searching ? (
+            <div className="relative w-[260px]">
+              <I.search size={15} className="absolute left-2.5 top-[9px] text-[var(--text-3)]" />
+              <input type="search" autoFocus value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
+                onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); setSearchOpen(false) } }}
+                onBlur={() => { if (!query) setSearchOpen(false) }}
+                placeholder={`Search ${CHANNEL[channel].label} chats`}
+                className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
+            </div>
+          ) : (
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search conversations" title="Search"
+              className="w-[33px] h-[33px] rounded-lg border border-[var(--border)] grid place-items-center text-[var(--text-2)] hover:bg-black/[0.03]">
+              <I.search size={16} />
+            </button>
+          )}
+          <button type="button" onClick={() => setStarting(s => !s)}
+            className="inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
+            <I.plus size={14} />New message
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 flex">
@@ -1277,7 +1310,7 @@ export default function Inbox({ focus = null } = {}) {
               : shown.length === 0 ? (
                 <div className="p-8 text-center text-sm text-[var(--text-3)]">
                   {query || filter ? 'Nothing matches. Clear the search or filter to see everything.'
-                    : channel === 'TELEGRAM' ? 'No Telegram chats yet. They will appear here once Telegram is connected.'
+                    : SOON.includes(channel) ? `No ${CHANNEL[channel].label} chats yet. They will appear here once ${CHANNEL[channel].label} is connected.`
                     : `${CHANNEL[channel].label} messages from customers will appear here.`}
                 </div>
               ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
