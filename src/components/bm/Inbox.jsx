@@ -119,7 +119,28 @@ const fileUrl = m => `/api/v1/communications/messages/${m.id}/file/`
 // Inside the Octos desktop app, the app itself keeps the file in its private
 // folder and opens it (octos-desktop, open_file); in a browser, as below.
 const desktopInvoke = () => window.__TAURI__?.core?.invoke
-export function openFile(m) {
+// In a browser, Open downloads straight from storage with a signed link
+// (15 Nov 2026): the file comes from R2's edge, not through our server first.
+// The link is asked for here, so the check of who may see the chat still runs.
+async function signedLink(m, download) {
+  try {
+    const { data } = await client.get(fileUrl(m), { params: { link: 1, ...(download ? { download: 1 } : {}) } })
+    return data?.url || null
+  } catch {
+    return null
+  }
+}
+export async function openFile(m) {
+  if (!desktopInvoke()) {
+    const url = await signedLink(m, true)
+    if (url) {
+      const a = document.createElement('a')
+      a.href = url
+      a.rel = 'noopener'
+      document.body.appendChild(a); a.click(); a.remove()
+      return
+    }
+  }
   client.get(fileUrl(m) + '?download=1', { responseType: 'blob' })
     .then(async r => {
       const name = m.media_name || (isPhoto(m) ? 'photo.png' : 'file')
@@ -139,11 +160,18 @@ export function openFile(m) {
     .catch(() => window.alert('That file could not be opened. Try again.'))
 }
 // A photo, fetched with the user's sign-in and shown from memory.
+// A photo's address: a signed link straight to storage (good for an hour, so
+// kept 50 minutes), or the file itself fetched through our server where
+// files aren't in R2.
+const photoSrc = async m => (await signedLink(m, false))
+  || client.get(fileUrl(m), { responseType: 'blob' }).then(r => URL.createObjectURL(r.data))
+const PHOTO_FRESH = 50 * 60 * 1000
 function Photo({ m }) {
   const { data: src, isError } = useQuery({
     queryKey: ['messageFile', m.id],
-    queryFn: () => client.get(fileUrl(m), { responseType: 'blob' }).then(r => URL.createObjectURL(r.data)),
-    staleTime: Infinity,
+    queryFn: () => photoSrc(m),
+    staleTime: PHOTO_FRESH,
+    gcTime: PHOTO_FRESH,
   })
   if (isError) return <span className="block px-3 py-6 text-xs text-[var(--text-3)]">This photo could not be loaded.</span>
   if (!src) return <span className="block w-[220px] h-[160px] rounded-lg bg-black/[0.05] animate-pulse" />
@@ -174,6 +202,8 @@ function fileInfo(m) {
   if (i.colour_mode) parts.push(/^(L|1|GRAY|GREY)/i.test(i.colour_mode) ? 'black and white' : 'colour')
   if (i.word) parts.push('Word, kept as sent')
   if (m.media_size) parts.push(size(m.media_size))
+  // Openable already; pages and paper size follow in a moment (15 Nov 2026).
+  if (i.measuring) parts.push('checking pages…')
   return parts.join(', ') || 'Saved'
 }
 
@@ -643,8 +673,9 @@ function savePhoto(m) {
 function usePhotoSrc(m) {
   return useQuery({
     queryKey: ['messageFile', m.id],
-    queryFn: () => client.get(fileUrl(m), { responseType: 'blob' }).then(r => URL.createObjectURL(r.data)),
-    staleTime: Infinity,
+    queryFn: () => photoSrc(m),
+    staleTime: PHOTO_FRESH,
+    gcTime: PHOTO_FRESH,
     enabled: !!m.media_file,
   }).data
 }
