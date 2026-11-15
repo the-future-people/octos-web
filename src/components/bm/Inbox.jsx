@@ -1028,7 +1028,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
             <I.plus size={14} />Record a job
           </button>
           {recording && (
-            <NewJobModal onClose={() => setRecording(false)} onSuccess={() => setRecording(false)}
+<ChatJobModal onClose={() => setRecording(false)} onSuccess={() => setRecording(false)}
               fromChat={{
                 conversationId: conv.id, customerId: conv.customer || null, name: nameOf(conv),
                 phone: conv.contact_phone, username: conv.contact_username,
@@ -1215,6 +1215,23 @@ const FILTERS = [
   { key: 'octos', label: 'Octos', test: c => c.handled_by === 'OCTOS' && c.channel === 'WHATSAPP' },
   { key: 'people', label: 'People', test: withPerson },
 ]
+
+// Recording a job from a chat follows the same rule as the dashboard's
+// New Job button: once recording has closed, the Branch Manager gives a
+// reason (and the job is held if the cashier has already signed off).
+// Sundays and holidays stay plain, so the server's "closed" message shows.
+function ChatJobModal(props) {
+  const { data: lock, isLoading } = useQuery({
+    queryKey: ['lockStatus'],
+    queryFn:  () => getLockStatus().then(r => r.data),
+    staleTime: 0,
+  })
+  if (isLoading) return null
+  const closedDay = lock?.is_today_sunday || lock?.is_today_holiday
+  const late = !!lock && !lock.can_create_jobs && !closedDay
+  return <NewJobModal {...props} late={late} held={late && !!lock.cashier_signed_off} />
+}
+
 
 export default function Inbox({ focus = null } = {}) {
   const queryClient = useQueryClient()
