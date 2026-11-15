@@ -431,7 +431,11 @@ function FileCard({ m, tint }) {
         <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
         {m.media_file
           ? <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
-          : (
+          : m.media_info?.failed ? (
+            <span className="text-[11.5px] font-semibold" style={{ color: C.redText }}>
+              This file couldn’t be saved. Ask the customer to send it again.
+            </span>
+          ) : (
             // Recorded before WhatsApp has handed the file over: it takes a few seconds.
             <span className="text-[11.5px] text-[var(--text-3)] inline-flex items-center gap-1.5" role="status">
               <span className="w-3 h-3 rounded-full border-2 border-black/15 border-t-black/60 animate-spin" aria-hidden="true" />
