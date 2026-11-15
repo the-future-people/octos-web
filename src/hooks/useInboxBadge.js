@@ -1,7 +1,7 @@
 // src/hooks/useInboxBadge.js
 //
 // The inbox's badge on the menu (8 Nov 2026): how many chats have unread
-// messages, and how many Octos has asked a person to take. It shares the
+// messages, and how many Octos has asked a person to take, and since when. It shares the
 // inbox's own query (same key, same request), so it costs nothing extra.
 // It also puts the count in the window's title, for the taskbar.
 import { useEffect, useRef } from 'react'
@@ -19,7 +19,12 @@ export default function useInboxBadge() {
     refetchInterval: 15_000,
   })
   const unread = data.filter(c => c.unread_count > 0).length
-  const needs = data.filter(c => c.handled_by === 'STAFF' && !!c.handoff_reason).length
+  const asked = data.filter(c => c.handled_by === 'STAFF' && !!c.handoff_reason)
+  const needs = asked.length
+  // When the longest-waiting of them was handed to a person (15 Nov 2026):
+  // the menu's line turns red once that is 5 minutes ago.
+  const waitingSince = asked.reduce((oldest, c) =>
+    (c.handled_since && (!oldest || c.handled_since < oldest) ? c.handled_since : oldest), null)
 
   useEffect(() => {
     document.title = needs ? `(${needs}) Needs you · Octos` : unread ? `(${unread}) Octos` : 'Octos'
@@ -40,7 +45,7 @@ export default function useInboxBadge() {
     before.current = unread + needs
   }, [unread, needs])
 
-  return { unread, needs }
+  return { unread, needs, waitingSince }
 }
 
 // The taskbar badge: a red circle with the count, as PNG bytes; null for none.

@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react'
 import { getMe } from '../api/auth'
+import usePresence, { endPresence } from '../hooks/usePresence'
 
 const AuthContext = createContext(null)
 
@@ -24,6 +25,9 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
+  // Every staff portal reports who is using it, for the manager's "On shift".
+  usePresence(user)
+
   const [justLoggedIn, setJustLoggedIn] = useState(false)
 
   const login = (tokens, userData) => {
@@ -37,6 +41,7 @@ export function AuthProvider({ children }) {
   const clearJustLoggedIn = () => setJustLoggedIn(false)
 
   const logout = () => {
+    endPresence()
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     setUser(null)
