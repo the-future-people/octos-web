@@ -16,6 +16,7 @@ import WindowControls from '../shared/WindowControls'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
+import { ProfileMenuItem } from '../shared/ProfileHost'
 
 const BRAND_RED = '#E3000F'
 const AMBER     = '#F59E0B'
@@ -188,6 +189,7 @@ export default function AttendantTopbar({ user, onLogout, onMenuToggle, showMenu
                   </div>
                 </div>
                 <div className="py-1">
+                  <ProfileMenuItem onPick={() => setDropdownOpen(false)} />
                   <button
                     onClick={toggle}
                     className="w-full flex items-center justify-between px-4 py-2.5

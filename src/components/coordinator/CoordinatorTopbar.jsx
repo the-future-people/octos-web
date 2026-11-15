@@ -4,6 +4,7 @@ import WindowControls from '../shared/WindowControls'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
+import { ProfileMenuItem } from '../shared/ProfileHost'
 
 /**
  * Follows BMTopbar closely — same dropdown behaviour, same theme toggle,
@@ -132,6 +133,7 @@ export default function CoordinatorTopbar({ user, onLogout }) {
                   </div>
                 </div>
                 <div className="py-1">
+                  <ProfileMenuItem onPick={() => setDropdownOpen(false)} />
                   <button
                     onClick={toggle}
                     role="menuitem"

@@ -1,6 +1,7 @@
 // src/components/operator/OperatorTopbar.jsx
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTheme } from '../../context/ThemeContext'
+import { ProfileMenuItem } from '../shared/ProfileHost'
 
 /**
  * Follows CoordinatorTopbar: same dropdown, same theme toggle, same
@@ -135,6 +136,7 @@ export default function OperatorTopbar({ user, machines, onLock, onLogout }) {
                   </div>
                 </div>
                 <div className="py-1">
+                  <ProfileMenuItem onPick={() => setDropdownOpen(false)} />
                   <button
                     onClick={toggle}
                     role="menuitem"

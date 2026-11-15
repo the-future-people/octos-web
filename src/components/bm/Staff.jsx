@@ -1,239 +1,246 @@
 // src/components/bm/Staff.jsx
-import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '../../context/AuthContext'
-import client from '../../api/client'
+//
+// The branch's staff as ID cards (15 Nov 2026), all from real records
+// (accounts/profiles.py): photo, live status from On shift, employee ID and
+// start date, three numbers for each role over today, this week or this month,
+// and a call or WhatsApp straight from the card. The Branch Manager can change
+// anyone's photo or phone here; the person is told.
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  getStaffCards, refusal, removeStaffPhoto, saveStaffPhone, uploadStaffPhoto,
+} from '../../api/profile'
+import StaffAvatar from '../shared/StaffAvatar'
+import { NumberTiles, PeriodSwitch, PhotoButtons, fmtJoined } from '../shared/ProfileBits'
 
-const getStaff = (branchId) =>
-  client.get(`/api/v1/accounts/users/?branch=${branchId}`).then(r => {
-    const d = r.data
-    return Array.isArray(d) ? d : (d?.results || [])
-  })
+const DOT = { active: '#5DCAA5', idle: '#B4B2A9' }
 
-function toTitleCase(str) {
-  if (!str) return str
-  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+// 024 555 0172 -> 233245550172, for WhatsApp links.
+function waNumber(phone) {
+  const digits = (phone || '').replace(/\D/g, '')
+  if (!digits) return null
+  if (digits.startsWith('233')) return digits
+  if (digits.startsWith('0')) return '233' + digits.slice(1)
+  return digits
 }
 
-function fmtDate(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-const ROLE_CONFIG = {
-  BRANCH_MANAGER: { label: 'Branch Manager', dot: 'bg-red-900',  badge: 'bg-red-900/10 text-red-900 border-red-200'  },
-  CASHIER:        { label: 'Cashier',         dot: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700 border-rose-200'   },
-  ATTENDANT:      { label: 'Attendant',        dot: 'bg-red-400', badge: 'bg-red-50 text-red-600 border-red-100'      },
-}
-
-const getRoleConfig = (roleName) =>
-  ROLE_CONFIG[roleName] || {
-    label: roleName?.replace(/_/g, ' '),
-    dot:   'bg-slate-400',
-    badge: 'bg-slate-50 text-slate-600 border-slate-200',
+function StatusChip({ presence }) {
+  if (!presence) {
+    return <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-black/15 text-white/80">Not in today</span>
   }
-
-function Avatar({ name }) {
-  const initials = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
-    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-600 to-red-900
-      flex items-center justify-center font-black text-white text-xl
-      shadow-lg ring-4 ring-white shrink-0">
-      {initials}
-    </div>
+    <span className="flex items-center gap-1.5 text-[10.5px] font-semibold px-2 py-0.5 rounded-full max-w-[60%]"
+      style={{ background: presence.state === 'off' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.18)', color: '#fff' }}>
+      {DOT[presence.state] && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: DOT[presence.state] }} />}
+      <span className="truncate">{presence.label}</span>
+    </span>
   )
 }
 
-// ── ID Card ───────────────────────────────────────────────────────────────────
-function StaffCard({ member }) {
-  const role   = getRoleConfig(member.role_name)
-  const name   = toTitleCase(member.full_name)
-  const branch = member.branch_detail?.name || 'Main Branch'
-
+function StaffCard({ member, onEdit }) {
+  const wa = waNumber(member.phone)
+  const action = 'flex-1 h-8 rounded-lg border border-[var(--border)] text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--bg)] flex items-center justify-center gap-1.5'
   return (
-    <div className="bg-white rounded-2xl border border-red-100 shadow-sm
-      hover:shadow-md hover:border-red-200 transition-all duration-200 overflow-hidden">
+    <div className="bg-[var(--panel)] rounded-2xl border border-[var(--border)] shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+      <div className="bg-gradient-to-br from-red-600 to-red-900 px-4 pt-3 pb-10 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[9px] font-bold text-red-200 uppercase tracking-widest">Farhat Printing Press</div>
+          <div className="text-[10px] text-red-300 truncate">{member.branch}</div>
+        </div>
+        <StatusChip presence={member.presence} />
+      </div>
 
-      {/* Red gradient header */}
-      <div className="bg-gradient-to-br from-red-600 to-red-900 px-5 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-[9px] font-bold text-red-200 uppercase tracking-widest">
-              Farhat Printing Press
-            </div>
-            <div className="text-[8px] text-red-300/70 mt-0.5">{branch}</div>
-          </div>
-          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border
-            ${member.is_active
-              ? 'bg-white/20 text-white border-white/30'
-              : 'bg-black/20 text-white/60 border-white/10'
-            }`}>
-            {member.is_active ? 'ACTIVE' : 'INACTIVE'}
-          </span>
+      <div className="relative -mt-8 mx-auto">
+        <StaffAvatar person={member} size={68} ring />
+        <button type="button" onClick={() => onEdit(member)} aria-label={`Change ${member.first_name}'s photo or phone`}
+          className="absolute -right-1 -bottom-0.5 w-6 h-6 rounded-full bg-[var(--panel)] border border-[var(--border)] grid place-items-center text-[var(--text-3)] hover:text-[var(--text)]">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
+      </div>
+
+      <div className="px-4 pt-2 pb-4 flex-1 flex flex-col">
+        <div className="text-center">
+          <div className="text-[15px] font-bold text-[var(--text)] truncate">{member.full_name}</div>
+          <div className="text-xs text-[var(--text-3)]">{member.role_label || '—'}</div>
         </div>
 
-        {/* Avatar centered */}
-        <div className="flex justify-center">
-          {member.photo ? (
-            <img src={member.photo} alt={name}
-              className="w-16 h-16 rounded-full object-cover ring-4 ring-white/30 shadow-md" />
+        <div className="mt-3 space-y-1">
+          <div className="flex justify-between text-[10.5px]">
+            <span className="font-bold text-[var(--text-3)] tracking-wider">EMPLOYEE ID</span>
+            <span className="font-mono font-semibold text-[var(--text)]">{member.employee_id || '—'}</span>
+          </div>
+          <div className="flex justify-between text-[10.5px]">
+            <span className="font-bold text-[var(--text-3)] tracking-wider">JOINED</span>
+            <span className="font-semibold text-[var(--text)]">{fmtJoined(member.joined)}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <NumberTiles numbers={member.numbers} compact />
+        </div>
+
+        <div className="mt-auto pt-3 flex gap-1.5">
+          {member.phone ? (
+            <>
+              <a href={`tel:${member.phone.replace(/\s/g, '')}`} className={action}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                Call
+              </a>
+              {wa && (
+                <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" className={action}>
+                  <img src="/brand/whatsapp.png" alt="" className="w-3.5 h-3.5" />
+                  WhatsApp
+                </a>
+              )}
+            </>
           ) : (
-            <Avatar name={name} />
+            <button type="button" onClick={() => onEdit(member)} className={`${action} text-[var(--text-3)]`}>Add a phone number</button>
           )}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Name + role */}
-      <div className="text-center px-5 pt-3 pb-2">
-        <div className="text-sm font-black text-slate-800 leading-tight">{name}</div>
-        <div className="flex items-center justify-center gap-1.5 mt-1">
-          <span className={`w-1.5 h-1.5 rounded-full ${role.dot}`} />
-          <span className="text-xs font-medium text-slate-500">{role.label}</span>
+// The Branch Manager changes someone's photo or phone.
+function StaffEditor({ member, period, onClose }) {
+  const queryClient = useQueryClient()
+  const [phone, setPhone] = useState(member.phone || '')
+  const [person, setPerson] = useState(member)
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState('')
+
+  useEffect(() => {
+    const esc = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onClose])
+
+  const done = (message) => (data) => {
+    setPerson(p => ({ ...p, ...data }))
+    queryClient.invalidateQueries({ queryKey: ['staffCards'] })
+    setError(''); setSaved(message)
+  }
+  const failed = (err) => { setSaved(''); setError(refusal(err)) }
+  const photo = useMutation({ mutationFn: file => uploadStaffPhoto(member.id, file), onSuccess: done('Photo saved'), onError: failed })
+  const unphoto = useMutation({ mutationFn: () => removeStaffPhoto(member.id), onSuccess: done('Photo removed'), onError: failed })
+  const number = useMutation({ mutationFn: () => saveStaffPhone(member.id, phone), onSuccess: done('Phone saved'), onError: failed })
+  const busy = photo.isPending || unphoto.isPending || number.isPending
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div role="dialog" aria-label={`${member.full_name}'s photo and phone`}
+        className="w-full max-w-sm bg-[var(--panel)] rounded-2xl border border-[var(--border)] shadow-2xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <StaffAvatar person={person} size={60} />
+          <div className="min-w-0">
+            <div className="font-bold text-[var(--text)] truncate">{member.full_name}</div>
+            <div className="text-xs text-[var(--text-3)]">{member.role_label}</div>
+          </div>
         </div>
-      </div>
-
-      {/* Info */}
-      <div className="px-5 pb-5 space-y-2">
-        <div className="grid grid-cols-2 gap-2 py-2 border-t border-red-50">
-          <div>
-            <div className="text-[9px] font-bold text-red-300 uppercase tracking-wider mb-0.5">Employee ID</div>
-            <div className="font-mono text-xs font-bold text-slate-700">{member.employee_id || '—'}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[9px] font-bold text-red-300 uppercase tracking-wider mb-0.5">Joined</div>
-            <div className="text-xs text-slate-600">{fmtDate(member.created_at)}</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 py-2 border-t border-red-50">
-          <svg className="w-3 h-3 text-red-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-          <span className="text-xs text-slate-600 truncate">{member.email}</span>
-        </div>
-
-        {member.phone && (
-          <div className="flex items-center gap-2 py-2 border-t border-red-50">
-            <svg className="w-3 h-3 text-red-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-            <span className="text-xs text-slate-600">{member.phone}</span>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-red-50">
-          <div className="flex gap-0.5">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className={`w-1 h-1 rounded-full ${i % 2 === 0 ? 'bg-red-300' : 'bg-red-100'}`} />
-            ))}
-          </div>
-          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${role.badge}`}>
-            {member.role_detail?.scope || 'BRANCH'}
-          </span>
+        <PhotoButtons busy={busy} hasPhoto={!!person.photo_url}
+          onPhoto={file => photo.mutate(file)} onRemove={() => unphoto.mutate()} />
+        <form className="flex items-end gap-2" onSubmit={e => { e.preventDefault(); number.mutate() }}>
+          <label className="flex-1">
+            <span className="block text-xs text-[var(--text-2)] mb-1">Phone</span>
+            <input value={phone} onChange={e => { setPhone(e.target.value); setSaved('') }} inputMode="tel" placeholder="024 555 0172"
+              className="w-full h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm text-[var(--text)] outline-none focus:border-[var(--text-3)]" />
+          </label>
+          <button type="submit" disabled={busy || phone === (person.phone || '')}
+            className="h-9 px-4 rounded-lg bg-[var(--text)] text-[var(--panel)] text-sm font-semibold disabled:opacity-40">Save</button>
+        </form>
+        {error && <p className="text-xs text-[var(--red-text)]">{error}</p>}
+        {saved && !error && <p className="text-xs text-emerald-600">{saved}. {member.first_name} has been told.</p>}
+        <p className="text-[11.5px] text-[var(--text-3)]">{member.first_name} can also change these from My profile in their own portal.</p>
+        <div className="flex justify-end">
+          <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)]">Done</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-export default function Staff() {
-  const { user } = useAuth()
-  const branchId = typeof user?.branch === 'object' ? user?.branch?.id : (user?.branch || 2)
+function Section({ title, count, muted, children }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <div className={`w-1 h-5 rounded-full ${muted ? 'bg-slate-300' : 'bg-red-600'}`} />
+        <span className={`text-sm font-bold ${muted ? 'text-[var(--text-3)]' : 'text-[var(--text)]'}`}>{title}</span>
+        <span className="text-[10px] font-bold px-2 py-0.5 bg-[var(--bg)] text-[var(--text-3)] rounded-full border border-[var(--border)]">{count}</span>
+        <div className="flex-1 h-px bg-[var(--border)]" />
+      </div>
+      {children}
+    </div>
+  )
+}
 
-  const { data: allStaff = [], isLoading } = useQuery({
-    queryKey: ['staff', branchId],
-    queryFn:  () => getStaff(branchId),
-    staleTime: 60_000,
+export default function Staff() {
+  const [period, setPeriod] = useState('week')
+  const [editing, setEditing] = useState(null)
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['staffCards', period],
+    queryFn: () => getStaffCards(period),
+    placeholderData: prev => prev,
+    refetchInterval: 60_000,
   })
 
-  const staff    = allStaff.filter(s => s.branch === branchId)
-  const active   = staff.filter(s => s.is_active)
+  const staff = data?.staff || []
+  const active = staff.filter(s => s.is_active)
   const inactive = staff.filter(s => !s.is_active)
-
-  const roleCounts = {
-    manager:   active.filter(s => s.role_name === 'BRANCH_MANAGER').length,
-    cashier:   active.filter(s => s.role_name === 'CASHIER').length,
-    attendant: active.filter(s => s.role_name === 'ATTENDANT').length,
-  }
+  const counts = Object.entries(data?.counts || {})
+  const grid = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
 
   return (
     <div className="p-5 sm:p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Staff</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">
-            {staff.length} team member{staff.length !== 1 ? 's' : ''} · {active.length} active
+            {active.length} team member{active.length !== 1 ? 's' : ''} · {data?.on ?? 0} on shift now
           </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {roleCounts.manager > 0 && (
-            <div className="px-3 py-1.5 bg-red-50 border border-red-100 rounded-xl flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-900" />
-              <span className="text-xs font-semibold text-red-900">{roleCounts.manager} Manager</span>
-            </div>
-          )}
-          {roleCounts.cashier > 0 && (
-            <div className="px-3 py-1.5 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-              <span className="text-xs font-semibold text-rose-700">{roleCounts.cashier} Cashier</span>
-            </div>
-          )}
-          {roleCounts.attendant > 0 && (
-            <div className="px-3 py-1.5 bg-red-50 border border-red-100 rounded-xl flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-              <span className="text-xs font-semibold text-red-600">{roleCounts.attendant} Attendant</span>
+          {counts.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap mt-2">
+              {counts.map(([role, n]) => (
+                <span key={role} className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--text-2)]">
+                  {n} {role}{n !== 1 ? 's' : ''}
+                </span>
+              ))}
             </div>
           )}
         </div>
+        <PeriodSwitch value={period} onChange={setPeriod} />
       </div>
 
-      {/* Cards */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1,2,3].map(i => <div key={i} className="h-72 bg-[var(--panel)] border border-[var(--border)] rounded-2xl animate-pulse" />)}
+        <div className={grid}>
+          {[1, 2, 3].map(i => <div key={i} className="h-80 bg-[var(--panel)] border border-[var(--border)] rounded-2xl animate-pulse" />)}
+        </div>
+      ) : isError ? (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl py-16 text-center text-sm text-[var(--text-2)]">
+          Couldn't load the staff. Try again in a moment.
         </div>
       ) : staff.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-          flex flex-col items-center justify-center py-16">
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl flex flex-col items-center justify-center py-16">
           <p className="text-sm font-semibold text-[var(--text-2)]">No staff found</p>
           <p className="text-xs text-[var(--text-3)] mt-1">Staff are assigned through HQ</p>
         </div>
       ) : (
         <>
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-5 bg-red-600 rounded-full" />
-              <span className="text-sm font-bold text-[var(--text)]">Active</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-red-50 text-red-700 rounded-full border border-red-100">
-                {active.length}
-              </span>
-              <div className="flex-1 h-px bg-[var(--border)]" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {active.map(m => <StaffCard key={m.id} member={m} />)}
-            </div>
-          </div>
-
+          <Section title="Active" count={active.length}>
+            <div className={grid}>{active.map(m => <StaffCard key={m.id} member={m} onEdit={setEditing} />)}</div>
+          </Section>
           {inactive.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-5 bg-slate-300 rounded-full" />
-                <span className="text-sm font-bold text-[var(--text-3)]">Inactive</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-[var(--bg)] text-[var(--text-3)] rounded-full border border-[var(--border)]">
-                  {inactive.length}
-                </span>
-                <div className="flex-1 h-px bg-[var(--border)]" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 opacity-50">
-                {inactive.map(m => <StaffCard key={m.id} member={m} />)}
-              </div>
-            </div>
+            <Section title="Inactive" count={inactive.length} muted>
+              <div className={`${grid} opacity-50`}>{inactive.map(m => <StaffCard key={m.id} member={m} onEdit={setEditing} />)}</div>
+            </Section>
           )}
         </>
       )}
+
+      {editing && <StaffEditor member={editing} period={period} onClose={() => setEditing(null)} />}
     </div>
   )
 }

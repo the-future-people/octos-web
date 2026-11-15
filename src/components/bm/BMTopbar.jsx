@@ -6,6 +6,7 @@ import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
 import { useQuery } from '@tanstack/react-query'
 import { getLockStatus } from '../../api/bm'
+import { ProfileMenuItem } from '../shared/ProfileHost'
 
 export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const { theme, toggle } = useTheme()
@@ -219,6 +220,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
                   </div>
                 </div>
                 <div className="py-1">
+                  <ProfileMenuItem onPick={() => setDropdownOpen(false)} />
                   <button
                     onClick={toggle}
                     role="menuitem"

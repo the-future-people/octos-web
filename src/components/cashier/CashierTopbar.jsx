@@ -4,6 +4,7 @@ import WindowControls from '../shared/WindowControls'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../../context/ThemeContext'
 import NotificationBell from '../cashier/NotificationBell'
+import { ProfileMenuItem } from '../shared/ProfileHost'
 
 export default function CashierTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   const { theme, toggle } = useTheme()
@@ -111,6 +112,7 @@ export default function CashierTopbar({ user, onLogout, onMenuToggle, showMenu }
 
                 {/* Actions */}
                 <div className="py-1">
+                  <ProfileMenuItem onPick={() => setDropdownOpen(false)} />
 
                   {/* Theme toggle */}
                   <button
