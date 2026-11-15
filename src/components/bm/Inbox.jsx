@@ -828,7 +828,7 @@ function EmailMessage({ m, conv, open, onToggle, reports }) {
 }
 
 // ── The side panel ──────────────────────────────────────────────────────
-function Panel({ conv, actions, files, onClose }) {
+function Panel({ conv, actions, files, onClose, reports, onToggleReports }) {
   const whatsapp = conv.channel === 'WHATSAPP'
   const state = inVisit(conv)
     ? ['At the counter', `Octos is quiet until ${clock(conv.counter_until)}.`, C.amberSoft, C.noteBorder, C.amberText]
@@ -856,6 +856,20 @@ function Panel({ conv, actions, files, onClose }) {
           </div>
         )}
       </div>
+
+      {/* Octos's reports: moved here from the chat's header (15 Nov 2026). A
+          setting, not something used mid-conversation. */}
+      <label className="flex items-start gap-2.5 cursor-pointer select-none">
+        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="text-[12.5px] font-semibold text-[var(--text)]">Show Octos's reports</span>
+          <span className="text-[11.5px] leading-snug text-[var(--text-3)]">A note under each of Octos's messages: what it looked up and why. Only staff see them.</span>
+        </span>
+        <button type="button" role="switch" aria-checked={reports} onClick={onToggleReports}
+          className="relative shrink-0 mt-0.5 w-9 h-5 rounded-full transition-colors"
+          style={{ background: reports ? '#080808' : 'var(--border-dark)' }}>
+          <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: reports ? 18 : 2 }} />
+        </button>
+      </label>
 
       <div className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold tracking-wider text-[var(--text-3)]">CUSTOMER</span>
@@ -1041,11 +1055,6 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                   .map(x => ({ id: x.id, name: x.media_name || 'File', pages: x.media_pages, info: fileInfo(x) })),
               }} />
           )}
-          <button type="button" onClick={toggleReports} aria-pressed={reports} title="Octos's reports under its messages, only staff see them"
-            className="hidden sm:inline-flex items-center gap-1.5 h-[34px] px-3 rounded-full text-xs font-semibold"
-            style={reports ? { background: '#080808', color: '#fff' } : { border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-            <I.lock size={12} />{reports ? 'Reports on' : 'Reports off'}
-          </button>
           <button type="button" onClick={() => setPanel(p => !p)} aria-label="Details" title="Details" aria-pressed={panel}
             className="w-[34px] h-[34px] rounded-lg grid place-items-center"
             style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
@@ -1191,7 +1200,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
 
       {panel && (
         <div className={wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}>
-          <Panel conv={conv} files={files} onClose={wide ? null : () => setPanel(false)} actions={{
+          <Panel conv={conv} files={files} onClose={wide ? null : () => setPanel(false)}
+            reports={reports} onToggleReports={toggleReports} actions={{
             atCounter: () => atCounter.mutate(),
             resolve: () => resolve.mutate(),
           }} />
