@@ -195,6 +195,9 @@ const I = {
   reply: p => <Svg {...p}><path d="M9 17 4 12l5-5" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></Svg>,
   lock: p => <Svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>,
   smile: p => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Svg>,
+  user: p => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Svg>,
+  pin: p => <Svg {...p}><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" /><circle cx="12" cy="9" r="2.5" /></Svg>,
+  info: p => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></Svg>,
   mail: p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></Svg>,
   sms: p => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></Svg>,
 }
@@ -406,9 +409,7 @@ function FileCard({ m, tint }) {
 
 function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATSAPP }) {
   const kind = kindOf(m)
-  if (kind === 'event') {
-    return <div className="self-center text-[11px] text-[var(--text-3)] py-1 text-center">{(m.body || '').replace(/\.$/, '')}, {clock(m.created_at)}</div>
-  }
+  if (kind === 'event') return <ChatEvent m={m} theme={theme} />
   if (kind === 'note') {
     // A note: a small annotation under the conversation, never mistaken for a message.
     return (
@@ -466,6 +467,51 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
         </div>
         {reports && m.report && <Report report={m.report} />}
       </div>
+    </div>
+  )
+}
+
+// What happened to the chat (15 Nov 2026). Octos asking for a person sits on
+// Octos's side like its report, its reason folded to two lines; taking over,
+// handing back, resolving and the counter are small chips, as an app shows
+// its own notices.
+const HANDOVER = /^\s*Octos asked for a person:?\s*/i
+function ChatEvent({ m, theme }) {
+  const body = (m.body || '').trim().replace(/\.$/, '')
+  if (HANDOVER.test(body)) return <HandoverNote reason={body.replace(HANDOVER, '')} at={m.created_at} />
+  // Names as people write them: "kingsford future adjei took over" → "Kingsford Future Adjei took over".
+  const words = body.replace(/^(.+?) (took over|handed|resolved|reopened|marked)/i, (_, who, verb) => `${titleCase(who)} ${verb}`)
+  const look = theme.day.background === 'transparent' ? { background: '#F1F3F4', color: '#444746' } : theme.day
+  const icon = /handed/i.test(body) ? <OctosMark s={13} />
+    : /took over/i.test(body) ? <I.user size={13} />
+    : /resolved/i.test(body) ? <I.check size={13} />
+    : /counter/i.test(body) ? <I.pin size={13} />
+    : <I.info size={13} />
+  return (
+    <div className="self-center my-1.5 max-w-[85%] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] leading-snug" style={look}>
+      <span className="shrink-0 grid place-items-center opacity-80">{icon}</span>
+      <span className="min-w-0">{words}</span>
+      <span className="shrink-0 opacity-70">· {clock(m.created_at)}</span>
+    </div>
+  )
+}
+
+function HandoverNote({ reason, at }) {
+  const [open, setOpen] = useState(false)
+  const long = reason.length > 140
+  return (
+    <div className="self-end mr-10 mt-1 w-[340px] max-w-[85%] flex flex-col gap-1 px-2.5 py-1.5 rounded-[10px] bg-white/90 shadow-[0_1px_1px_rgba(0,0,0,.04)]"
+      style={{ border: `1px solid ${C.redBorder}` }} title="Only staff see this">
+      <span className="flex items-center gap-1.5 text-[11.5px]">
+        <span style={{ color: C.redText }}><I.lock size={11} /></span>
+        <b style={{ color: C.redText }}>Octos asked for a person</b>
+        <span className="text-[var(--text-3)]">· {clock(at)}</span>
+      </span>
+      <span className={`text-[11.5px] leading-snug text-[var(--text-2)] ${open ? '' : 'line-clamp-2'}`}>{reason}</span>
+      {long && (
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="self-start text-[11px] font-semibold underline text-[var(--text-2)]">{open ? 'Show less' : 'Read all'}</button>
+      )}
     </div>
   )
 }
