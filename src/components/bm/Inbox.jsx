@@ -1187,9 +1187,11 @@ export default function Inbox({ focus = null } = {}) {
   const setChannel = t => { setChannelState(t); try { localStorage.setItem('octos.inbox.channel', t) } catch { /* private */ } }
   const [filter, setFilter] = useState(null)
   const [query, setQuery] = useState('')
-  // Search folds into a button until it's wanted (15 Nov 2026, layout C).
+  // Search folds into a button and grows into a box on the same row when
+  // wanted; clicking away folds it back (15 Nov 2026). What was typed keeps
+  // filtering, shown by a red dot on the button; Esc clears it.
   const [searchOpen, setSearchOpen] = useState(false)
-  const searching = searchOpen || !!query
+  const searchBox = useRef(null)
   const [selectedId, setSelectedId] = useState(null)
   const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
@@ -1238,7 +1240,7 @@ export default function Inbox({ focus = null } = {}) {
       style={{ height: 'calc(100vh - 100px)', minHeight: 560 }}>
       {/* One row (15 Nov 2026): the chosen channel opens into a pill with its
           name and count; the others are their marks, with counts of their own. */}
-      <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)] flex-wrap">
+      <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[var(--panel)] border-b border-[var(--border)] whitespace-nowrap">
         <span className="text-base font-bold shrink-0 mr-1">Inbox</span>
         <div role="tablist" aria-label="Channel" className="flex items-center gap-1 p-[3px] rounded-full bg-black/[0.05] shrink-0">
           {TABS.map(t => {
@@ -1260,27 +1262,28 @@ export default function Inbox({ focus = null } = {}) {
             )
           })}
         </div>
-        <span className="text-[11.5px] text-[var(--text-2)] truncate min-w-0">
+        <span className="flex-1 text-[11.5px] text-[var(--text-2)] truncate min-w-0">
           {needsCount > 0
             ? <b style={{ color: C.redText }}>{needsCount} need{needsCount === 1 ? 's' : ''} you</b>
             : `${unread} unread. Octos is answering the rest.`}
         </span>
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          {searching ? (
-            <div className="relative w-[260px]">
-              <I.search size={15} className="absolute left-2.5 top-[9px] text-[var(--text-3)]" />
-              <input type="search" autoFocus value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
-                onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); setSearchOpen(false) } }}
-                onBlur={() => { if (!query) setSearchOpen(false) }}
-                placeholder={`Search ${CHANNEL[channel].label} chats`}
-                className="w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none focus:border-zinc-900" />
-            </div>
-          ) : (
-            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search conversations" title="Search"
-              className="w-[33px] h-[33px] rounded-lg border border-[var(--border)] grid place-items-center text-[var(--text-2)] hover:bg-black/[0.03]">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative h-[33px] transition-[width] duration-200 ease-out" style={{ width: searchOpen ? 260 : 33 }}>
+            <button type="button" aria-label={query ? `Search conversations (searching for ${query})` : 'Search conversations'} title="Search"
+              onClick={() => { setSearchOpen(true); setTimeout(() => searchBox.current?.focus(), 50) }}
+              className={`absolute left-0 top-0 z-[1] w-[33px] h-[33px] rounded-lg grid place-items-center text-[var(--text-2)]
+                ${searchOpen ? 'pointer-events-none border border-transparent' : 'border border-[var(--border)] hover:bg-black/[0.03]'}`}>
               <I.search size={16} />
+              {query && !searchOpen && <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] rounded-full" style={{ background: C.red }} />}
             </button>
-          )}
+            <input ref={searchBox} type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search conversations"
+              tabIndex={searchOpen ? 0 : -1}
+              onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); e.currentTarget.blur() } }}
+              onBlur={() => setSearchOpen(false)}
+              placeholder={`Search ${CHANNEL[channel].label} chats`}
+              className={`absolute inset-0 w-full h-[33px] pl-8 pr-2.5 text-[12.5px] rounded-lg border border-[var(--border)] bg-[#FAFAF9] outline-none
+                focus:border-zinc-900 transition-opacity duration-150 ${searchOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} />
+          </div>
           <button type="button" onClick={() => setStarting(s => !s)}
             className="inline-flex items-center gap-1.5 h-[33px] px-3.5 rounded-lg bg-zinc-900 text-white text-[12.5px] font-semibold">
             <I.plus size={14} />New message
