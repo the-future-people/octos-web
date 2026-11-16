@@ -16,7 +16,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, createJob, getCustomers, getPromise } from '../../api/bm'
+import { getServices, calculatePrice, createJob, getCustomers, getPromise, createProforma, issueProforma } from '../../api/bm'
 import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
@@ -139,6 +139,11 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
  * late   after closing: the same window, with a required reason (Branch
  *        Manager only; the server checks). held: no cashier on duty, so
  *        the job waits for the morning handover.
+ * proforma  (16 Nov 2026) the same recorder makes a proforma: the same
+ *        services, choices, finishing and prices as a job, so the total on
+ *        screen is the total saved. A registered customer, any mix of
+ *        instant, production and design, no files, deposit or ready time;
+ *        saving issues it and hands it to onSuccess for sharing.
  */
 // Where a job's files came from (JobLineItem.file_source), as icons in their colours.
 const SOURCES = [
@@ -154,7 +159,7 @@ const SOURCES = [
     path: <><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></> },
 ]
 
-export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null }) {
+export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null, proforma = false }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -184,8 +189,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   // once the job was made, it is still one job. Fresh after a success.
   const attemptKey = useRef(crypto.randomUUID().replace(/-/g, ''))
 
-  const roomy = jobType !== 'INSTANT'
-  const wantsFile = jobType === 'PRODUCTION'
+  const roomy = !proforma && jobType !== 'INSTANT'
+  const wantsFile = !proforma && jobType === 'PRODUCTION'
 
   // One request per pause in typing, not per keystroke.
   const [debouncedQty,   setDebouncedQty]   = useState(1)
@@ -332,7 +337,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const { data: arrivals = [] } = useQuery({
     queryKey: ['arrivals'],
     queryFn: () => client.get('/api/v1/communications/arrivals/').then(r => r.data),
-    enabled: !fromChat && !customer,
+    enabled: !proforma && !fromChat && !customer,
     refetchInterval: 15_000,
   })
   function pickArrival(row) {
@@ -433,7 +438,38 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const removeFromCart = id => setCart(c => c.filter(i => i._id !== id))
   const cartTotal = cart.reduce((s, i) => s + parseFloat(i._price || 0), 0)
 
-  const { mutate, isPending } = useMutation({
+  // A proforma: saved, then issued (the 14 days start now), then shared.
+  const { mutate: saveProforma, isPending: savingProforma } = useMutation({
+    mutationFn: async payload => {
+      const { data: saved } = await createProforma(payload)
+      try {
+        return (await issueProforma(saved.id)).data
+      } catch (err) {
+        err.savedAs = saved
+        throw err
+      }
+    },
+    onSuccess: p => {
+      queryClient.invalidateQueries({ queryKey: ['proformas'] })
+      onSuccess?.(p)
+      onClose()
+    },
+    onError: err => {
+      if (err.savedAs) {
+        queryClient.invalidateQueries({ queryKey: ['proformas'] })
+        onSuccess?.(null, `Saved as ${err.savedAs.proforma_number}, but it couldn't be issued: ${err.response?.data?.detail || 'press Share on it in the list.'}`)
+        onClose()
+        return
+      }
+      const d = err.response?.data
+      if (!d) { setError('That proforma didn’t save. Try again.'); return }
+      if (typeof d === 'string') { setError(d); return }
+      if (d.detail) { setError(d.detail); return }
+      setError(Object.values(d).flat().find(v => typeof v === 'string') || 'That proforma didn’t save.')
+    },
+  })
+
+  const { mutate, isPending: creatingJob } = useMutation({
     mutationFn: payload => createJob(payload),
     onSuccess: res => {
       invalidateAfterJobCreated(queryClient)
@@ -459,10 +495,33 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     },
   })
 
+  const isPending = creatingJob || savingProforma
+
+  const lineOf = item => ({
+    service: item.service.id,
+    quantity: item.quantity,
+    pages: item.pages,
+    is_color: item.service.smart_defaults?.is_color ?? false,
+    ...(item.ring_size   ? { ring_size: item.ring_size } : {}),
+    ...(item.output_mode ? { output_mode: item.output_mode } : {}),
+    ...(item.specifications && Object.keys(item.specifications).length ? { specifications: item.specifications } : {}),
+    ...(item.addons?.length ? { addons: item.addons } : {}),
+  })
+
   const handleSubmit = () => {
     if (isPending) return
     setError('')
     if (cart.length === 0) { setError('Add at least one item.'); return }
+    if (proforma) {
+      if (!customer) { setError('Choose a registered customer first. Proformas go to registered customers only.'); return }
+      saveProforma({
+        // For an organisation: its proforma, addressed to the person who asked.
+        customer: orderFor ? orderFor.organisation : customer.id,
+        ...(orderFor ? { contact_person: nameOf(customer), contact_phone: customer.phone || '' } : {}),
+        line_items: cart.map(lineOf),
+      })
+      return
+    }
     if (late && !lateReason.trim()) { setError('Say why this job is being recorded after closing.'); return }
     if (jobType !== 'INSTANT' && !customer) {
       setError('Production and design jobs need a customer, for their ready message and collection PIN.')
@@ -480,16 +539,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       ...(late ? { post_closing_reason: lateReason.trim() } : {}),
       deposit_percentage: 100,
       line_items: cart.map(item => ({
-        service: item.service.id,
-        quantity: item.quantity,
-        pages: item.pages,
-        is_color: item.service.smart_defaults?.is_color ?? false,
+        ...lineOf(item),
         sets: item.quantity,
-        ...(item.ring_size   ? { ring_size: item.ring_size } : {}),
-        ...(item.output_mode ? { output_mode: item.output_mode } : {}),
-        ...(item.specifications && Object.keys(item.specifications).length ? { specifications: item.specifications } : {}),
         ...(item.artwork?.token ? { artwork_token: item.artwork.token } : {}),
-        ...(item.addons?.length ? { addons: item.addons } : {}),
         file_source: fileSource || 'NA',
       })),
       // Who it was for, even with no customer record (a WhatsApp username).
@@ -538,7 +590,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     <div role="tablist" aria-label="Kind of job" className="flex gap-0.5 p-[3px] rounded-xl bg-black/[0.05]">
       {TYPES.map(([v, label, icon]) => (
         <button key={v} type="button" role="tab" aria-selected={jobType === v}
-                onClick={() => { setJobType(v); setCart([]); setSelected(null); setSelArtwork(null) }}
+                onClick={() => { setJobType(v); if (!proforma) setCart([]); setSelected(null); setSelArtwork(null) }}
                 className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[9px] text-[13px] transition-colors
                             ${jobType === v ? 'bg-zinc-900 text-white font-semibold shadow-sm' : 'text-[var(--text-2)] font-medium hover:text-[var(--text)]'}`}>
           <Icon kind={icon} size={15} />{label}
@@ -581,14 +633,16 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
   // Who the job is for: prominent, because production and design can't be
   // created without it, and instant work is better with it.
-  const customerTag = jobType === 'INSTANT'
+  const customerTag = proforma
+    ? <span className="text-xs font-semibold text-red-700">Needed: proformas go to registered customers</span>
+    : jobType === 'INSTANT'
     ? <span className="text-xs text-[var(--text-3)]">Optional for instant work: leave blank for a walk-in</span>
     : <span className="text-xs font-semibold text-red-700">Needed: for the ready message and the collection PIN</span>
 
   const customerBand = (
     <div className="px-6 py-3 border-b border-black/[0.07] bg-[#fafaf9] shrink-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1.5">
-        <label htmlFor="job-customer" className="text-sm font-bold">Who is this job for?</label>
+        <label htmlFor="job-customer" className="text-sm font-bold">{proforma ? 'Who is this proforma for?' : 'Who is this job for?'}</label>
         {!customer && customerTag}
       </div>
       {customer ? (
@@ -642,7 +696,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
                    onChange={e => setCustSearch(e.target.value)}
                    placeholder="Search by name or phone number"
                    className={`w-full h-11 pl-10 pr-4 text-[15px] font-medium rounded-xl outline-none border-2 transition-colors
-                               ${jobType === 'INSTANT' ? 'border-zinc-900 bg-white' : 'border-red-600 bg-red-50/60'}`} />
+                               ${jobType === 'INSTANT' && !proforma ? 'border-zinc-900 bg-white' : 'border-red-600 bg-red-50/60'}`} />
             {custResults.length > 0 && (
               <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl border border-black/10 bg-[var(--panel)] shadow-xl overflow-hidden">
                 {custResults.map(c => (
@@ -664,7 +718,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </div>
         </>
       )}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {!proforma && <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span className="text-[12px] font-bold text-[var(--text-3)] mr-1">Files came by:</span>
         {SOURCES.map(({ value, label, colour, path }) => {
           const on = fileSource === value
@@ -679,7 +733,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             </button>
           )
         })}
-      </div>
+      </div>}
       {chat?.conversationId && fileSource && fileSource !== 'WHATSAPP' && (
         <div className="mt-1.5 px-3 py-1.5 rounded-lg bg-[#FFF4DC] border border-[#F1DFC0] text-[12.5px] font-semibold text-[#8A5A00]">
           Their files came on WhatsApp.
@@ -1043,7 +1097,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0}
                 className="w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-lg bg-zinc-900 text-white text-[13px] font-semibold disabled:bg-black/20">
           <Icon kind="check" size={15} />
-          {isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
+          {proforma ? (isPending ? 'Saving…' : `Save and share · ${fmt(cartTotal)}`)
+            : isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
         <button type="button" onClick={onClose} className="w-full h-8 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
       </div>
@@ -1068,7 +1123,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
             <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={16} /></span>
-            <span className="text-[17px] font-bold">New Job</span>
+            <span className="text-[17px] font-bold">{proforma ? 'New Proforma' : 'New Job'}</span>
           </div>
           {typeTabs}
           {branchName && <span className="ml-auto text-sm text-[var(--text-3)] hidden sm:inline">{branchName}</span>}
@@ -1081,6 +1136,13 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {lateNote}
         {customerBand}
         {chatBand}
+
+        {proforma && (
+          <div className="px-6 py-2 border-b border-black/[0.07] text-[12.5px] text-[var(--text-3)] shrink-0">
+            Mix instant, production and design on one proforma: the cart keeps everything as you switch.
+            Saving issues it (valid 14 days) and opens Share.
+          </div>
+        )}
 
         <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[300px_1fr_280px] animate-unfold">
           <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>

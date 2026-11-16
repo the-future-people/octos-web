@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProformas, issueProforma, convertProforma, getProformaPdf,
 } from '../../api/bm'
-import NewProformaModal from './NewProformaModal'
+import NewJobModal from './NewJobModal'
 import ReviseProformaModal from './ReviseProformaModal'
 import InvoicesTab from './InvoicesTab'
 import { saveFile } from '../../api/saveFile'
@@ -313,7 +313,10 @@ export default function ProformasTab({ onOpenDetail }) {
       )}
 
       {showCreate && (
-        <NewProformaModal onClose={() => setShowCreate(false)} onSuccess={p => setSharing(p)} onIssueFailed={setError} />
+        // The New Job recorder in proforma mode (16 Nov 2026): one recorder,
+        // so a proforma is priced exactly as the job it becomes.
+        <NewJobModal proforma onClose={() => setShowCreate(false)}
+          onSuccess={(p, problem) => { if (p) setSharing(p); if (problem) setError(problem) }} />
       )}
 
       {revising && (
