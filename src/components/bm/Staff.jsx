@@ -4,11 +4,12 @@
 // (accounts/profiles.py): photo, live status from On shift, employee ID and
 // start date, three numbers for each role over today, this week or this month,
 // and a call or WhatsApp straight from the card. The Branch Manager can change
-// anyone's photo or phone here; the person is told.
+// anyone's photo, phone or email here; the person is told. Changes staff ask
+// for in My profile wait here for his approval (16 Nov 2026).
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  getStaffCards, refusal, removeStaffPhoto, saveStaffPhone, uploadStaffPhoto,
+  decideChange, getStaffCards, refusal, removeStaffPhoto, saveStaffContact, uploadStaffPhoto,
 } from '../../api/profile'
 import StaffAvatar from '../shared/StaffAvatar'
 import { NumberTiles, PeriodSwitch, PhotoButtons, fmtJoined } from '../shared/ProfileBits'
@@ -64,6 +65,12 @@ function StaffCard({ member, onEdit }) {
         <div className="text-center">
           <div className="text-[15px] font-bold text-[var(--text)] truncate">{member.full_name}</div>
           <div className="text-xs text-[var(--text-3)]">{member.role_label || '—'}</div>
+          {member.pending?.length > 0 && (
+            <div className="inline-block mt-1.5 text-[10.5px] font-semibold px-2 py-0.5 rounded-full text-[var(--text)]"
+              style={{ background: 'rgba(239, 159, 39, 0.16)' }}>
+              {member.pending.length} change{member.pending.length > 1 ? 's' : ''} waiting for you
+            </div>
+          )}
         </div>
 
         <div className="mt-3 space-y-1">
@@ -108,6 +115,7 @@ function StaffCard({ member, onEdit }) {
 function StaffEditor({ member, period, onClose }) {
   const queryClient = useQueryClient()
   const [phone, setPhone] = useState(member.phone || '')
+  const [email, setEmail] = useState(member.email || '')
   const [person, setPerson] = useState(member)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
@@ -126,7 +134,7 @@ function StaffEditor({ member, period, onClose }) {
   const failed = (err) => { setSaved(''); setError(refusal(err)) }
   const photo = useMutation({ mutationFn: file => uploadStaffPhoto(member.id, file), onSuccess: done('Photo saved'), onError: failed })
   const unphoto = useMutation({ mutationFn: () => removeStaffPhoto(member.id), onSuccess: done('Photo removed'), onError: failed })
-  const number = useMutation({ mutationFn: () => saveStaffPhone(member.id, phone), onSuccess: done('Phone saved'), onError: failed })
+  const number = useMutation({ mutationFn: () => saveStaffContact(member.id, { phone, email }), onSuccess: done('Saved'), onError: failed })
   const busy = photo.isPending || unphoto.isPending || number.isPending
 
   return (
@@ -143,14 +151,21 @@ function StaffEditor({ member, period, onClose }) {
         </div>
         <PhotoButtons busy={busy} hasPhoto={!!person.photo_url}
           onPhoto={file => photo.mutate(file)} onRemove={() => unphoto.mutate()} />
-        <form className="flex items-end gap-2" onSubmit={e => { e.preventDefault(); number.mutate() }}>
-          <label className="flex-1">
+        <form className="space-y-2.5" onSubmit={e => { e.preventDefault(); number.mutate() }}>
+          <label className="block">
             <span className="block text-xs text-[var(--text-2)] mb-1">Phone</span>
             <input value={phone} onChange={e => { setPhone(e.target.value); setSaved('') }} inputMode="tel" placeholder="024 555 0172"
               className="w-full h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm text-[var(--text)] outline-none focus:border-[var(--text-3)]" />
           </label>
-          <button type="submit" disabled={busy || phone === (person.phone || '')}
-            className="h-9 px-4 rounded-lg bg-[var(--text)] text-[var(--panel)] text-sm font-semibold disabled:opacity-40">Save</button>
+          <label className="block">
+            <span className="block text-xs text-[var(--text-2)] mb-1">Email <span className="text-[var(--text-3)]">· they sign in with it</span></span>
+            <input value={email} onChange={e => { setEmail(e.target.value); setSaved('') }} type="email" placeholder="name@example.com"
+              className="w-full h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm text-[var(--text)] outline-none focus:border-[var(--text-3)]" />
+          </label>
+          <div className="flex justify-end">
+            <button type="submit" disabled={busy || (phone === (person.phone || '') && email === (person.email || ''))}
+              className="h-9 px-4 rounded-lg bg-[var(--text)] text-[var(--panel)] text-sm font-semibold disabled:opacity-40">Save</button>
+          </div>
         </form>
         {error && <p className="text-xs text-[var(--red-text)]">{error}</p>}
         {saved && !error && <p className="text-xs text-emerald-600">{saved}. {member.first_name} has been told.</p>}
@@ -159,6 +174,67 @@ function StaffEditor({ member, period, onClose }) {
           <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)]">Done</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// One change a staff member asked for, with Approve and Not approved.
+function WaitingRow({ change }) {
+  const queryClient = useQueryClient()
+  const [refusing, setRefusing] = useState(false)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const decide = useMutation({
+    mutationFn: ({ decision, note }) => decideChange(change.id, decision, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staffCards'] }),
+    onError: err => setError(refusal(err)),
+  })
+  const was = change.field === 'PHOTO' ? null : (change.current || '(none)')
+  const btn = 'h-8 px-3 rounded-lg text-xs font-semibold disabled:opacity-50'
+  return (
+    <div className="px-4 py-3 flex flex-col gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-[200px]">
+          <div className="text-sm font-semibold text-[var(--text)]">
+            {change.full_name} <span className="font-normal text-[var(--text-3)]">· {change.role_label}</span>
+          </div>
+          {change.field === 'PHOTO' ? (
+            <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--text-2)]">
+              {change.current_photo_url
+                ? <img src={change.current_photo_url} alt="Current" className="w-9 h-9 rounded-full object-cover" />
+                : <span className="w-9 h-9 rounded-full grid place-items-center bg-[var(--bg)] border border-[var(--border)] text-[10px] text-[var(--text-3)]">None</span>}
+              <span>→</span>
+              {change.removes_photo
+                ? <span className="font-semibold">Remove the photo</span>
+                : <img src={change.photo_url} alt="New" className="w-12 h-12 rounded-full object-cover ring-2 ring-amber-400" />}
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--text-2)] mt-0.5">
+              {change.what[0].toUpperCase() + change.what.slice(1)}: <span className="line-through text-[var(--text-3)]">{was}</span>
+              {' → '}<span className="font-semibold text-[var(--text)]">{change.value || '(none)'}</span>
+              {change.field === 'EMAIL' && <span className="text-[var(--text-3)]"> · they'll sign in with it</span>}
+            </div>
+          )}
+        </div>
+        {!refusing && (
+          <div className="flex gap-1.5">
+            <button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ decision: 'approve' })}
+              className={`${btn} bg-[var(--text)] text-[var(--panel)]`}>Approve</button>
+            <button type="button" disabled={decide.isPending} onClick={() => setRefusing(true)}
+              className={`${btn} border border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--bg)]`}>Not approved</button>
+          </div>
+        )}
+      </div>
+      {refusing && (
+        <form className="flex gap-1.5" onSubmit={e => { e.preventDefault(); decide.mutate({ decision: 'reject', note }) }}>
+          <input autoFocus value={note} onChange={e => setNote(e.target.value)} maxLength={300}
+            placeholder={`Why not? ${change.first_name} will see this`}
+            className="flex-1 h-8 px-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs text-[var(--text)] outline-none focus:border-[var(--text-3)]" />
+          <button type="submit" disabled={decide.isPending} className={`${btn} bg-[var(--text)] text-[var(--panel)]`}>Send</button>
+          <button type="button" onClick={() => setRefusing(false)} className={`${btn} text-[var(--text-3)]`}>Cancel</button>
+        </form>
+      )}
+      {error && <p className="text-xs text-[var(--red-text)]">{error}</p>}
     </div>
   )
 }
@@ -188,6 +264,7 @@ export default function Staff() {
   })
 
   const staff = data?.staff || []
+  const waiting = data?.waiting || []
   const active = staff.filter(s => s.is_active)
   const inactive = staff.filter(s => !s.is_active)
   const counts = Object.entries(data?.counts || {})
@@ -229,6 +306,13 @@ export default function Staff() {
         </div>
       ) : (
         <>
+          {waiting.length > 0 && (
+            <Section title="Waiting for your approval" count={waiting.length}>
+              <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)]">
+                {waiting.map(c => <WaitingRow key={c.id} change={c} />)}
+              </div>
+            </Section>
+          )}
           <Section title="Active" count={active.length}>
             <div className={grid}>{active.map(m => <StaffCard key={m.id} member={m} onEdit={setEditing} />)}</div>
           </Section>

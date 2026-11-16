@@ -9,12 +9,16 @@ const photoForm = (file) => {
 }
 
 export const getProfile   = (period = 'week') => client.get('/api/v1/accounts/profile/', { params: { period } }).then(r => r.data)
-export const savePhone    = (phone) => client.patch('/api/v1/accounts/profile/', { phone }).then(r => r.data)
+// Phone and email: a Branch Manager's own apply at once; anyone else's wait for him.
+export const saveContact  = (fields) => client.patch('/api/v1/accounts/profile/', fields).then(r => r.data)
+export const withdrawChange = (id) => client.delete(`/api/v1/accounts/profile/changes/${id}/`).then(r => r.data)
 export const uploadPhoto  = (file) => client.post('/api/v1/accounts/profile/photo/', photoForm(file)).then(r => r.data)
 export const removePhoto  = () => client.delete('/api/v1/accounts/profile/photo/').then(r => r.data)
 
 export const getStaffCards     = (period = 'week') => client.get('/api/v1/accounts/staff/', { params: { period } }).then(r => r.data)
-export const saveStaffPhone    = (id, phone) => client.patch(`/api/v1/accounts/staff/${id}/`, { phone }).then(r => r.data)
+export const saveStaffContact  = (id, fields) => client.patch(`/api/v1/accounts/staff/${id}/`, fields).then(r => r.data)
+export const decideChange      = (id, decision, note = '') =>
+  client.post(`/api/v1/accounts/staff/changes/${id}/${decision}/`, { note }).then(r => r.data)
 export const uploadStaffPhoto  = (id, file) => client.post(`/api/v1/accounts/staff/${id}/photo/`, photoForm(file)).then(r => r.data)
 export const removeStaffPhoto  = (id) => client.delete(`/api/v1/accounts/staff/${id}/photo/`).then(r => r.data)
 

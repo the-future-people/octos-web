@@ -5,6 +5,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { getMe } from '../api/auth'
 import usePresence, { endPresence } from '../hooks/usePresence'
+import ProfileHost from '../components/shared/ProfileHost'
 
 const AuthContext = createContext(null)
 
@@ -54,6 +55,8 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, getAccessToken, justLoggedIn, clearJustLoggedIn }}>
       {children}
+      {/* My profile, opened from any portal's user menu */}
+      <ProfileHost user={user} />
     </AuthContext.Provider>
   )
 }
