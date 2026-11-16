@@ -27,6 +27,9 @@ import NewCustomerModal    from '../../components/bm/NewCustomerModal'
 import DailyGreeting       from '../../components/layout/DailyGreeting'
 import NavBadge, { NavDot } from '../../components/shared/NavBadge'
 import useInboxBadge      from '../../hooks/useInboxBadge'
+import BMInfoStrip         from '../../components/bm/BMInfoStrip'
+import OnShift             from '../../components/bm/OnShift'
+import IdleCheck           from '../../components/attendant/IdleCheck'
 
 const getSheetToday = () => client.get('/api/v1/finance/sheets/today/').then(r => r.data)
 
@@ -34,48 +37,43 @@ const getSheetToday = () => client.get('/api/v1/finance/sheets/today/').then(r =
 // Work joined on 14 Nov 2026: front-desk jobs that come to the attendants.
 // My Jobs, Branch Jobs and Drafts became one Jobs tab; Collect became Pickup
 // (it will grow to every ready job, not only online orders); Services is
-// what the counter uses it for, a price list.
+// what the counter uses it for, a price list. New icons on 16 Nov 2026.
+// No Customers tab: attendants register customers from Today's band and
+// from New job, and look them up there.
+const icon = (children) => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+)
 const NAV = [
   {
     key: 'overview', label: 'Today', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-      <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-    </svg>,
+    // A sun: the day at a glance
+    icon: icon(<><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>),
   },
   {
     key: 'work', label: 'Work', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
-    </svg>,
+    // A bell at the counter: work that came to the front desk
+    icon: icon(<><path d="M4 18h16"/><path d="M6 18a6 6 0 0 1 12 0"/><path d="M12 9V7"/><path d="M10 7h4"/></>),
   },
   {
     key: 'collect', label: 'Pickup', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>
-    </svg>,
+    // A bag going home
+    icon: icon(<><path d="M6 7h12l1 13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></>),
   },
   {
     key: 'jobs', label: 'Jobs', section: 'WORKSPACE',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-    </svg>,
+    // A clipboard with lines
+    icon: icon(<><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/></>),
   },
   {
     key: 'inbox', label: 'Inbox', section: 'BRANCH',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-      <polyline points="22,6 12,13 2,6"/>
-    </svg>,
+    // A speech bubble: chats
+    icon: icon(<><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></>),
   },
   {
     key: 'services', label: 'Price list', section: 'BRANCH',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-      <path d="M4.93 4.93a10 10 0 0 0 0 14.14"/>
-    </svg>,
+    // A price tag
+    icon: icon(<><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></>),
   },
 ]
 
@@ -100,6 +98,9 @@ export default function AttendantPortal() {
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [showSignOff,   setShowSignOff]   = useState(false)
   const [jobsView,      setJobsView]      = useState('mine')
+  // A chat to open in the Inbox, and a chat to record a job for (Today's scan-in card)
+  const [inboxFocus,    setInboxFocus]    = useState(null)
+  const [chatJob,       setChatJob]       = useState(null)
 
   const { data: sheet } = useQuery({
     queryKey: ['sheet-today'],
@@ -147,38 +148,43 @@ export default function AttendantPortal() {
   const handleNav = (id) => {
     const legacy = { 'my-jobs': 'mine', 'drafts': 'mine', 'branch-jobs': 'branch' }
     if (legacy[id]) { setJobsView(legacy[id]); id = 'jobs' }
+    if (id === 'inbox') setInboxFocus(null)
     setPage(id)
     setMobileOpen(false)
   }
+
+  // Today's "Her chat" and "chats handed to you": the Inbox, at that chat.
+  const openChat = (id) => {
+    setInboxFocus({ id, at: Date.now() })
+    setPage('inbox')
+    setMobileOpen(false)
+  }
+
+  const today = (
+    <AttendantOverview
+      onNavigate={handleNav}
+      onNewJob={() => setShowNewJob(true)}
+      onRegisterCustomer={() => setShowNewCustomer(true)}
+      onOpenChat={openChat}
+      onStartChatJob={setChatJob}
+      recordingClosed={recordingClosed}
+    />
+  )
 
   const renderPage = () => {
     switch (page) {
       case 'overview':    return (
         <>
         {morning && <HandoverNotes notes={signOff?.handover_notes} />}
-        <AttendantOverview
-          sheet={sheet}
-          onNavigate={handleNav}
-          onNewJob={() => setShowNewJob(true)}
-          onRegisterCustomer={() => setShowNewCustomer(true)}
-          recordingClosed={recordingClosed}
-        />
+        {today}
         </>
       )
       case 'work':        return <AttendantWork />
       case 'collect':     return <AttendantCollect />
       case 'jobs':        return <AttendantJobs key={jobsView} sheet={sheet} initialView={jobsView} />
-      case 'inbox':       return <Inbox />
+      case 'inbox':       return <Inbox focus={inboxFocus} />
       case 'services':    return <AttendantServices />
-      default:            return (
-        <AttendantOverview
-          sheet={sheet}
-          onNavigate={handleNav}
-          onNewJob={() => setShowNewJob(true)}
-          onRegisterCustomer={() => setShowNewCustomer(true)}
-          recordingClosed={recordingClosed}
-        />
-      )
+      default:            return today
     }
   }
 
@@ -193,6 +199,8 @@ export default function AttendantPortal() {
         showMenu={mobileOpen}
         signOff={signOff}
       />
+      {/* Belt, date, floor load, machines up, promises kept: the same strip as the manager's */}
+      <BMInfoStrip user={user} />
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden justify-center">
@@ -245,6 +253,7 @@ export default function AttendantPortal() {
                     </div>
                   ))}
                 </nav>
+                <OnShift />
               </div>
             </>
           )}
@@ -253,8 +262,8 @@ export default function AttendantPortal() {
           <aside className="hidden sm:flex md:w-56 sm:w-12 shrink-0 bg-[var(--panel)]
             border-r border-[var(--border)] flex-col overflow-y-auto">
 
-            {/* Full labels — md+ */}
-            <div className="hidden md:block pt-3">
+            {/* Full labels — md+, with who is on shift at the foot */}
+            <div className="hidden md:flex flex-col min-h-full pt-3">
               {sections.map(section => (
                 <div key={section} className="mb-4">
                   <div className="text-[9px] font-black text-[var(--text-3)] uppercase
@@ -277,6 +286,7 @@ export default function AttendantPortal() {
                   ))}
                 </div>
               ))}
+              <div className="mt-auto pt-3"><OnShift /></div>
             </div>
 
             {/* Icons only — sm */}
@@ -330,7 +340,7 @@ export default function AttendantPortal() {
           she took it from the bar mid-task. */}
       {!showPortalLocked && (
         <DeskArrival
-          busy={showNewJob || showNewCustomer || showSignOff}
+          busy={showNewJob || showNewCustomer || showSignOff || !!chatJob}
           onTaken={({ fromBar }) => { if (!fromBar) handleNav('work') }}
         />
       )}
@@ -374,6 +384,15 @@ export default function AttendantPortal() {
           onSuccess={() => setShowNewJob(false)}
         />
       )}
+      {!showPortalLocked && !recordingClosed && chatJob && (
+        <NewJobModal
+          fromChat={chatJob}
+          onClose={() => setChatJob(null)}
+          onSuccess={() => setChatJob(null)}
+        />
+      )}
+      {/* Thirty quiet minutes: "Hey Kofi, are you there?", and breaks */}
+      <IdleCheck user={user} enabled={!showPortalLocked && !showSignOff} />
       {!showPortalLocked && showNewCustomer && (
         <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
