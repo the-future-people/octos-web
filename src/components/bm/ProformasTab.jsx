@@ -8,6 +8,7 @@ import {
 import NewProformaModal from './NewProformaModal'
 import ReviseProformaModal from './ReviseProformaModal'
 import InvoicesTab from './InvoicesTab'
+import { saveFile } from '../../api/saveFile'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -70,12 +71,7 @@ export default function ProformasTab({ onOpenDetail }) {
   const download = async (p) => {
     try {
       const res = await getProformaPdf(p.id)
-      const url = URL.createObjectURL(res.data)
-      const a   = document.createElement('a')
-      a.href     = url
-      a.download = `${p.proforma_number}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveFile(`${p.proforma_number}.pdf`, res.data, `proforma-${p.id}`)
       setSharing(null)
     } catch {
       setError('Could not build the document.')
@@ -110,9 +106,11 @@ export default function ProformasTab({ onOpenDetail }) {
     .filter(p => p.status === 'ISSUED' && !lapsed(p))
     .reduce((s, p) => s + parseFloat(p.total || 0), 0)
 
-  const { mutate: issue, isPending: issuing } = useMutation({
-    mutationFn: (id) => issueProforma(id),
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['proformas'] }),
+  // A draft left from before Save and share (or one that saved but couldn't
+  // be issued) is issued as it's shared, in the same press.
+  const { mutate: issueAndShare, isPending: issuing } = useMutation({
+    mutationFn: (id) => issueProforma(id).then(r => r.data),
+    onSuccess:  (p) => { queryClient.invalidateQueries({ queryKey: ['proformas'] }); setSharing(p) },
     onError:    (e) => setError(e.response?.data?.detail || 'Could not issue this proforma.'),
   })
 
@@ -271,16 +269,9 @@ export default function ProformasTab({ onOpenDetail }) {
                   </span>
                 </div>
                 <div className="col-span-3 flex justify-end gap-1.5">
-                  {p.status === 'DRAFT' && (
-                    <button onClick={() => issue(p.id)} disabled={issuing}
-                      className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
-                        rounded-lg hover:border-[var(--border-dark)] disabled:opacity-40
-                        transition-colors whitespace-nowrap">
-                      Issue
-                    </button>
-                  )}
                   {(p.status === 'ISSUED' || p.status === 'DRAFT') && (
-                    <button onClick={() => setSharing(p)}
+                    <button onClick={() => (p.status === 'DRAFT' ? issueAndShare(p.id) : setSharing(p))}
+                      disabled={issuing}
                       className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
                         rounded-lg hover:border-[var(--border-dark)] transition-colors">
                       Share
@@ -322,7 +313,7 @@ export default function ProformasTab({ onOpenDetail }) {
       )}
 
       {showCreate && (
-        <NewProformaModal onClose={() => setShowCreate(false)} />
+        <NewProformaModal onClose={() => setShowCreate(false)} onSuccess={p => setSharing(p)} onIssueFailed={setError} />
       )}
 
       {revising && (

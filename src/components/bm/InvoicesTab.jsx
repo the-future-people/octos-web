@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendInvoice, createInvoice, getServices, calculatePrice, getCustomers } from '../../api/bm'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
+import { saveFile } from '../../api/saveFile'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -50,12 +51,7 @@ export default function InvoicesTab() {
   const handleDownload = async (id, invoiceNumber) => {
     try {
       const res  = await client.get(`/api/v1/finance/invoices/${id}/pdf/`, { responseType: 'blob' })
-      const url  = URL.createObjectURL(res.data)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `${invoiceNumber}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveFile(`${invoiceNumber}.pdf`, res.data, `invoice-${id}`)
     } catch { /* silent */ }
   }
 

@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
 import { createInvoice, getInvoicePdfUrl, sendInvoice } from '../../api/bm'
 import { fileQuery, invoicesQuery } from './jobFileQuery'
+import { saveFile } from '../../api/saveFile'
 
 const fmt = v => `GHS ${parseFloat(v || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 const when = iso => (iso ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) : '—')
@@ -45,10 +46,7 @@ const TAG_TONES = {
 
 async function download(path, filename) {
   const { data } = await client.get(path, { responseType: 'blob' })
-  const url = URL.createObjectURL(data)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
-  URL.revokeObjectURL(url)
+  await saveFile(filename, data)
 }
 
 async function printReceipt(id) {

@@ -8,6 +8,7 @@ import { reportMissingDayDisruption } from '../../api/bm'
 import { downloadBranchStatement } from '../../api/bm'
 import ShareDocumentModal from '../shared/ShareDocumentModal'
 import MonthReview from './MonthReview'
+import { saveFile } from '../../api/saveFile'
 
 const fmt = (n) =>
   `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -736,12 +737,7 @@ function WeeklyTab() {
     setDownloading(true)
     try {
       const res = await getWeeklyPdf(r.id)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `weekly-${r.date_from}-to-${r.date_to}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveFile(`weekly-${r.date_from}-to-${r.date_to}.pdf`, res.data, `weekly-${r.id}`)
       setSharing(null)
     } catch {
       setError('Could not build that document.')
@@ -1020,12 +1016,7 @@ function MonthlyTab() {
     setDownloadingPdf(true)
     try {
       const res = await getMonthlyPdf(close.id)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `monthly-close-${year}-${String(month).padStart(2, '0')}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveFile(`monthly-close-${year}-${String(month).padStart(2, '0')}.pdf`, res.data, `monthly-${close.id}`)
       setSharingMonth(false)
     } catch {
       setPrepareError('Could not build that document.')
@@ -1905,14 +1896,7 @@ function InvestorStatementTab() {
     mutationFn: () => downloadBranchStatement(dateFrom, dateTo),
     onSuccess: (res) => {
       const blob = new Blob([res.data], { type: 'application/pdf' })
-      const url  = window.URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `branch-statement-${dateFrom}-to-${dateTo}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      window.URL.revokeObjectURL(url)
+      saveFile(`branch-statement-${dateFrom}-to-${dateTo}.pdf`, blob, `statement-${dateFrom}-${dateTo}`)
     },
     onError: (err) => {
       setError(err.response?.data?.detail || 'Could not generate statement.')

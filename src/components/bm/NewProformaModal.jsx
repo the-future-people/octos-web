@@ -2,14 +2,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, getBulkPricing, getCustomers, createProforma } from '../../api/bm'
+import { getServices, calculatePrice, getBulkPricing, getCustomers, createProforma, issueProforma } from '../../api/bm'
 import { useAuth } from '../../context/AuthContext'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toFixed(2)}`
 }
 
-export default function NewProformaModal({ onClose, onSuccess }) {
+export default function NewProformaModal({ onClose, onSuccess, onIssueFailed }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -148,14 +148,34 @@ export default function NewProformaModal({ onClose, onSuccess }) {
   const removeFromCart = (id) => setCart(c => c.filter(i => i._id !== id))
   const cartTotal = cart.reduce((s, i) => s + parseFloat(i._price || 0), 0)
 
+  // Save and share (16 Nov 2026): a proforma that's been prepared is going to
+  // the customer, so saving also issues it (the 14-day validity starts now)
+  // and the share window opens straight after. There is no draft step.
   const { mutate, isPending } = useMutation({
-    mutationFn: (payload) => createProforma(payload),
-    onSuccess: () => {
+    mutationFn: async (payload) => {
+      const { data: saved } = await createProforma(payload)
+      try {
+        const { data: issued } = await issueProforma(saved.id)
+        return issued
+      } catch (err) {
+        err.savedAs = saved
+        throw err
+      }
+    },
+    onSuccess: (proforma) => {
       queryClient.invalidateQueries({ queryKey: ['proformas'] })
-      onSuccess?.()
+      onSuccess?.(proforma)
       onClose()
     },
     onError: (err) => {
+      // Saved but not issued: the window closes (pressing Save again would
+      // make a second one) and it waits in the list with its own Share button.
+      if (err.savedAs) {
+        queryClient.invalidateQueries({ queryKey: ['proformas'] })
+        onIssueFailed?.(`Saved as ${err.savedAs.proforma_number}, but it couldn't be issued: ${err.response?.data?.detail || 'press Share on it in the list.'}`)
+        onClose()
+        return
+      }
       const d = err.response?.data
       if (!d) { setError('Could not save this proforma.'); return }
       if (typeof d === 'string') { setError(d); return }
@@ -196,7 +216,7 @@ export default function NewProformaModal({ onClose, onSuccess }) {
           <div>
             <div className="font-bold text-lg text-[var(--text)]">New Proforma</div>
             <div className="text-xs text-[var(--text-3)] mt-0.5">
-              Saved as a draft — issue it when you are ready to send
+              Saving issues it and opens Share · valid for 14 days from today
             </div>
           </div>
           <button onClick={onClose}
@@ -462,7 +482,7 @@ export default function NewProformaModal({ onClose, onSuccess }) {
             disabled={isPending || cart.length === 0 || !customer}
             className="px-5 py-2.5 bg-zinc-900 text-white text-sm font-bold rounded-xl
               disabled:opacity-40 hover:opacity-90 transition-opacity whitespace-nowrap">
-            {isPending ? 'Saving...' : `Save Draft · ${fmt(cartTotal)}`}
+            {isPending ? 'Saving...' : `Save and share · ${fmt(cartTotal)}`}
           </button>
         </div>
 
