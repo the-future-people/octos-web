@@ -6,7 +6,6 @@ import {
   getProformas, issueProforma, convertProforma, getProformaPdf,
 } from '../../api/bm'
 import NewJobModal from './NewJobModal'
-import ReviseProformaModal from './ReviseProformaModal'
 import InvoicesTab from './InvoicesTab'
 import { saveFile } from '../../api/saveFile'
 
@@ -320,7 +319,9 @@ export default function ProformasTab({ onOpenDetail }) {
       )}
 
       {revising && (
-        <ReviseProformaModal proformaId={revising} onClose={() => setRevising(null)} />
+        // Revising uses the same recorder, opened with the proforma's lines.
+        <NewJobModal revise={revising} onClose={() => setRevising(null)}
+          onSuccess={p => { if (p) setSharing(p) }} />
       )}
 
       {sharing && createPortal(

@@ -16,7 +16,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getServices, calculatePrice, createJob, getCustomers, getPromise, createProforma, issueProforma } from '../../api/bm'
+import { getServices, calculatePrice, createJob, getCustomers, getPromise, createProforma, issueProforma,
+  getProformaDetail, reviseProforma } from '../../api/bm'
 import { invalidateAfterJobCreated } from '../../api/invalidations'
 import { useAuth } from '../../context/AuthContext'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
@@ -144,6 +145,9 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
  *        screen is the total saved. A registered customer, any mix of
  *        instant, production and design, no files, deposit or ready time;
  *        saving issues it and hands it to onSuccess for sharing.
+ * revise    (16 Nov 2026) a proforma's id: the same, opened with that
+ *        proforma's customer (fixed) and its lines in the cart, re-priced at
+ *        today's prices. Saving sends the customer the next version.
  */
 // Where a job's files came from (JobLineItem.file_source), as icons in their colours.
 const SOURCES = [
@@ -159,7 +163,9 @@ const SOURCES = [
     path: <><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></> },
 ]
 
-export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null, proforma = false }) {
+export default function NewJobModal({ onClose, onSuccess, late = false, held = false, fromChat = null,
+                                     proforma: proformaMode = false, revise = null }) {
+  const proforma = proformaMode || !!revise
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -395,6 +401,89 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     setSelAddons(list => list.filter(x => offered.has(x.service ?? x)))
   }
 
+  // ── Revising a proforma: its customer and lines, priced at today's prices ──
+  const { data: source } = useQuery({
+    queryKey: ['proforma', revise],
+    queryFn: () => getProformaDetail(revise).then(r => r.data),
+    enabled: !!revise,
+  })
+  const [seeded, setSeeded] = useState(false)
+  const [withdrawn, setWithdrawn] = useState([])
+  const [revNote, setRevNote] = useState('')
+
+  // One line's price now: the product, then its finishing, as the recorder does.
+  async function quoteItem(item) {
+    try {
+      const { data: p } = await calculatePrice({
+        service: item.service.id, branch: branchId, quantity: item.quantity, pages: item.pages,
+        ...item.specifications,
+        ...(item.ring_size   ? { ring_size: item.ring_size } : {}),
+        ...(item.output_mode ? { output_mode: item.output_mode } : {}),
+      })
+      let total = parseFloat(p.total || 0)
+      let addonsPriced = []
+      if (item.addons.length) {
+        const { data: a } = await client.post('/api/v1/jobs/addons/quote/', {
+          service: item.service.id, quantity: item.quantity, pages: item.pages,
+          specifications: item.specifications, addons: item.addons,
+        })
+        total += parseFloat(a.total || 0)
+        addonsPriced = a.addons || []
+      }
+      return { _price: total.toFixed(2), addonsPriced, _quoting: false }
+    } catch {
+      return { _quoting: false, _quoteFailed: true }
+    }
+  }
+
+  useEffect(() => {
+    if (!revise || seeded || !source || !servicesRaw.length || !branchId) return
+    setSeeded(true)
+    setCustomer({ id: source.customer, full_name: source.customer_name || source.issued_to,
+                  phone: source.contact_phone, customer_type: 'INDIVIDUAL', links: [] })
+    const byId = Object.fromEntries(servicesRaw.map(sv => [sv.id, sv]))
+    const gone = []
+    const items = []
+    ;(source.line_items || []).forEach((li, i) => {
+      const service = byId[li.service_id]
+      if (!service || !service.is_active) { gone.push(li.service_name); return }
+      const specifications = { ...(li.specifications || {}) }
+      delete specifications.is_color; delete specifications.ring_size; delete specifications.output_mode
+      // Finishing back into the form the recorder sends: ids, and packing
+      // with whether it was one per copy.
+      const addons = (li.addons || []).map(a => {
+        const def = (service.addons || []).find(x => x.id === a.service)
+        return def?.packing ? { service: a.service, per_copy: li.quantity > 1 && a.quantity === li.quantity } : a.service
+      })
+      items.push({
+        _id: `rev-${i}`, service, quantity: li.quantity, pages: li.pages || 1,
+        ring_size: li.ring_size || null, output_mode: li.output_mode || null,
+        specifications, addons, addonsPriced: li.addons || [], _price: li.total, _quoting: true,
+      })
+    })
+    setWithdrawn(gone)
+    setCart(items)
+    Promise.all(items.map(quoteItem)).then(prices =>
+      setCart(c => c.map(it => {
+        const k = items.findIndex(x => x._id === it._id)
+        return k >= 0 ? { ...it, ...prices[k] } : it
+      })))
+  }, [revise, seeded, source, servicesRaw, branchId])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A line back in the editor to change it (copies, pages, size, finishing).
+  const editItem = item => {
+    setCart(c => c.filter(i => i._id !== item._id))
+    setJobType(item.service.category)
+    setSelected(item.service)
+    setSelQty(item.quantity); setDebouncedQty(item.quantity)
+    setSelPages(item.pages); setDebouncedPages(item.pages)
+    setSelRingSize(item.ring_size)
+    setSelOutputMode(item.output_mode)
+    setSelArtwork(item.artwork || null)
+    setSelAddons(item.addons || [])
+    setSpecValues(item.specifications || {})
+  }
+
   const needsFile = wantsFile && !!selected?.requires_file_upload
   const fileReady = !needsFile || (selArtwork && selArtwork.verdict !== 'refuse')
   const addonsReady = !selAddons.length || (!!addonQuote && !addonError && !addonLoading)
@@ -469,6 +558,21 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     },
   })
 
+  // A revision: the customer gets the next version, issued as it's made.
+  const { mutate: saveRevision, isPending: savingRevision } = useMutation({
+    mutationFn: payload => reviseProforma(revise, payload).then(r => r.data),
+    onSuccess: p => {
+      queryClient.invalidateQueries({ queryKey: ['proformas'] })
+      queryClient.invalidateQueries({ queryKey: ['proforma', revise] })
+      onSuccess?.(p)
+      onClose()
+    },
+    onError: err => {
+      const d = err.response?.data
+      setError(d?.detail || (d && Object.values(d).flat().find(v => typeof v === 'string')) || 'That revision didn’t save. Try again.')
+    },
+  })
+
   const { mutate, isPending: creatingJob } = useMutation({
     mutationFn: payload => createJob(payload),
     onSuccess: res => {
@@ -495,7 +599,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     },
   })
 
-  const isPending = creatingJob || savingProforma
+  const isPending = creatingJob || savingProforma || savingRevision
+  const quoting = cart.some(i => i._quoting)
 
   const lineOf = item => ({
     service: item.service.id,
@@ -512,6 +617,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     if (isPending) return
     setError('')
     if (cart.length === 0) { setError('Add at least one item.'); return }
+    if (revise) {
+      if (withdrawn.length) { setError('Something on it is no longer offered. Raise a new proforma at current prices.'); return }
+      if (quoting) return
+      saveRevision({ line_items: cart.map(lineOf), notes: revNote.trim() })
+      return
+    }
     if (proforma) {
       if (!customer) { setError('Choose a registered customer first. Proformas go to registered customers only.'); return }
       saveProforma({
@@ -642,7 +753,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const customerBand = (
     <div className="px-6 py-3 border-b border-black/[0.07] bg-[#fafaf9] shrink-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1.5">
-        <label htmlFor="job-customer" className="text-sm font-bold">{proforma ? 'Who is this proforma for?' : 'Who is this job for?'}</label>
+        <label htmlFor="job-customer" className="text-sm font-bold">{revise ? 'For' : proforma ? 'Who is this proforma for?' : 'Who is this job for?'}</label>
         {!customer && customerTag}
       </div>
       {customer ? (
@@ -654,7 +765,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
             <div className="text-sm font-bold truncate">{nameOf(customer)}</div>
             <div className="text-[13px] text-[var(--text-3)]">{customer.phone}</div>
           </div>
-          {customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
+          {!revise && customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
             <div className="flex items-center gap-1.5 ml-4 min-w-0 overflow-x-auto">
               <span className="text-sm text-[var(--text-3)] mr-0.5">For</span>
               <button type="button" onClick={() => setOrderFor(null)}
@@ -671,8 +782,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
               ))}
             </div>
           )}
-          <button type="button" onClick={() => { setCustomer(null); setOrderFor(null) }}
-                  className="ml-auto h-11 px-3 text-sm font-bold text-blue-700 shrink-0">Change customer</button>
+          {revise ? (
+            <span className="ml-auto text-[13px] text-[var(--text-3)]">A revision goes to the same customer</span>
+          ) : (
+            <button type="button" onClick={() => { setCustomer(null); setOrderFor(null) }}
+                    className="ml-auto h-11 px-3 text-sm font-bold text-blue-700 shrink-0">Change customer</button>
+          )}
         </div>
       ) : (
         <>
@@ -1051,7 +1166,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
               <div className="text-[11px] text-[var(--text-3)]">
                 {item.specifications?.width_in && item.specifications?.height_in
                   ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
-                  : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`}
+                  : item.specifications?.width_ft && item.specifications?.height_ft
+                    ? `${item.specifications.width_ft} × ${item.specifications.height_ft} ft · ${item.quantity}`
+                    : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`}
               </div>
               {item.addonsPriced?.length > 0 && (
                 <div className="text-[13px] text-[var(--text-3)] truncate">
@@ -1065,8 +1182,14 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
               )}
             </div>
             <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[13px] font-bold tabular-nums">{fmt(item._price)}</span>
-              <button type="button" onClick={() => removeFromCart(item._id)} className="text-[11px] text-red-700 py-0.5">Remove</button>
+              <span className="text-[13px] font-bold tabular-nums" style={{ opacity: item._quoting ? 0.4 : 1 }}
+                    title={item._quoteFailed ? 'Couldn’t check today’s price; the server prices it when saved' : undefined}>
+                {fmt(item._price)}{item._quoteFailed ? ' ?' : ''}
+              </span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => editItem(item)} className="text-[11px] text-blue-700 py-0.5">Edit</button>
+                <button type="button" onClick={() => removeFromCart(item._id)} className="text-[11px] text-red-700 py-0.5">Remove</button>
+              </div>
             </div>
           </div>
         ))}
@@ -1093,11 +1216,22 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           </p>
         ) : null)}
         {lateBox}
+        {revise && withdrawn.length > 0 && (
+          <p className="text-[13px] text-red-700">
+            No longer offered: {withdrawn.join(', ')}. A revision can’t drop it quietly; raise a new proforma at current prices.
+          </p>
+        )}
+        {revise && (
+          <input value={revNote} onChange={e => setRevNote(e.target.value)} maxLength={300}
+                 placeholder="What changed? (optional, kept with the revision)"
+                 className="w-full h-8 px-2.5 text-xs bg-white border border-black/15 rounded-lg outline-none focus:border-zinc-900" />
+        )}
         {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0}
+        <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0 || quoting}
                 className="w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-lg bg-zinc-900 text-white text-[13px] font-semibold disabled:bg-black/20">
           <Icon kind="check" size={15} />
-          {proforma ? (isPending ? 'Saving…' : `Save and share · ${fmt(cartTotal)}`)
+          {revise ? (isPending ? 'Saving…' : quoting ? 'Checking today’s prices…' : `Save revision and share · ${fmt(cartTotal)}`)
+            : proforma ? (isPending ? 'Saving…' : `Save and share · ${fmt(cartTotal)}`)
             : isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
         </button>
         <button type="button" onClick={onClose} className="w-full h-8 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
@@ -1123,7 +1257,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
             <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={16} /></span>
-            <span className="text-[17px] font-bold">{proforma ? 'New Proforma' : 'New Job'}</span>
+            <span className="text-[17px] font-bold">{revise ? `Revise ${source?.proforma_number || 'proforma'}` : proforma ? 'New Proforma' : 'New Job'}</span>
           </div>
           {typeTabs}
           {branchName && <span className="ml-auto text-sm text-[var(--text-3)] hidden sm:inline">{branchName}</span>}
@@ -1139,8 +1273,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
         {proforma && (
           <div className="px-6 py-2 border-b border-black/[0.07] text-[12.5px] text-[var(--text-3)] shrink-0">
-            Mix instant, production and design on one proforma: the cart keeps everything as you switch.
-            Saving issues it (valid 14 days) and opens Share.
+            {revise
+              ? 'Its lines are in the cart at today’s prices: Edit or Remove them, or add more. Saving sends the next version (valid 14 days) and opens Share.'
+              : 'Mix instant, production and design on one proforma: the cart keeps everything as you switch. Saving issues it (valid 14 days) and opens Share.'}
           </div>
         )}
 
