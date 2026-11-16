@@ -224,8 +224,7 @@ html.octos-desktop { scrollbar-gutter: auto; }
 html.octos-desktop .octos-topbar { box-shadow: inset 0 -5px 0 #E3000F; }
 /* ── The attendant's Today screen (16 Nov 2026) ───────────────────────────
    Cards rise in one after another, new items slide in, urgent items pulse,
-   the photo's dot breathes, New job's halo beats, and confetti falls when
-   the target is reached. None of it moves for anyone who asked for less. */
+   and confetti falls when the target is reached. None of it moves for anyone who asked for less. */
 @keyframes todayRise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
@@ -233,14 +232,6 @@ html.octos-desktop .octos-topbar { box-shadow: inset 0 -5px 0 #E3000F; }
 @keyframes todaySlide {
   from { opacity: 0; transform: translateX(-14px); }
   to   { opacity: 1; transform: none; }
-}
-@keyframes todayBreathe {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
-  50%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
-}
-@keyframes todayHalo {
-  0%   { transform: scale(1);   opacity: 0.45; }
-  100% { transform: scale(1.7); opacity: 0; }
 }
 @keyframes todayUrgent {
   0%, 100% { background-color: rgba(217, 45, 32, 0.07); }
@@ -252,13 +243,24 @@ html.octos-desktop .octos-topbar { box-shadow: inset 0 -5px 0 #E3000F; }
 }
 .today-rise    { animation: todayRise 0.45s cubic-bezier(.2, .8, .2, 1) both; }
 .today-slide   { animation: todaySlide 0.4s cubic-bezier(.2, .8, .2, 1) both; }
-.today-breathe { animation: todayBreathe 2.4s ease-in-out infinite; }
-.today-halo    { animation: todayHalo 1.8s ease-out infinite; }
 .today-urgent  { animation: todayUrgent 1.6s ease-in-out infinite; }
 .today-fall    { animation: todayFall var(--fall, 2.8s) cubic-bezier(.25, .6, .45, 1) forwards; }
 .today-ring    { transition: stroke-dashoffset 1.2s cubic-bezier(.2, .8, .2, 1); }
 @media (prefers-reduced-motion: reduce) {
-  .today-rise, .today-slide, .today-breathe, .today-halo, .today-urgent { animation: none; }
+  .today-rise, .today-slide, .today-urgent { animation: none; }
   .today-fall { display: none; }
   .today-ring { transition: none; }
+}
+
+/* Today's canvas (16 Nov 2026): a step greyer than the page, with firmer card
+   edges, so the white cards stand apart instead of melting together. */
+:root {
+  --today-canvas: #E9EAEC;
+  --today-line: #D6D7DB;
+  --today-chip: #F1F1F3;
+}
+[data-theme="dark"] {
+  --today-canvas: #0D0D0E;
+  --today-line: #303033;
+  --today-chip: #262628;
 }

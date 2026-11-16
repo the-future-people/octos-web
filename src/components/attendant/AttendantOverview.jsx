@@ -3,13 +3,13 @@
 // The attendant's Today screen (redesigned 16 Nov 2026). One call, polled
 // every 30 seconds (GET /api/v1/jobs/attendant/today/), feeds all of it:
 //
-//   band          her photo, the greeting, her streak, Register customer, and
+//   band          the greeting, her streak, Register customer, and
 //                 the shift from opening to sign-off with a live countdown to
 //                 recording closing
 //   someone just scanned in   when a customer scans the counter QR
 //   my day        a ring of her jobs against her own usual day, what she has
 //                 recorded, how many are paid, jobs an hour, and New job, a
-//                 round red button that greys and locks once recording closes
+//                 red bar that greys and locks once recording closes
 //   needs you now front-desk work to take, pickups ready, chats Octos handed
 //                 to a person, her drafts; anything kept waiting pulses red
 //   my jobs today her jobs as a timeline, newest first
@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { todayQuery } from '../../api/today'
-import StaffAvatar from '../shared/StaffAvatar'
+import { todayCard as card, CardHead } from './TodayCard'
 import QuickPriceCheck from './QuickPriceCheck'
 import Confetti from './Confetti'
 
@@ -98,8 +98,6 @@ function CountUp({ value, decimals = 0, duration = 700 }) {
     : Math.round(shown).toLocaleString('en-GH')
 }
 
-const card = 'rounded-2xl border border-[var(--border)] bg-[var(--panel)]'
-const heading = 'text-[11px] font-bold uppercase tracking-widest text-[var(--text-3)]'
 
 // ── The band ─────────────────────────────────────────────────────────────
 
@@ -108,20 +106,14 @@ function Band({ user, me, shift, recordingClosed, onRegisterCustomer }) {
   const hour = new Date(now).getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const name = me?.first_name || user?.first_name || ''
-  const person = { role: 'ATTENDANT', photo_url: me?.photo_url, full_name: user?.full_name,
-                   initials: `${(user?.first_name || '?')[0]}${(user?.last_name || '')[0] || ''}`.toUpperCase() }
 
   return (
-    <section className="today-rise relative overflow-hidden rounded-2xl bg-[#0B0B0C] text-white p-5 sm:p-6 border border-white/5">
+    <section className="today-rise relative overflow-hidden rounded-2xl bg-[#0B0B0C] text-white p-5 sm:p-6 border border-white/10">
       {/* A soft red glow in the corner, so the black isn't flat */}
       <div aria-hidden className="absolute -right-24 -top-24 w-72 h-72 rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(204,0,0,0.35), transparent 65%)' }} />
 
       <div className="relative flex flex-wrap items-center gap-4">
-        <div className="relative shrink-0">
-          <StaffAvatar person={person} size={56} />
-          <span className="today-breathe absolute right-0 bottom-0 w-3.5 h-3.5 rounded-full bg-[#22C55E] ring-[3px] ring-[#0B0B0C]" />
-        </div>
         <div className="min-w-[180px] flex-1">
           <h2 className="text-xl sm:text-2xl font-black tracking-tight truncate">{greeting}, {name}</h2>
           <p className="text-[13px] text-white/60 mt-0.5">
@@ -248,36 +240,26 @@ function Ring({ total, target }) {
   )
 }
 
-function NewJobDisc({ closed, onNewJob }) {
+function NewJobButton({ closed, onNewJob }) {
   if (closed) {
     return (
-      <div className="flex items-center gap-3">
-        <div aria-disabled="true" className="w-14 h-14 rounded-full grid place-items-center bg-[var(--border)] text-[var(--text-3)]">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
-          </svg>
-        </div>
-        <div className="text-[13px] font-semibold text-[var(--text-3)]">Recording closed for today</div>
+      <div aria-disabled="true"
+        className="w-full h-11 rounded-xl flex items-center justify-center gap-2 bg-[var(--today-chip)] text-[var(--text-3)] text-[13px] font-semibold">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+        Recording closed for today
       </div>
     )
   }
   return (
-    <div className="flex items-center gap-3">
-      <div role="button" tabIndex={0} aria-label="New job" onClick={onNewJob}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNewJob() } }}
-        className="relative w-14 h-14 rounded-full cursor-pointer select-none outline-none focus-visible:ring-4 focus-visible:ring-red-300 group">
-        <span aria-hidden className="today-halo absolute inset-0 rounded-full bg-[#CC0000]" />
-        <span className="absolute inset-0 rounded-full bg-[#CC0000] grid place-items-center text-white shadow-[0_8px_20px_-6px_rgba(204,0,0,0.7)] transition-transform group-hover:scale-105 group-active:scale-95">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </span>
-      </div>
-      <div>
-        <div className="text-sm font-bold text-[var(--text)]">New job</div>
-        <div className="text-[11.5px] text-[var(--text-3)]">Tap to record</div>
-      </div>
-    </div>
+    <button onClick={onNewJob}
+      className="w-full h-11 rounded-xl flex items-center justify-center gap-2 bg-[#CC0000] hover:bg-[#B00000] active:scale-[0.99] text-white text-sm font-bold transition-colors shadow-[0_6px_16px_-8px_rgba(204,0,0,0.8)]">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      New job
+    </button>
   )
 }
 
@@ -289,10 +271,9 @@ function MyDay({ me, recordingClosed, onNewJob }) {
   ]
   return (
     <section className={`today-rise ${card} p-5`} style={{ animationDelay: '60ms' }}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className={heading}>My day</h3>
+      <CardHead tone="red" icon="target" title="My day">
         {me.sheet_number && <span className="text-[11px] text-[var(--text-3)]">Sheet {me.sheet_number}</span>}
-      </div>
+      </CardHead>
       <div className="flex flex-wrap items-center gap-5">
         <Ring total={me.total} target={me.target} />
         <div className="flex-1 min-w-[200px]">
@@ -302,15 +283,15 @@ function MyDay({ me, recordingClosed, onNewJob }) {
           </p>
           <div className="grid grid-cols-3 gap-2 mt-3">
             {figures.map(f => (
-              <div key={f.label} className="rounded-xl bg-[var(--bg)] px-2.5 py-2">
+              <div key={f.label} className="rounded-xl bg-[var(--today-chip)] px-2.5 py-2">
                 <div className="text-[15px] font-black text-[var(--text)] tabular-nums whitespace-nowrap">{f.value}</div>
                 <div className="text-[10.5px] text-[var(--text-3)]">{f.label}</div>
               </div>
             ))}
           </div>
-          <div className="mt-4"><NewJobDisc closed={recordingClosed} onNewJob={onNewJob} /></div>
         </div>
       </div>
+      <div className="mt-4"><NewJobButton closed={recordingClosed} onNewJob={onNewJob} /></div>
     </section>
   )
 }
@@ -363,12 +344,11 @@ function NeedsNow({ needs, onNavigate, onOpenChat }) {
   const items = needItems(needs, now)
   return (
     <section className={`today-rise ${card} p-4`} style={{ animationDelay: '100ms' }}>
-      <div className="flex items-center justify-between mb-2.5">
-        <h3 className={heading}>Needs you now</h3>
+      <CardHead tone="amber" icon="bolt" title="Needs you now">
         {items.some(i => i.urgent) && <span className="w-2 h-2 rounded-full bg-[#D92D20] animate-pulse" />}
-      </div>
+      </CardHead>
       {items.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-xl bg-[var(--bg)] px-3 py-3.5">
+        <div className="flex items-center gap-3 rounded-xl border border-[var(--today-line)] px-3 py-3.5">
           <span className="w-8 h-8 rounded-full grid place-items-center text-white bg-[#10B981] shrink-0">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6 9 17l-5-5" /></svg>
           </span>
@@ -383,7 +363,7 @@ function NeedsNow({ needs, onNavigate, onOpenChat }) {
             <button key={i.key}
               onClick={() => (i.chatId ? onOpenChat(i.chatId) : onNavigate(i.to))}
               className={`today-slide w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:brightness-95
-                ${i.urgent ? 'today-urgent' : 'bg-[var(--bg)]'}`}
+                ${i.urgent ? 'today-urgent border border-[rgba(217,45,32,0.35)]' : 'border border-[var(--today-line)] hover:bg-[var(--today-chip)]'}`}
               style={i.urgent ? { boxShadow: 'inset 3px 0 0 #D92D20' } : undefined}>
               <span className="w-8 h-8 rounded-full grid place-items-center shrink-0"
                 style={{ background: i.urgent ? '#D92D20' : `${i.tone}22`, color: i.urgent ? '#fff' : i.tone }}>
@@ -407,14 +387,13 @@ function NeedsNow({ needs, onNavigate, onOpenChat }) {
 function MyJobs({ jobs, total, onNavigate }) {
   return (
     <section className={`today-rise ${card} p-5`} style={{ animationDelay: '140ms' }}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className={heading}>My jobs today</h3>
+      <CardHead tone="green" icon="list" title="My jobs today">
         {total > 0 && (
           <button onClick={() => onNavigate('my-jobs')} className="text-[12px] font-semibold text-[var(--text-2)] hover:text-[var(--text)]">
             See all {total} →
           </button>
         )}
-      </div>
+      </CardHead>
       {jobs.length === 0 ? (
         <p className="text-[13px] text-[var(--text-3)] py-4 text-center">Your first job of the day will show up here.</p>
       ) : (
@@ -453,12 +432,12 @@ function TeamToday({ team }) {
   const minePct = team.total ? (team.mine / team.total) * 100 : 0
   return (
     <section className={`today-rise ${card} p-4`} style={{ animationDelay: '200ms' }}>
-      <h3 className={`${heading} mb-2`}>Team today</h3>
+      <CardHead tone="purple" icon="team" title="Team today" />
       <div className="text-[22px] font-black text-[var(--text)] leading-tight">
         <CountUp value={team.total} /> <span className="text-sm font-semibold text-[var(--text-3)]">jobs so far</span>
       </div>
       {usual > 0 && (
-        <div className="mt-2.5 h-2 rounded-full bg-[var(--bg)] overflow-hidden" title={`${Math.round(pct)}% of a usual day`}>
+        <div className="mt-2.5 h-2 rounded-full bg-[var(--today-chip)] overflow-hidden" title={`${Math.round(pct)}% of a usual day`}>
           <div className="h-full rounded-full bg-[var(--text)] relative" style={{ width: `${pct}%`, transition: 'width 1s ease' }}>
             <div className="absolute inset-y-0 left-0 bg-[#CC0000] rounded-full" style={{ width: `${minePct}%` }} />
           </div>
@@ -526,7 +505,7 @@ export default function AttendantOverview({
   const startJob = s => onStartChatJob?.({ conversationId: s.conversation_id, customerId: s.customer_id, name: s.name, phone: s.phone })
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    <div className="min-h-full bg-[var(--today-canvas)] p-4 sm:p-6 space-y-4">
       <Band user={user} me={me} shift={shift} recordingClosed={closed} onRegisterCustomer={onRegisterCustomer} />
       <ScanIn scans={scans} recordingClosed={closed} onStartJob={startJob} onOpenChat={onOpenChat} />
 

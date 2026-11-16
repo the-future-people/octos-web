@@ -2,7 +2,8 @@
 //
 // "On shift" at the foot of the menu (15 Nov 2026; redrawn 16 Nov 2026 and
 // shared by the manager's and the attendant's portals): everyone who signed
-// in today. Folded, overlapping photos with a dark "+N" and "4 in · 1 idle".
+// in today. Folded, a dark tile with overlapping photos, a "+N", how many are
+// in, and who is idle, on break or signed off.
 // Clicked, a panel opens beside the menu with everyone grouped: working now,
 // on break, idle, signed off. The server decides each state
 // (accounts/on_shift.py); this only draws it.
@@ -129,34 +130,38 @@ export default function OnShift() {
   const faces = (here.length ? here : staff).slice(0, STACK)
   const more = (here.length ? here : staff).length - faces.length
 
+  const off = staff.length - here.length
+  const summary = [idle && `${idle} idle`, onBreak && `${onBreak} on break`, off && `${off} signed off`].filter(Boolean).join(' · ')
+
+  // A dark tile, like Today's band, so who is here stands out from the menu (16 Nov 2026).
   return (
-    <div className="border-t border-[var(--border)] px-3 pt-2.5 pb-3">
-      <div className="px-1 pb-1.5 text-[9px] font-bold text-[var(--text-3)] uppercase tracking-widest">On shift</div>
+    <div className="px-3 pt-2 pb-3">
       <button ref={anchor} onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="dialog"
-        className={`w-full flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors
-          ${open ? 'bg-[var(--bg)]' : 'hover:bg-[var(--bg)]'}`}>
+        className={`w-full rounded-xl bg-[#111113] border border-white/10 p-2.5 text-left transition-shadow
+          ${open ? 'ring-2 ring-[#22C55E]/60' : 'hover:ring-2 hover:ring-white/10'}`}>
+        <span className="flex items-center justify-between mb-2">
+          <span className="text-[10.5px] font-semibold text-[#A1A1AA]">On shift</span>
+          <span className="flex items-center gap-1 text-[10.5px] font-semibold text-[#4ADE80]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />{data.on} in
+          </span>
+        </span>
         {staff.length === 0 ? (
-          <span className="text-[11px] text-[var(--text-3)]">Nobody else in yet</span>
+          <span className="block text-[11px] text-[#A1A1AA]">Nobody else in yet</span>
         ) : (
           <>
             <span className="flex items-center">
               {faces.map((p, i) => (
-                <span key={p.id} className="relative" style={{ marginLeft: i ? -6 : 0, zIndex: STACK - i }}>
-                  <Face person={p} size={28} ring dot={false} />
+                <span key={p.id} className="relative rounded-full"
+                  style={{ marginLeft: i ? -6 : 0, zIndex: STACK - i, boxShadow: '0 0 0 2px #111113', opacity: p.state === 'off' ? 0.55 : 1 }}>
+                  <Face person={p} size={26} dot={false} />
                 </span>
               ))}
               {more > 0 && (
-                <span className="relative grid place-items-center rounded-full bg-[#18181B] text-white text-[10.5px] font-bold"
-                  style={{ width: 28, height: 28, marginLeft: -6, boxShadow: '0 0 0 3px var(--panel)' }}>+{more}</span>
+                <span className="relative grid place-items-center rounded-full bg-[#3F3F46] text-white text-[10px] font-bold"
+                  style={{ width: 26, height: 26, marginLeft: -6, boxShadow: '0 0 0 2px #111113' }}>+{more}</span>
               )}
             </span>
-            <span className="min-w-0 text-[11px] leading-tight text-[var(--text-2)]">
-              <span className="flex items-center gap-1 whitespace-nowrap">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-                <b className="text-[var(--text)]">{data.on} in</b><span className="text-[var(--text-3)]">· {idle} idle</span>
-              </span>
-              {onBreak > 0 && <span className="block text-[#B45309] whitespace-nowrap">{onBreak} on break</span>}
-            </span>
+            {summary && <span className="block mt-1.5 text-[10.5px] text-[#A1A1AA] truncate">{summary}</span>}
           </>
         )}
       </button>

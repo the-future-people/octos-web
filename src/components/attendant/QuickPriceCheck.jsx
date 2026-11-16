@@ -7,6 +7,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { getServices, calculatePrice } from '../../api/bm'
+import { todayCard, CardHead } from './TodayCard'
 
 const money = n => `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -49,13 +50,13 @@ export default function QuickPriceCheck() {
   const total = price?.total != null ? Number(price.total) : null
 
   return (
-    <section className="today-rise rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4" style={{ animationDelay: '160ms' }}>
-      <h3 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2.5">Quick price check</h3>
+    <section className={`today-rise ${todayCard} p-4`} style={{ animationDelay: '160ms' }}>
+      <CardHead tone="blue" icon="tag" title="Quick price check" />
 
       <div className="relative">
         <input value={search} onChange={e => { setSearch(e.target.value); setService(null) }}
           placeholder="What does the customer want?"
-          className="w-full h-10 pl-9 pr-9 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm text-[var(--text)] outline-none focus:border-[var(--text-3)] transition-colors" />
+          className="w-full h-10 pl-9 pr-9 rounded-xl border border-[var(--today-line)] bg-[var(--bg)] text-sm text-[var(--text)] outline-none focus:border-[var(--text-3)] transition-colors" />
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
         </svg>
