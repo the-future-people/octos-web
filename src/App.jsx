@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import DailyGreeting from './components/layout/DailyGreeting'
 import PortalPreloader from './components/layout/PortalPreloader'
+import UpdateBar from './components/shared/UpdateBar'
 import LoginPage from './pages/auth/LoginPage'
 import CashierPortal from './pages/cashier/CashierPortal'
 import BMPortal        from './pages/bm/BMPortal'
@@ -38,6 +39,7 @@ export default function App() {
       <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <UpdateBar />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
