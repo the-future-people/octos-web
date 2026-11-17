@@ -18,10 +18,11 @@
 // in the inbox; their connections come later.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import client from '../../api/client'
-import { getCustomers } from '../../api/bm'
+import { getCustomers, getLockStatus } from '../../api/bm'
 import NewJobModal from './NewJobModal'
+import { useInboxCounts } from '../../hooks/useInboxBadge'
 
 // Octos's colours, from the logo (8 Nov 2026): black, and red only for what
 // needs attention. Octos's own messages are Mist grey with its mark beside its
@@ -60,8 +61,13 @@ function useWide() {
 }
 const MEDIA = ['IMAGE', 'DOCUMENT', 'VIDEO', 'AUDIO']
 
-const getConversations = () =>
-  client.get('/api/v1/communications/').then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])))
+// The chats a page at a time (17 Nov 2026): 40, then 40 more as the list is
+// scrolled, back to the very first. Channel, chip and search are applied by
+// the server, so search reaches every chat, not only those loaded.
+const getConversationPage = ({ pageParam, queryKey: [, , params] }) =>
+  client.get('/api/v1/communications/', {
+    params: { page: pageParam, channel: params.channel, filter: params.filter || undefined, search: params.search || undefined },
+  }).then(r => (Array.isArray(r.data) ? { results: r.data, next: null } : r.data))
 const getConversation = id => client.get(`/api/v1/communications/${id}/`).then(r => r.data)
 
 const needsYou = c => c?.handled_by === 'STAFF' && !!c?.handoff_reason
@@ -1265,13 +1271,44 @@ export default function Inbox({ focus = null } = {}) {
     if (focus.filter) setFilter(focus.filter)
   }, [focus])
 
-  const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: getConversations,
+  // Search waits for a pause in typing before asking the server.
+  const [search, setSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(query.trim()), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const {
+    data: pages, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['conversations', 'list', { channel, filter, search }],
+    queryFn: getConversationPage,
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (last?.next ? all.length + 1 : undefined),
     staleTime: 10_000,
-    refetchInterval: 15_000,
-    placeholderData: prev => prev,
+    // Every 15 seconds while near the top; once far down, each refresh
+    // re-reads every page loaded, so it slows to a minute.
+    refetchInterval: q => ((q.state.data?.pages?.length || 0) > 2 ? 60_000 : 15_000),
+    placeholderData: keepPreviousData,
   })
+  const conversations = useMemo(() => {
+    const seen = new Set()
+    return (pages?.pages || []).flatMap(p => p.results || []).filter(c => !seen.has(c.id) && seen.add(c.id))
+  }, [pages])
+  const counts = useInboxCounts()
+
+  // The next page loads as the end of the list comes into view.
+  const listBox = useRef(null)
+  const listEnd = useRef(null)
+  useEffect(() => {
+    const end = listEnd.current
+    if (!end || !hasNextPage) return
+    const watch = new IntersectionObserver(([seen]) => {
+      if (seen.isIntersecting && !isFetchingNextPage) fetchNextPage()
+    }, { root: listBox.current, rootMargin: '200px' })
+    watch.observe(end)
+    return () => watch.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, conversations.length])
 
   // Opened from a notification: show the tab the chat is on.
   const focused = useRef(null)
@@ -1281,19 +1318,13 @@ export default function Inbox({ focus = null } = {}) {
     if (c && TABS.includes(c.channel)) { focused.current = focus.id; setChannelState(c.channel) }
   }, [focus, conversations])
 
-  // Per channel: chats with unread messages or waiting for a person.
-  const waitingOn = t => conversations.filter(c => c.channel === t && (c.unread_count > 0 || needsYou(c))).length
-  const needsCount = conversations.filter(needsYou).length
-  const unread = conversations.filter(c => c.unread_count > 0).length
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const f = FILTERS.find(x => x.key === filter)
-    return conversations
-      .filter(c => c.channel === channel)
-      .filter(c => !f || f.test(c))
-      .filter(c => !q || [nameOf(c), c.contact_phone, c.last_message_preview, c.job?.ref, c.job?.what].some(v => (v || '').toLowerCase().includes(q)))
-      .sort((a, b) => (needsYou(b) - needsYou(a)) || (new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)))
-  }, [conversations, channel, filter, query])
+  // Per channel, over every chat (the server counts): unread or waiting for a person.
+  const waitingOn = t => counts.by_channel?.[t] || 0
+  const needsCount = counts.needs
+  const unread = counts.unread
+  // The server has filtered and ordered them (needs you first, then newest);
+  // this only keeps a stale page from showing another channel's chat.
+  const shown = useMemo(() => conversations.filter(c => c.channel === channel), [conversations, channel])
 
   // No chat opens by itself (9 Nov 2026): staff choose. Opening one marks it read.
 
@@ -1370,7 +1401,7 @@ export default function Inbox({ focus = null } = {}) {
               )
             })}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div ref={listBox} className="flex-1 overflow-y-auto">
             {isLoading ? [1, 2, 3].map(i => <div key={i} className="h-16 m-3 bg-[var(--bg)] rounded-xl animate-pulse" />)
               : shown.length === 0 ? (
                 <div className="p-8 text-center text-sm text-[var(--text-3)]">
@@ -1378,7 +1409,16 @@ export default function Inbox({ focus = null } = {}) {
                     : SOON.includes(channel) ? `No ${CHANNEL[channel].label} chats yet. They will appear here once ${CHANNEL[channel].label} is connected.`
                     : `${CHANNEL[channel].label} messages from customers will appear here.`}
                 </div>
-              ) : shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
+              ) : (
+                <>
+                  {shown.map(c => <Row key={c.id} c={c} selected={c.id === selectedId} onOpen={setSelectedId} />)}
+                  <div ref={listEnd} className="px-3 py-4 text-center text-[11.5px] text-[var(--text-3)]">
+                    {isFetchingNextPage ? 'Loading older chats…'
+                      : hasNextPage ? <button type="button" onClick={() => fetchNextPage()} className="font-semibold underline">Show older chats</button>
+                      : shown.length > 12 ? 'That’s every chat.' : null}
+                  </div>
+                </>
+              )}
           </div>
           {starting && (
             <NewMessage prefill={prefill} onClose={() => { setStarting(false); setPrefill(null) }} onStarted={id => {

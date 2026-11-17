@@ -1,30 +1,35 @@
 // src/hooks/useInboxBadge.js
 //
 // The inbox's badge on the menu (8 Nov 2026): how many chats have unread
-// messages, and how many Octos has asked a person to take, and since when. It shares the
-// inbox's own query (same key, same request), so it costs nothing extra.
+// messages, and how many Octos has asked a person to take, and since when.
 // It also puts the count in the window's title, for the taskbar.
+//
+// Counted by the server over every chat (17 Nov 2026), not from the first
+// page of the list, which left out anything older than the newest 20.
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import client from '../api/client'
 
-const getConversations = () =>
-  client.get('/api/v1/communications/').then(r => (Array.isArray(r.data) ? r.data : (r.data?.results || [])))
+const NONE = { unread: 0, needs: 0, waiting_since: null, by_channel: {} }
 
-export default function useInboxBadge() {
-  const { data = [] } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: getConversations,
+// Under the 'conversations' key, so anything that refreshes the inbox
+// refreshes these numbers too.
+export function useInboxCounts() {
+  const { data } = useQuery({
+    queryKey: ['conversations', 'counts'],
+    queryFn: () => client.get('/api/v1/communications/counts/').then(r => r.data),
     staleTime: 10_000,
     refetchInterval: 15_000,
   })
-  const unread = data.filter(c => c.unread_count > 0).length
-  const asked = data.filter(c => c.handled_by === 'STAFF' && !!c.handoff_reason)
-  const needs = asked.length
-  // When the longest-waiting of them was handed to a person (15 Nov 2026):
+  return data || NONE
+}
+
+export default function useInboxBadge() {
+  const counts = useInboxCounts()
+  const { unread, needs } = counts
+  // When the longest-waiting chat was handed to a person (15 Nov 2026):
   // the menu's line turns red once that is 5 minutes ago.
-  const waitingSince = asked.reduce((oldest, c) =>
-    (c.handled_since && (!oldest || c.handled_since < oldest) ? c.handled_since : oldest), null)
+  const waitingSince = counts.waiting_since
 
   useEffect(() => {
     document.title = needs ? `(${needs}) Needs you · Octos` : unread ? `(${unread}) Octos` : 'Octos'
