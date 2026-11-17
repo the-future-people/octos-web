@@ -1,5 +1,12 @@
 // src/components/bm/Catalogue.jsx
-import { useState } from 'react'
+//
+// The catalogue (redesigned 17 Nov 2026). Services as a grid of cards, three
+// across on a wide screen, with the photo on top so the catalogue can be
+// scanned by picture; a list view for changing many prices at once; search
+// and the type tabs on one row. Clicking a service opens a pane beside it
+// with the full details, its price, and its photo, which can be changed or
+// taken off there (PUT/DELETE /api/v1/jobs/services/<id>/photo/).
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getServices } from '../../api/bm'
@@ -17,27 +24,11 @@ const CATEGORY_CONFIG = {
   DESIGN:     { label: 'Design',     color: 'bg-violet-600', text: 'text-white'        },
 }
 
-// ── Service Image ─────────────────────────────────────────────────────────────
-function ServiceImage({ src, name, small }) {
-  const size = small ? 'w-20 h-16' : 'w-24 h-20'
-  if (src) {
-    return (
-      <img src={src} alt={name}
-        className={`${size} object-cover rounded-lg shrink-0 bg-[var(--bg)]`} />
-    )
-  }
-  return (
-    <div className={`${size} rounded-lg shrink-0 bg-[var(--bg)] border border-[var(--border)]
-      flex items-center justify-center`}>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="1.5" className="text-[var(--border-dark)]">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-    </div>
-  )
-}
+// What a price is for: "per copy", "per sq ft".
+const UNIT_LABEL = { PER_COPY: 'copy', PER_PIECE: 'piece', PER_SQFT: 'sq ft', PER_SQCM: 'sq cm', PER_JOB: 'job' }
+const perUnit = unit => `per ${UNIT_LABEL[unit] || (unit || 'piece').replace(/^PER_/, '').toLowerCase()}`
+
+const VIEW_KEY = 'octos.catalogue.view'
 
 // ── Edit Pricing Modal ────────────────────────────────────────────────────────
 function EditPricingModal({ service, pricing, branchId, onClose }) {
@@ -433,69 +424,299 @@ function CreateServiceModal({ onClose }) {
     document.body
   )
 }
-// ── Service Card ──────────────────────────────────────────────────────────────
-function ServiceCard({ service, pricing, onEditPricing }) {
-  const cat = CATEGORY_CONFIG[service.category] || CATEGORY_CONFIG.INSTANT
 
+// ── Photos ────────────────────────────────────────────────────────────────────
+
+function NoPhoto({ big }) {
   return (
-    <div className="bg-[var(--panel)] border border-[var(--border)] rounded-xl
-      flex items-center gap-4 px-4 py-3 hover:border-[var(--border-dark)] transition-colors">
-
-      {/* Image */}
-      <ServiceImage src={service.image} name={service.name} small />
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2 flex-wrap">
-          <span className="text-sm font-bold text-[var(--text)] leading-tight">{service.name}</span>
-          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${cat.color} ${cat.text} shrink-0`}>
-            {cat.label}
-          </span>
-        </div>
-        {service.description && (
-          <div className="text-[10px] text-[var(--text-3)] mt-0.5 truncate">{service.description}</div>
-        )}
-        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-          {pricing ? (
-            <>
-              <span className="text-xs font-mono font-bold text-emerald-600">
-                {fmt(pricing.base_price)} <span className="text-[10px] font-normal text-[var(--text-3)]">B&W</span>
-              </span>
-              {parseFloat(pricing.color_multiplier) > 1 && (
-                <span className="text-xs font-mono font-bold text-amber-600">
-                  {fmt(parseFloat(pricing.base_price) * parseFloat(pricing.color_multiplier))}
-                  <span className="text-[10px] font-normal text-[var(--text-3)]"> Colour</span>
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-[10px] text-[var(--text-3)] italic">No pricing set</span>
-          )}
-          <span className="text-[10px] text-[var(--text-3)]">{service.code}</span>
-        </div>
+    <div className="absolute inset-0 grid place-items-center bg-[var(--bg)] text-[var(--border-dark)]">
+      <div className="flex flex-col items-center gap-1.5">
+        <svg width={big ? 34 : 24} height={big ? 34 : 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+        </svg>
+        {big && <span className="text-xs text-[var(--text-3)]">No photo yet</span>}
       </div>
-
-      {/* Action */}
-      <button
-        onClick={() => onEditPricing(service, pricing)}
-        className={`shrink-0 px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-colors
-          ${pricing
-            ? 'border-[var(--border)] text-[var(--text-2)] hover:border-[var(--border-dark)]'
-            : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-          }`}>
-        {pricing ? 'Edit Price' : 'Set Price'}
-      </button>
     </div>
   )
 }
 
+// A photo that fills its box; a plain placeholder when there is none or it fails.
+function Photo({ src, name, big }) {
+  const [broken, setBroken] = useState(false)
+  if (!src || broken) return <NoPhoto big={big} />
+  return <img src={src} alt={name} loading="lazy" onError={() => setBroken(true)}
+    className="absolute inset-0 w-full h-full object-cover" />
+}
+
+function CategoryTag({ category, className = '' }) {
+  const cat = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.INSTANT
+  return (
+    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${cat.color} ${cat.text} ${className}`}>{cat.label}</span>
+  )
+}
+
+function Price({ pricing, unit, size = 'md' }) {
+  if (!pricing) return <span className="text-xs font-semibold text-amber-600">No price yet</span>
+  const colour = parseFloat(pricing.color_multiplier) > 1
+    ? parseFloat(pricing.base_price) * parseFloat(pricing.color_multiplier) : null
+  return (
+    <div className="min-w-0">
+      <div className={`font-black text-emerald-600 tabular-nums ${size === 'lg' ? 'text-2xl' : 'text-[15px]'}`}>
+        {fmt(pricing.base_price)} <span className="text-[11px] font-medium text-[var(--text-3)]">{perUnit(unit)}</span>
+      </div>
+      {colour != null && (
+        <div className="text-[11px] text-[var(--text-3)]">
+          Colour <b className="font-bold text-amber-600 tabular-nums">{fmt(colour)}</b>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EditPriceButton({ pricing, onClick, wide }) {
+  return (
+    <button onClick={e => { e.stopPropagation(); onClick() }}
+      className={`shrink-0 px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors
+        ${wide ? 'w-full py-2.5 text-sm' : ''}
+        ${pricing
+          ? 'border-[var(--border)] text-[var(--text-2)] bg-[var(--panel)] hover:border-[var(--border-dark)] hover:text-[var(--text)]'
+          : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+      {pricing ? 'Edit price' : 'Set price'}
+    </button>
+  )
+}
+
+// ── Grid card ─────────────────────────────────────────────────────────────────
+
+function ServiceTile({ service, pricing, onOpen, onEditPricing }) {
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen}
+      onKeyDown={e => { if (e.key === 'Enter') onOpen() }}
+      className="group flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden cursor-pointer
+        transition-all hover:border-[var(--border-dark)] hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)]
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-dark)]">
+      <div className="relative aspect-[16/10] overflow-hidden">
+        <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-[1.03]">
+          <Photo key={service.image || 'none'} src={service.image} name={service.name} />
+        </div>
+        <CategoryTag category={service.category} className="absolute top-2.5 left-2.5 shadow-sm" />
+        <span className="absolute top-2.5 right-2.5 max-w-[55%] truncate rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600">
+          {service.code}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-1 p-3.5">
+        <div className="text-[14px] font-bold leading-snug text-[var(--text)] line-clamp-2">{service.name}</div>
+        {service.description && (
+          <div className="text-[12px] leading-relaxed text-[var(--text-3)] line-clamp-2">{service.description}</div>
+        )}
+        <div className="mt-auto flex items-end justify-between gap-2 pt-2.5">
+          <Price pricing={pricing} unit={service.unit} />
+          <EditPriceButton pricing={pricing} onClick={onEditPricing} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── List row: for changing many prices at once ────────────────────────────────
+
+function ServiceRow({ service, pricing, onOpen, onEditPricing }) {
+  const colour = pricing && parseFloat(pricing.color_multiplier) > 1
+    ? parseFloat(pricing.base_price) * parseFloat(pricing.color_multiplier) : null
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen}
+      onKeyDown={e => { if (e.key === 'Enter') onOpen() }}
+      className="grid grid-cols-[48px_minmax(0,1fr)_auto] sm:grid-cols-[48px_minmax(0,1fr)_110px_110px_auto] items-center gap-3
+        px-3 py-2 cursor-pointer hover:bg-[var(--bg)] transition-colors">
+      <div className="relative w-12 h-9 rounded-md overflow-hidden"><Photo key={service.image || 'none'} src={service.image} name={service.name} /></div>
+      <div className="min-w-0">
+        <div className="text-[13px] font-semibold text-[var(--text)] truncate">{service.name}</div>
+        <div className="text-[11px] text-[var(--text-3)] font-mono truncate">{service.code} · {perUnit(service.unit)}</div>
+      </div>
+      <div className="hidden sm:block text-[13px] font-bold text-emerald-600 tabular-nums">
+        {pricing ? fmt(pricing.base_price) : <span className="text-xs font-semibold text-amber-600">No price</span>}
+      </div>
+      <div className="hidden sm:block text-[13px] font-bold text-amber-600 tabular-nums">{colour != null ? fmt(colour) : <span className="text-[var(--text-3)] font-normal">—</span>}</div>
+      <EditPriceButton pricing={pricing} onClick={onEditPricing} />
+    </div>
+  )
+}
+
+function ServiceList({ items, pricingMap, onOpen, onEditPricing }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden divide-y divide-[var(--border)]">
+      <div className="hidden sm:grid grid-cols-[48px_minmax(0,1fr)_110px_110px_auto] gap-3 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)]">
+        <span /><span>Service</span><span>Price</span><span>Colour</span><span className="w-[68px]" />
+      </div>
+      {items.map(s => (
+        <ServiceRow key={s.id} service={s} pricing={pricingMap[s.id]}
+          onOpen={() => onOpen(s)} onEditPricing={() => onEditPricing(s, pricingMap[s.id])} />
+      ))}
+    </div>
+  )
+}
+
+// ── The pane beside a service ─────────────────────────────────────────────────
+
+const PHOTO_KINDS = ['image/jpeg', 'image/png', 'image/webp']
+
+function ServicePane({ service, pricing, onClose, onEditPricing }) {
+  const queryClient = useQueryClient()
+  const input = useRef(null)
+  const [preview, setPreview] = useState(null)
+  const [error, setError] = useState('')
+  const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    const esc = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onClose])
+
+  // The local preview's address is let go when it's replaced or the pane closes.
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+
+  const saved = updated => {
+    queryClient.setQueryData(['services'], list =>
+      Array.isArray(list) ? list.map(s => (s.id === updated.id ? updated : s)) : list)
+    queryClient.invalidateQueries({ queryKey: ['services'] })
+    setPreview(null)
+  }
+  const failed = err => {
+    setPreview(null)
+    setError(err.response?.data?.detail || 'The photo could not be saved. Try again.')
+  }
+
+  const upload = useMutation({
+    mutationFn: file => {
+      const form = new FormData()
+      form.append('image', file)
+      return client.put(`/api/v1/jobs/services/${service.id}/photo/`, form).then(r => r.data)
+    },
+    onSuccess: saved,
+    onError: failed,
+  })
+  const remove = useMutation({
+    mutationFn: () => client.delete(`/api/v1/jobs/services/${service.id}/photo/`).then(r => r.data),
+    onSuccess: saved,
+    onError: failed,
+  })
+  const busy = upload.isPending || remove.isPending
+
+  const choose = file => {
+    if (!file) return
+    setError('')
+    if (!PHOTO_KINDS.includes(file.type)) { setError('Use a JPG, PNG or WebP photo.'); return }
+    if (file.size > 5 * 1024 * 1024) { setError('That photo is over 5 MB. Use a smaller one.'); return }
+    setPreview(URL.createObjectURL(file))
+    upload.mutate(file)
+  }
+
+  const addons = service.addons || []
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9998]" role="dialog" aria-modal="true" aria-label={service.name}>
+      <div className="absolute inset-0 bg-black/30 animate-fadeIn" onClick={onClose} />
+      <aside className="catalogue-pane absolute right-0 top-0 h-full w-full max-w-[440px] bg-[var(--panel)] shadow-2xl flex flex-col">
+        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[var(--border)]">
+          <CategoryTag category={service.category} />
+          <span className="font-mono text-[11px] text-[var(--text-3)] truncate">{service.code}</span>
+          <button onClick={onClose} aria-label="Close"
+            className="ml-auto w-8 h-8 rounded-full grid place-items-center text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--bg)]">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          {/* The photo: change it, drop one on it, or take it off */}
+          <div>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => { e.preventDefault(); setDragging(false); choose(e.dataTransfer.files?.[0]) }}
+              className={`relative aspect-[4/3] rounded-2xl overflow-hidden border transition-colors
+                ${dragging ? 'border-2 border-dashed border-emerald-500' : 'border-[var(--border)]'}`}>
+              {preview
+                ? <img src={preview} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                : <Photo key={service.image || 'none'} src={service.image} name={service.name} big />}
+              {busy && (
+                <div className="absolute inset-0 grid place-items-center bg-black/40 text-white text-sm font-semibold">
+                  {upload.isPending ? 'Uploading…' : 'Removing…'}
+                </div>
+              )}
+              {dragging && !busy && (
+                <div className="absolute inset-0 grid place-items-center bg-emerald-500/15 text-emerald-700 text-sm font-bold">Drop to use this photo</div>
+              )}
+            </div>
+            <input ref={input} type="file" accept={PHOTO_KINDS.join(',')} className="hidden"
+              onChange={e => { choose(e.target.files?.[0]); e.target.value = '' }} />
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={() => input.current?.click()} disabled={busy}
+                className="flex-1 h-10 rounded-xl bg-[var(--text)] text-[var(--panel)] text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                </svg>
+                {service.image ? 'Change photo' : 'Add a photo'}
+              </button>
+              {service.image && (
+                <button onClick={() => { setError(''); remove.mutate() }} disabled={busy}
+                  className="h-10 px-4 rounded-xl border border-[var(--border)] text-sm font-semibold text-[var(--text-2)] hover:text-[var(--red-text)] hover:border-[var(--red-border)] disabled:opacity-50">
+                  Remove
+                </button>
+              )}
+            </div>
+            {error
+              ? <p className="mt-2 text-xs text-[var(--red-text)]">{error}</p>
+              : <p className="mt-2 text-[11px] text-[var(--text-3)]">JPG, PNG or WebP, up to 5 MB. Or drop a photo on it. It shows on the website and the app too.</p>}
+          </div>
+
+          <div>
+            <h2 className="text-xl font-black leading-tight text-[var(--text)]">{service.name}</h2>
+            {service.variant_label && <p className="text-xs text-[var(--text-3)] mt-1">{service.variant_label}</p>}
+            {service.description && <p className="mt-2.5 text-[13px] leading-relaxed text-[var(--text-2)]">{service.description}</p>}
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] p-4 space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)]">Price</div>
+            <Price pricing={pricing} unit={service.unit} size="lg" />
+            <p className="text-[11px] text-[var(--text-3)]">The same at every branch, on the website and in the app.</p>
+            <EditPriceButton pricing={pricing} onClick={onEditPricing} wide />
+          </div>
+
+          {addons.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2">Finishing offered</div>
+              <div className="flex flex-wrap gap-1.5">
+                {addons.map(a => (
+                  <span key={a.id} className="rounded-lg border border-[var(--border)] px-2 py-1 text-[11.5px] text-[var(--text-2)]">{a.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  )
+}
+
 // ── Main Catalogue ────────────────────────────────────────────────────────────
+
+function useView() {
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid' } catch { return 'grid' }
+  })
+  const choose = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v) } catch { /* private window */ } }
+  return [view, choose]
+}
+
 export default function Catalogue() {
   const { user } = useAuth()
   const branchId = typeof user?.branch === 'object' ? user?.branch?.id : (user?.branch || 2)
-  const [category,     setCategory]     = useState('ALL')
-  const [editTarget,   setEditTarget]   = useState(null)  // { service, pricing }
-  const [showCreate,   setShowCreate]   = useState(false)
+  const [category,   setCategory]   = useState('ALL')
+  const [search,     setSearch]     = useState('')
+  const [view,       setView]       = useView()
+  const [openId,     setOpenId]     = useState(null)
+  const [editTarget, setEditTarget] = useState(null)  // { service, pricing }
+  const [showCreate, setShowCreate] = useState(false)
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ['services'],
@@ -523,119 +744,131 @@ export default function Catalogue() {
     staleTime: 60_000,
   })
 
-  // Build pricing map: service_id → pricing rule
-  const pricingMap = pricingRules.reduce((acc, p) => {
+  // service id → its price
+  const pricingMap = useMemo(() => pricingRules.reduce((acc, p) => {
     const key = typeof p.service === 'object' ? p.service?.id : p.service
     acc[key] = p
     return acc
-  }, {})
+  }, {}), [pricingRules])
 
-  const filtered = category === 'ALL'
-    ? services
-    : services.filter(s => s.category === category)
+  const q = search.trim().toLowerCase()
+  const matches = useMemo(() => services.filter(s =>
+    (category === 'ALL' || s.category === category) &&
+    (!q || [s.name, s.code, s.description].some(t => (t || '').toLowerCase().includes(q)))
+  ), [services, category, q])
 
-  // Group by category for ALL view
-  const grouped = filtered.reduce((acc, s) => {
-    const cat = s.category || 'OTHER'
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(s)
-    return acc
-  }, {})
+  const groups = category === 'ALL'
+    ? ['INSTANT', 'PRODUCTION', 'DESIGN'].map(cat => ({ cat, items: matches.filter(s => s.category === cat) })).filter(g => g.items.length)
+    : [{ cat: category, items: matches }]
 
   const noPricing = services.filter(s => !pricingMap[s.id]).length
+  const open = services.find(s => s.id === openId)
+  const editPrice = (svc, p) => setEditTarget({ service: svc, pricing: p })
+  const count = cat => services.filter(s => s.category === cat).length
 
   return (
     <div className="p-5 sm:p-6 space-y-5">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-[var(--text)]">Catalogue</h2>
           <p className="text-xs text-[var(--text-3)] mt-0.5">
             {services.length} services
-            {noPricing > 0 && (
-              <span className="text-amber-600 font-bold ml-2">· {noPricing} need pricing</span>
-            )}
+            {noPricing > 0 && <span className="text-amber-600 font-bold ml-2">· {noPricing} need pricing</span>}
           </p>
         </div>
         <button onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-[var(--text)] text-white text-sm font-bold
-            rounded-xl hover:opacity-90 transition-opacity flex items-center gap-2">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
+          className="px-4 py-2 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          New Service
+          New service
         </button>
       </div>
 
-      {/* Category tabs */}
-      <div className="flex gap-1 bg-black/5 p-1 rounded-xl">
-        {[
-          { key: 'ALL',        label: `All (${services.length})`                                        },
-          { key: 'INSTANT',    label: `Instant (${services.filter(s=>s.category==='INSTANT').length})`    },
-          { key: 'PRODUCTION', label: `Production (${services.filter(s=>s.category==='PRODUCTION').length})` },
-          { key: 'DESIGN',     label: `Design (${services.filter(s=>s.category==='DESIGN').length})`     },
-        ].map(t => (
-          <button key={t.key} onClick={() => setCategory(t.key)}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors
-              ${category === t.key
-                ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm'
-                : 'text-[var(--text-3)] hover:text-[var(--text-2)]'
-              }`}>
-            {t.label}
-          </button>
-        ))}
+      {/* Search, type tabs, grid or list */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services"
+            className="w-full h-10 pl-9 pr-9 rounded-xl border border-[var(--border)] bg-[var(--panel)] text-sm text-[var(--text)] outline-none focus:border-[var(--border-dark)]" />
+          {search && (
+            <button onClick={() => setSearch('')} aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 grid place-items-center rounded-full text-[var(--text-3)] hover:text-[var(--text)]">✕</button>
+          )}
+        </div>
+        <div className="flex gap-1 bg-black/5 p-1 rounded-xl overflow-x-auto">
+          {[
+            { key: 'ALL',        label: 'All',        n: services.length },
+            { key: 'INSTANT',    label: 'Instant',    n: count('INSTANT') },
+            { key: 'PRODUCTION', label: 'Production', n: count('PRODUCTION') },
+            { key: 'DESIGN',     label: 'Design',     n: count('DESIGN') },
+          ].map(t => (
+            <button key={t.key} onClick={() => setCategory(t.key)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-colors
+                ${category === t.key ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+              {t.label} <span className="font-semibold opacity-60">{t.n}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-black/5 p-1 rounded-xl">
+          {[
+            { key: 'grid', label: 'Grid', icon: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></> },
+            { key: 'list', label: 'List', icon: <><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></> },
+          ].map(v => (
+            <button key={v.key} onClick={() => setView(v.key)} aria-label={`${v.label} view`} aria-pressed={view === v.key} title={`${v.label} view`}
+              className={`w-8 h-7 grid place-items-center rounded-lg transition-colors
+                ${view === v.key ? 'bg-[var(--panel)] text-[var(--text)] shadow-sm' : 'text-[var(--text-3)] hover:text-[var(--text-2)]'}`}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">{v.icon}</svg>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Service list */}
+      {/* Services */}
       {servicesLoading ? (
-        <div className="space-y-2">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-[var(--panel)] border border-[var(--border)] rounded-xl animate-pulse" />)}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-64 bg-[var(--panel)] border border-[var(--border)] rounded-2xl animate-pulse" />)}
         </div>
-      ) : category === 'ALL' ? (
-        // Grouped view
-        <div className="space-y-6">
-          {['INSTANT', 'PRODUCTION', 'DESIGN'].map(cat => {
-            const items = grouped[cat] || []
-            if (!items.length) return null
-            const cfg = CATEGORY_CONFIG[cat]
-            return (
-              <div key={cat}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg ${cfg.color} ${cfg.text}`}>
-                    {cfg.label}
-                  </span>
-                  <div className="flex-1 h-px bg-[var(--border)]" />
-                  <span className="text-[10px] text-[var(--text-3)]">{items.length} services</span>
-                </div>
-                <div className="space-y-2">
-                  {items.map(s => (
-                    <ServiceCard key={s.id} service={s} pricing={pricingMap[s.id]}
-                      onEditPricing={(svc, p) => setEditTarget({ service: svc, pricing: p })} />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+      ) : groups.length === 0 ? (
+        <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl flex flex-col items-center justify-center py-16 gap-1">
+          <p className="text-sm font-semibold text-[var(--text-2)]">{q ? `No services match “${search.trim()}”` : 'No services in this category'}</p>
+          {q && <button onClick={() => setSearch('')} className="text-xs font-semibold text-[var(--text-3)] hover:text-[var(--text)]">Clear the search</button>}
         </div>
       ) : (
-        // Single category view
-        <div className="space-y-2">
-          {filtered.length === 0 ? (
-            <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl
-              flex flex-col items-center justify-center py-16">
-              <p className="text-sm font-semibold text-[var(--text-2)]">No services in this category</p>
-            </div>
-          ) : filtered.map(s => (
-            <ServiceCard key={s.id} service={s} pricing={pricingMap[s.id]}
-              onEditPricing={(svc, p) => setEditTarget({ service: svc, pricing: p })} />
+        <div className="space-y-6">
+          {groups.map(({ cat, items }) => (
+            <section key={cat}>
+              {category === 'ALL' && (
+                <div className="flex items-center gap-2 mb-3">
+                  <CategoryTag category={cat} className="px-2.5 py-1 rounded-lg" />
+                  <div className="flex-1 h-px bg-[var(--border)]" />
+                  <span className="text-[10px] text-[var(--text-3)]">{items.length} service{items.length === 1 ? '' : 's'}</span>
+                </div>
+              )}
+              {view === 'list' ? (
+                <ServiceList items={items} pricingMap={pricingMap} onOpen={s => setOpenId(s.id)} onEditPricing={editPrice} />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {items.map(s => (
+                    <ServiceTile key={s.id} service={s} pricing={pricingMap[s.id]}
+                      onOpen={() => setOpenId(s.id)} onEditPricing={() => editPrice(s, pricingMap[s.id])} />
+                  ))}
+                </div>
+              )}
+            </section>
           ))}
         </div>
       )}
 
-      {/* Modals */}
+      {/* The pane, and the modals over it */}
+      {open && (
+        <ServicePane service={open} pricing={pricingMap[open.id]}
+          onClose={() => setOpenId(null)} onEditPricing={() => editPrice(open, pricingMap[open.id])} />
+      )}
       {editTarget && (
         <EditPricingModal
           service={editTarget.service}

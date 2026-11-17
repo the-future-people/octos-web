@@ -264,3 +264,11 @@ html.octos-desktop .octos-topbar { box-shadow: inset 0 -5px 0 #E3000F; }
   --today-line: #303033;
   --today-chip: #262628;
 }
+
+/* The catalogue's side pane slides in from the right (17 Nov 2026). */
+@keyframes paneIn {
+  from { transform: translateX(28px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.catalogue-pane { animation: paneIn 0.22s cubic-bezier(.2, .8, .2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .catalogue-pane { animation: none; } }
