@@ -578,14 +578,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     onSuccess: res => {
       invalidateAfterJobCreated(queryClient)
       setSuccessJob(res.data?.job_number || res.data?.id || '—')
-      // Recorded from a chat: the job is linked to it, so the chat shows it.
-      if (chat?.conversationId && res.data?.id) {
-        client.post(`/api/v1/communications/${chat.conversationId}/link-job/`, { job_id: res.data.id })
-          .then(() => {
-            queryClient.invalidateQueries({ queryKey: ['conversation', chat.conversationId] })
-            queryClient.invalidateQueries({ queryKey: ['arrivals'] })
-          })
-          .catch(() => {})
+      // Recorded from a chat: the server linked it as it was made (17 Nov
+      // 2026), so the chat shows it and the receipt can reach the customer
+      // there, even one with no number.
+      if (chat?.conversationId) {
+        queryClient.invalidateQueries({ queryKey: ['conversation', chat.conversationId] })
+        queryClient.invalidateQueries({ queryKey: ['arrivals'] })
       }
       attemptKey.current = crypto.randomUUID().replace(/-/g, '')
     },
@@ -647,6 +645,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       branch: branchId,
       intake_channel: 'WALK_IN',
       idempotency_key: attemptKey.current,
+      // The chat it was recorded from, linked to the job as it is made.
+      ...(chat?.conversationId ? { conversation: chat.conversationId } : {}),
       ...(late ? { post_closing_reason: lateReason.trim() } : {}),
       deposit_percentage: 100,
       line_items: cart.map(item => ({
