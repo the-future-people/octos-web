@@ -146,7 +146,7 @@ export default function ReceiptModal({ result, onClose, waStatus = null }) {
                 strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
               </svg>
-              {shown.state === 'sending' ? 'Sending…' : shown.state === 'sent' ? 'Sent' : shown.state === 'failed' ? 'Try WhatsApp again' : 'WhatsApp'}
+              {shown.state === 'sending' ? 'Sending…' : shown.state === 'sent' ? 'On its way' : shown.state === 'failed' ? 'Try WhatsApp again' : 'WhatsApp'}
             </button>
           </div>
           {shown.note && (

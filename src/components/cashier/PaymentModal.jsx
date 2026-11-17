@@ -101,13 +101,11 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
     onSuccess: res => {
       invalidateAfterPaymentConfirmed(queryClient)
       setReceipt(res.data)
-      // The WhatsApp receipt, for those who want it: sent now, shown on the receipt.
-      if (sendWa && res.data?.receipt_id) {
-        setWaStatus({ state: 'sending', note: '' })
-        client.post(`/api/v1/finance/receipts/${res.data.receipt_id}/send-whatsapp/`)
-          .then(r => setWaStatus({ state: 'sent', note: r.data?.detail || 'Sent on WhatsApp.' }))
-          .catch(err => setWaStatus({ state: 'failed', note: err?.response?.data?.detail || 'Could not send. Try again.' }))
-      }
+      // The WhatsApp receipt, for those who want it: already on its way, or why not.
+      const wa = res.data?.whatsapp
+      if (wa) setWaStatus(wa.queued
+        ? { state: 'sent', note: 'Sending on WhatsApp. You can carry on.' }
+        : { state: 'failed', note: wa.detail || 'Could not send. Try again.' })
     },
     onError: err => {
       const d = err.response?.data
@@ -135,6 +133,9 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
       payment_method: method,
       company_name: company || undefined,
       customer_phone: phone || undefined,
+      // The server sends it with the payment, in the background (17 Nov 2026):
+      // it goes even if this screen is closed before the answer comes back.
+      send_whatsapp: sendWa,
       notes: notes || undefined,
     }
     if (method === 'CASH') {
