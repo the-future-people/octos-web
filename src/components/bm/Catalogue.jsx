@@ -13,6 +13,8 @@ import { getServices } from '../../api/bm'
 import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
+import CostsPanel from './CostsPanel'
+import { saveServiceCost, saveBulkPrices } from '../../api/discounts'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -681,6 +683,9 @@ function ServicePane({ service, pricing, onClose, onEditPricing }) {
             <EditPriceButton pricing={pricing} onClick={onEditPricing} wide />
           </div>
 
+          {pricing && <BulkPrices service={service} pricing={pricing} />}
+          <CostToMake service={service} pricing={pricing} />
+
           {addons.length > 0 && (
             <div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2">Finishing offered</div>
@@ -695,6 +700,116 @@ function ServicePane({ service, pricing, onClose, onEditPricing }) {
       </aside>
     </div>,
     document.body,
+  )
+}
+
+// ── Bulk prices and cost to make (17 Nov 2026) ────────────────────────────────
+
+// Bulk prices, counted on the whole line (pages × copies): from so many on,
+// the price drops. Octos quotes them by itself.
+function BulkPrices({ service, pricing }) {
+  const queryClient = useQueryClient()
+  const [bands, setBands] = useState(() => (pricing.bulk_prices || []).map(b => ({ from: String(b.from), price: String(b.price) })))
+  const [said, setSaid] = useState({ text: '', bad: false })
+  const save = useMutation({
+    mutationFn: () => saveBulkPrices(pricing.id, bands.filter(b => b.from && b.price).map(b => ({ from: Number(b.from), price: Number(b.price) }))),
+    onSuccess: () => { setSaid({ text: 'Bulk prices saved.', bad: false }); queryClient.invalidateQueries({ queryKey: ['pricing', 'company'] }) },
+    onError: err => {
+      const d = err?.response?.data
+      setSaid({ text: d?.detail || (d && Object.values(d).flat().find(v => typeof v === 'string')) || 'Could not save.', bad: true })
+    },
+  })
+  const set = (i, key, v) => setBands(bands.map((b, j) => (j === i ? { ...b, [key]: v.replace(/[^\d.]/g, '') } : b)))
+  const unit = perUnit(service.unit).replace('per ', '')
+  return (
+    <div className="rounded-2xl border border-[var(--border)] p-4 space-y-2.5">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)]">Bulk prices</div>
+      <p className="text-[11.5px] text-[var(--text-3)]">Counted on the whole job: {unit}s × copies. Octos quotes these by itself.</p>
+      {bands.length === 0 && <p className="text-[12px] text-[var(--text-2)]">None yet: the list price for any amount.</p>}
+      {bands.map((b, i) => (
+        <div key={i} className="flex items-center gap-2 text-[12.5px]">
+          <span className="text-[var(--text-3)]">From</span>
+          <input value={b.from} onChange={e => set(i, 'from', e.target.value)} inputMode="numeric" aria-label="From how many"
+            className="w-20 h-8 px-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] font-bold tabular-nums" />
+          <span className="text-[var(--text-3)]">{unit}s, GHS</span>
+          <input value={b.price} onChange={e => set(i, 'price', e.target.value)} inputMode="decimal" aria-label="Price"
+            className="w-20 h-8 px-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] font-bold tabular-nums" />
+          <button onClick={() => setBands(bands.filter((_, j) => j !== i))} aria-label="Remove"
+            className="ml-auto w-7 h-7 rounded-full text-[var(--text-3)] hover:text-[var(--red-text)]">✕</button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <button onClick={() => setBands([...bands, { from: '', price: '' }])}
+          className="h-9 px-3 rounded-xl border border-[var(--border)] text-[12px] font-semibold text-[var(--text-2)]">Add a bulk price</button>
+        <button onClick={() => save.mutate()} disabled={save.isPending}
+          className="h-9 px-4 rounded-xl bg-[var(--text)] text-[var(--panel)] text-[12px] font-bold disabled:opacity-50">Save</button>
+      </div>
+      {said.text && <p className={`text-[11.5px] ${said.bad ? 'text-[var(--red-text)]' : 'text-emerald-700'}`}>{said.text}</p>}
+    </div>
+  )
+}
+
+const BASES = [
+  { key: 'COLOUR_PAGE', label: 'A colour page' },
+  { key: 'BW_PAGE', label: 'A black and white page' },
+  { key: 'FIXED', label: 'A fixed amount' },
+  { key: 'NONE', label: 'Not set' },
+]
+
+// What one unit costs to make, from "What things cost". The discount floor
+// comes from it.
+function CostToMake({ service, pricing }) {
+  const queryClient = useQueryClient()
+  const [basis, setBasis] = useState(service.cost_basis || 'NONE')
+  const [size, setSize] = useState(String(service.cost_size ?? '1'))
+  const [amount, setAmount] = useState(String(service.cost_amount ?? '0'))
+  const [said, setSaid] = useState({ text: '', bad: false })
+  const save = useMutation({
+    mutationFn: () => saveServiceCost(service.id, { cost_basis: basis, cost_size: size || '1', cost_amount: amount || '0' }),
+    onSuccess: updated => {
+      queryClient.setQueryData(['services'], list => (Array.isArray(list) ? list.map(x => (x.id === updated.id ? updated : x)) : list))
+      setSaid({ text: 'Cost saved.', bad: false })
+    },
+    onError: err => setSaid({ text: err?.response?.data?.detail || 'Could not save.', bad: true }),
+  })
+  const cost = service.unit_cost != null ? Number(service.unit_cost) : null
+  const price = pricing ? Number(pricing.base_price) : null
+  const page = basis === 'COLOUR_PAGE' || basis === 'BW_PAGE'
+  return (
+    <div className="rounded-2xl border border-[var(--border)] p-4 space-y-2.5">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)]">Cost to make</div>
+      {cost != null ? (
+        <p className="text-[12.5px] text-[var(--text-2)]">
+          About <b className="text-[var(--text)]">GHS {cost.toFixed(2)}</b> {perUnit(service.unit)}
+          {price ? <> · at {fmt(price)} it earns <b className="text-[var(--text)]">{(price / cost).toFixed(1)}×</b> its cost</> : null}
+        </p>
+      ) : (
+        <p className="text-[12px] text-amber-700">Not set yet: discounts on it are held to a small percentage.</p>
+      )}
+      <div className="flex flex-wrap gap-2 items-center">
+        <select value={basis} onChange={e => setBasis(e.target.value)} aria-label="What it costs"
+          className="h-9 px-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[12.5px]">
+          {BASES.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+        </select>
+        {page && (
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-3)]">
+            Size ×A4
+            <input value={size} onChange={e => setSize(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal"
+              className="w-14 h-9 px-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] font-bold tabular-nums" />
+          </label>
+        )}
+        {basis === 'FIXED' && (
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-3)]">
+            GHS
+            <input value={amount} onChange={e => setAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal"
+              className="w-20 h-9 px-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] font-bold tabular-nums" />
+          </label>
+        )}
+        <button onClick={() => save.mutate()} disabled={save.isPending}
+          className="h-9 px-4 rounded-xl bg-[var(--text)] text-[var(--panel)] text-[12px] font-bold disabled:opacity-50">Save</button>
+      </div>
+      {said.text && <p className={`text-[11.5px] ${said.bad ? 'text-[var(--red-text)]' : 'text-emerald-700'}`}>{said.text}</p>}
+    </div>
   )
 }
 
@@ -717,6 +832,7 @@ export default function Catalogue() {
   const [openId,     setOpenId]     = useState(null)
   const [editTarget, setEditTarget] = useState(null)  // { service, pricing }
   const [showCreate, setShowCreate] = useState(false)
+  const [showCosts,  setShowCosts]  = useState(false)
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ['services'],
@@ -778,6 +894,11 @@ export default function Catalogue() {
             {noPricing > 0 && <span className="text-amber-600 font-bold ml-2">· {noPricing} need pricing</span>}
           </p>
         </div>
+        <div className="flex gap-2">
+        <button onClick={() => setShowCosts(true)}
+          className="px-3.5 py-2 border border-[var(--border)] bg-[var(--panel)] text-[var(--text-2)] text-sm font-semibold rounded-xl hover:border-[var(--border-dark)]">
+          What things cost
+        </button>
         <button onClick={() => setShowCreate(true)}
           className="px-4 py-2 bg-[var(--text)] text-white text-sm font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center gap-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -785,6 +906,7 @@ export default function Catalogue() {
           </svg>
           New service
         </button>
+        </div>
       </div>
 
       {/* Search, type tabs, grid or list */}
@@ -880,6 +1002,7 @@ export default function Catalogue() {
       {showCreate && (
         <CreateServiceModal onClose={() => setShowCreate(false)} />
       )}
+      {showCosts && <CostsPanel onClose={() => setShowCosts(false)} />}
 
     </div>
   )

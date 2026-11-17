@@ -11,6 +11,9 @@ import client from '../../api/client'
 import { createInvoice, getInvoicePdfUrl, sendInvoice } from '../../api/bm'
 import { fileQuery, invoicesQuery } from './jobFileQuery'
 import { saveFile } from '../../api/saveFile'
+import DiscountPanel from './DiscountPanel'
+import { useAuth } from '../../context/AuthContext'
+import { mayDiscount } from '../../api/discounts'
 
 const fmt = v => `GHS ${parseFloat(v || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 const when = iso => (iso ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) : '—')
@@ -81,6 +84,9 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('order')
   const [note, setNote] = useState({ text: '', bad: false })
+  // Lowering the price before any payment (17 Nov 2026).
+  const [pricing, setPricing] = useState(false)
+  const { user } = useAuth()
   const say = (text, bad = false) => setNote({ text, bad })
 
   const { data: file, isLoading, error } = useQuery({ ...fileQuery(jobId), enabled: !!jobId })
@@ -171,6 +177,11 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
                 <Fact label="PAID" value={fmt(f.paid)} sub={parseFloat(f.balance) > 0 ? `${fmt(f.balance)} still owed` : [...new Set((file.payments || []).map(p => p.method_label))].join(' · ')} />
                 <Fact label="PROMISED" value={promised ? when(promised) : '—'} sub={f.ready_at ? `ready ${when(f.ready_at)}${onTime ? `, ${onTime}` : ''}` : ''} />
               </div>
+              {mayDiscount(user) && parseFloat(f.paid || 0) === 0 && parseFloat(f.total || 0) > 0 && (
+                <div className="flex justify-end">
+                  <Button onClick={() => setPricing(true)}>Lower the price</Button>
+                </div>
+              )}
 
               <div role="tablist" aria-label="Job details" className="flex gap-1 bg-black/[0.06] p-1 rounded-xl">
                 {tabs.map(([id, label, count]) => (
@@ -284,6 +295,10 @@ export default function JobFile({ jobId, onClose, onOpenChat }) {
           {file?.can_remind && <Button icon="bell" disabled={remind.isPending} onClick={() => remind.mutate()}>Remind the customer</Button>}
           {note.text && <span className={`text-[12.5px] font-semibold ${note.bad ? 'text-red-600' : 'text-emerald-700'}`}>{note.text}</span>}
         </div>
+        {pricing && (
+          <DiscountPanel kind="job" id={jobId} title={`${file?.job_number || ''} · ${owner.name || ''}`}
+            onClose={() => setPricing(false)} />
+        )}
       </section>
     </div>,
     document.body,

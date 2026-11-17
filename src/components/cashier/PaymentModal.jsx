@@ -82,6 +82,8 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
   const [waStatus, setWaStatus] = useState(null)
 
   const total = parseFloat(job?.estimated_cost || 0)
+  // What the customer is being let off: the bulk price plus any discount.
+  const saved = (parseFloat(job?.bulk_saving) || 0) + (parseFloat(job?.discount_amount) || 0)
   const amountDue = balanceMode ? parseFloat(job?.balance_due || 0) : total * deposit / 100
   const given = parseFloat(cash || 0)
   const change = method === 'CASH' ? Math.max(0, given - amountDue) : 0
@@ -241,6 +243,11 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
                 {balanceMode
                   ? <div className="text-xs text-[var(--text-3)]">{fmt(job.amount_paid)} deposit paid of {fmt(total)} · this settles it</div>
                   : production && <div className="text-xs text-[var(--text-3)]">{deposit}% of {fmt(total)} · balance {fmt(total - amountDue)} at pickup</div>}
+                {saved > 0 && (
+                  <div className="text-xs font-semibold text-emerald-700">
+                    Includes {fmt(saved)} off{job.discount_reason ? ` · ${job.discount_reason}` : parseFloat(job.bulk_saving) > 0 ? ' · bulk price' : ''}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 {production && !balanceMode && (

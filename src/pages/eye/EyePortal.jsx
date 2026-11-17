@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { eyeMe } from '../../api/eye'
 import { C, DISPLAY } from '../../components/eye/theme'
+import WaitingForYou from '../../components/eye/WaitingForYou'
 import Overview from '../../components/eye/lenses/Overview'
 import People from '../../components/eye/lenses/People'
 import Money from '../../components/eye/lenses/Money'
@@ -88,6 +89,8 @@ export default function EyePortal() {
         </button>
       </div>
       <div className="max-w-[1100px] mx-auto">
+        {/* Prices a Branch Manager asked to take below the floor (17 Nov 2026) */}
+        <WaitingForYou />
         <Lens key={`${lens}-${entity || ''}`} nav={nav} />
       </div>
     </Shell>

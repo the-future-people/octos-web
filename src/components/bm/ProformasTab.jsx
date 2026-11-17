@@ -6,6 +6,9 @@ import {
   getProformas, issueProforma, convertProforma, getProformaPdf,
 } from '../../api/bm'
 import NewJobModal from './NewJobModal'
+import DiscountPanel from './DiscountPanel'
+import { useAuth } from '../../context/AuthContext'
+import { mayDiscount } from '../../api/discounts'
 import InvoicesTab from './InvoicesTab'
 import { saveFile } from '../../api/saveFile'
 
@@ -66,6 +69,10 @@ export default function ProformasTab({ onOpenDetail }) {
   const [showCreate, setShowCreate] = useState(false)
   const [revising, setRevising]     = useState(null)
   const [sharing, setSharing]       = useState(null)
+  // Lowering a price (17 Nov 2026): the Branch Manager and the owner.
+  const [pricing, setPricing]       = useState(null)
+  const { user } = useAuth()
+  const canDiscount = mayDiscount(user)
 
   const download = async (p) => {
     try {
@@ -261,6 +268,11 @@ export default function ProformasTab({ onOpenDetail }) {
                 </div>
                 <div className="col-span-2 text-right pr-3 font-mono text-xs font-bold text-[var(--text)]">
                   {fmt(p.total)}
+                  {(parseFloat(p.discount_amount) > 0 || parseFloat(p.bulk_saving) > 0) && (
+                    <div className="text-[10px] font-semibold text-emerald-700">
+                      saves {fmt(parseFloat(p.discount_amount || 0) + parseFloat(p.bulk_saving || 0))}
+                    </div>
+                  )}
                 </div>
                 <div className="col-span-1">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>
@@ -268,6 +280,13 @@ export default function ProformasTab({ onOpenDetail }) {
                   </span>
                 </div>
                 <div className="col-span-3 flex justify-end gap-1.5">
+                  {canDiscount && (p.status === 'ISSUED' || p.status === 'DRAFT') && !lapsed(p) && (
+                    <button onClick={() => setPricing(p)}
+                      className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
+                        rounded-lg hover:border-[var(--border-dark)] transition-colors">
+                      Price
+                    </button>
+                  )}
                   {(p.status === 'ISSUED' || p.status === 'DRAFT') && (
                     <button onClick={() => (p.status === 'DRAFT' ? issueAndShare(p.id) : setSharing(p))}
                       disabled={issuing}
@@ -316,6 +335,12 @@ export default function ProformasTab({ onOpenDetail }) {
         // so a proforma is priced exactly as the job it becomes.
         <NewJobModal proforma onClose={() => setShowCreate(false)}
           onSuccess={(p, problem) => { if (p) setSharing(p); if (problem) setError(problem) }} />
+      )}
+
+      {pricing && (
+        <DiscountPanel kind="proforma" id={pricing.id}
+          title={`${pricing.proforma_number} · ${pricing.customer_name || ''}`}
+          onClose={() => setPricing(null)} />
       )}
 
       {revising && (
