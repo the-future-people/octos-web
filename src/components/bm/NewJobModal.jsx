@@ -122,7 +122,28 @@ const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.
 
 // A number typed straight in. Raw while typing (clamping each keystroke
 // turned 168 into 6), settled on leaving.
-function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter }) {
+function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter, stepper = false }) {
+  // On a phone (18 Nov 2026): − and + either side, big enough for a thumb.
+  if (stepper) {
+    const n = parseInt(value) || min
+    const step = d => { const v = Math.max(min, max ? Math.min(max, n + d) : n + d); onChange(v); onCommit(v) }
+    return (
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <label htmlFor={id} className="text-[15.5px] text-[#1C1C1E]">{label}</label>
+        <div className="flex items-center h-[40px] rounded-[12px] bg-[#F2F2F4] overflow-hidden shrink-0">
+          <button type="button" onClick={() => step(-1)} disabled={disabled || n <= min} aria-label={`Fewer: ${label}`}
+                  className="w-11 h-full grid place-items-center text-[#1C1C1E] disabled:text-black/20"><Icon kind="minus" size={18} /></button>
+          <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
+                 onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+                 onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
+                 className="w-[56px] h-full text-center text-[17px] font-semibold tabular-nums bg-transparent outline-none
+                            disabled:text-[#8A8A8E] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+          <button type="button" onClick={() => step(1)} disabled={disabled || (max && n >= max)} aria-label={`More: ${label}`}
+                  className="w-11 h-full grid place-items-center text-[#1C1C1E] disabled:text-black/20"><Icon kind="plus" size={18} /></button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col items-center">
       <label htmlFor={id} className={LABEL}>{label}</label>
@@ -889,6 +910,18 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
 
   // One field of a product's form: − and + for numbers, a list for choices.
   const specField = field => {
+    if (field.type === 'select' && phone) {
+      return (
+        <div key={field.key} className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <label htmlFor={`spec-${field.key}`} className="text-[15.5px] text-[#1C1C1E]">{field.label}{field.unit ? ` (${field.unit})` : ''}</label>
+          <select id={`spec-${field.key}`} value={specValues[field.key] ?? ''}
+                  onChange={e => setSpecValues(v => ({ ...v, [field.key]: e.target.value }))}
+                  className="h-[40px] px-3 rounded-[12px] bg-[#F2F2F4] text-[15.5px] font-semibold outline-none max-w-[60%]">
+            {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+      )
+    }
     if (field.type === 'select') {
       return (
         <div key={field.key} className="min-w-[160px] flex flex-col items-center">
@@ -910,7 +943,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     return (
       <NumberField key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
                label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`} disabled={locked}
-               onChange={put} onCommit={put} onEnter={addToCart} />
+               onChange={put} onCommit={put} onEnter={addToCart} stepper={phone} />
     )
   }
 
@@ -966,12 +999,14 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           {selected.description && <p className="mt-0.5 text-xs leading-snug text-[var(--text-3)] max-w-[60ch]">{selected.description}</p>}
           {UNIT[selected.unit] && <p className="mt-0.5 text-[11px] text-[var(--text-3)]">Priced {UNIT[selected.unit]}</p>}
         </div>
+        {!phone && (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/[0.05] text-[11px] font-semibold shrink-0">
           <Icon kind={TYPES.find(t => t[0] === jobType)[2]} size={12} />{BADGE[jobType]}
         </span>
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 py-2">
+      <div className={`flex-1 flex flex-col items-center gap-4 py-2 ${phone ? '' : 'justify-center'}`}>
       {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
         <fieldset className="flex flex-col items-center">
           <legend className="text-[13px] font-bold mb-1.5 mx-auto text-center">One side or both sides?</legend>
@@ -1017,8 +1052,35 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         const fields = (selected.spec_template || []).length > 0 ? selected.spec_template
           : [{ key: 'pages', label: 'Pages per copy', min: 1 }, { key: 'quantity', label: 'Number of copies', min: 1 }]
         const keys = fields.map(f => f.key)
+        const ringField = fields.find(f => f.key === 'ring_size')
+        if (phone) {
+          // On a phone: one white card, a row per number, and the sheets worked out at the foot.
+          const both = keys.includes('pages') && keys.includes('quantity')
+          const pagesN = parseInt(selPages) || 0, copiesN = parseInt(selQty) || 0
+          const each = bothSides(selected) ? Math.ceil(pagesN / 2) : pagesN
+          return (
+            <div className="w-full flex flex-col gap-3.5">
+              <div className="w-full rounded-[16px] bg-white border border-black/[0.04] shadow-[0_3px_12px_rgba(17,24,39,0.05)] divide-y divide-black/[0.07]">
+                {/* Pages, then copies, then what they make: the order they are asked in. */}
+                {fields.filter(f => f !== ringField && f.key !== 'pages' && f.key !== 'quantity').map(specField)}
+                {fields.filter(f => f.key === 'pages').map(specField)}
+                {fields.filter(f => f.key === 'quantity').map(specField)}
+                {both && (
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[15.5px] text-[#1C1C1E]">Sheets</span>
+                    <span className="text-right">
+                      <output aria-live="polite" className="block text-[18px] font-bold tabular-nums">{each * copiesN || '—'}</output>
+                      {pagesN > 0 && copiesN > 0 && <span className="block text-[12.5px] text-[#8A8A8E]">{each} a copy{bothSides(selected) ? ', both sides' : ''}</span>}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {ringField && ringPicker(ringField)}
+            </div>
+          )
+        }
         if (!(keys.includes('pages') && keys.includes('quantity'))) {
-          const ring = fields.find(f => f.key === 'ring_size')
+          const ring = ringField
           return (
             <div className="flex flex-col items-center gap-3.5">
               <div className="flex flex-wrap justify-center gap-2.5">{fields.filter(f => f !== ring).map(specField)}</div>
@@ -1120,7 +1182,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         </div>
       )}
 
-      <div className="mt-auto">
+      {/* On a phone the total and Add to cart stay pinned along the bottom instead. */}
+      {!phone && <div className="mt-auto">
         <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
           <div className="flex items-center gap-3">
             <Icon kind="tag" size={17} className="text-emerald-800" />
@@ -1142,9 +1205,19 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         {needsFile && !fileReady && (
           <p className="mt-1.5 text-right text-[13px] text-[var(--text-3)]">Adds once the file is checked and printable</p>
         )}
-      </div>
+      </div>}
     </div>
   )
+
+  // What a cart line is, in a few words; and what the last button says.
+  const sizeOf = item => (item.specifications?.width_in && item.specifications?.height_in
+    ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
+    : item.specifications?.width_ft && item.specifications?.height_ft
+      ? `${item.specifications.width_ft} × ${item.specifications.height_ft} ft · ${item.quantity}`
+      : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`)
+  const submitWords = revise ? (isPending ? 'Saving…' : quoting ? 'Checking today’s prices…' : `Save revision and share · ${fmt(cartTotal)}`)
+    : proforma ? (isPending ? 'Saving…' : `Save and share · ${fmt(cartTotal)}`)
+    : isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'
 
   const cartPanel = (
     <div className="flex flex-col h-full min-h-0 gap-2.5">
@@ -1167,13 +1240,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           <div key={item._id} className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg border border-black/[0.08] bg-white">
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold">{item.service.name}</div>
-              <div className="text-[11px] text-[var(--text-3)]">
-                {item.specifications?.width_in && item.specifications?.height_in
-                  ? `${item.specifications.width_in} × ${item.specifications.height_in} in · ${item.quantity}`
-                  : item.specifications?.width_ft && item.specifications?.height_ft
-                    ? `${item.specifications.width_ft} × ${item.specifications.height_ft} ft · ${item.quantity}`
-                    : `${item.pages} page${item.pages == 1 ? '' : 's'} × ${item.quantity}`}
-              </div>
+              <div className="text-[11px] text-[var(--text-3)]">{sizeOf(item)}</div>
               {item.addonsPriced?.length > 0 && (
                 <div className="text-[13px] text-[var(--text-3)] truncate">
                   + {item.addonsPriced.map(x => x.service_name + (x.detail ? ` (${x.detail})` : '')).join(', ')}
@@ -1234,13 +1301,321 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <button type="button" onClick={handleSubmit} disabled={isPending || cart.length === 0 || quoting}
                 className="w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-lg bg-zinc-900 text-white text-[13px] font-semibold disabled:bg-black/20">
           <Icon kind="check" size={15} />
-          {revise ? (isPending ? 'Saving…' : quoting ? 'Checking today’s prices…' : `Save revision and share · ${fmt(cartTotal)}`)
-            : proforma ? (isPending ? 'Saving…' : `Save and share · ${fmt(cartTotal)}`)
-            : isPending ? 'Creating…' : late ? 'Record late job' : forName ? `Create job for ${forName}` : 'Create job'}
+          {submitWords}
         </button>
         <button type="button" onClick={onClose} className="w-full h-8 text-xs font-semibold text-[var(--text-3)]">Cancel</button>
       </div>
     </div>
+  )
+
+  // ── The phone (18 Nov 2026), in the Overview's look ──────────────
+  // One screen to choose: the kind of job, who it is for, how the files came,
+  // and the services in white lists. A service slides in to be set up, with
+  // its total and Add to cart pinned at the foot; the cart slides in the same
+  // way, with Create job at the foot. Nothing hides behind a bar.
+  const TINT_OF = {
+    Printing: ['#DCE9FF', '#2563EB'], Photocopy: ['#F1F1F3', '#52525B'], 'Certificates and cards': ['#FFEDB8', '#B45309'],
+    Flyers: ['#FCE7F3', '#BE185D'], 'Binding and lamination': ['#E7DCFF', '#7C3AED'], Scanning: ['#D3F2DE', '#15803D'],
+    Photos: ['#FCE7F3', '#BE185D'], Envelopes: ['#FFEDB8', '#B45309'], 'Typing and forms': ['#D3F2DE', '#15803D'],
+    'Large format': ['#DCE9FF', '#2563EB'], Design: ['#E7DCFF', '#7C3AED'],
+  }
+  const tintOf = grp => TINT_OF[grp] || ['#F1F1F3', '#52525B']
+  const SOFT_AV = ['#DCE9FF', '#1D4ED8']
+  const needed = !proforma && jobType !== 'INSTANT'
+  const navBar = (left, title, right) => (
+    <div className="ios-bar shrink-0" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <div className="h-[50px] px-2 grid grid-cols-[1fr_auto_1fr] items-center">
+        <span className="justify-self-start">{left}</span>
+        <span className="text-[16px] font-semibold text-[#111] truncate max-w-[200px]">{title}</span>
+        <span className="justify-self-end">{right}</span>
+      </div>
+    </div>
+  )
+  const backButton = (label, onClick) => (
+    <button type="button" onClick={onClick} className="flex items-center text-[17px] text-[#D70015] pr-2">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>{label}
+    </button>
+  )
+  const sectionTitle = (text, extra) => (
+    <div className="px-5 pt-5 pb-1.5 flex items-baseline justify-between gap-3">
+      <span className="text-[13px] font-semibold uppercase tracking-[0.04em] text-[#8A8A8E]">{text}</span>
+      {extra}
+    </div>
+  )
+  const card = 'mx-4 rounded-[16px] bg-white border border-black/[0.04] shadow-[0_3px_12px_rgba(17,24,39,0.05)]'
+  const footer = children => (
+    <div className="shrink-0 bg-white border-t border-black/[0.08] px-4 pt-2.5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 10px)' }}>
+      {children}
+    </div>
+  )
+  const redButton = 'w-full h-[50px] rounded-[16px] text-white text-[16px] font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40'
+  const RED_FILL = { background: 'linear-gradient(135deg,#EF1C2C 0%,#C8000F 100%)' }
+
+  const phoneCustomer = (
+    <>
+      {sectionTitle(revise ? 'For' : proforma ? 'Who is it for?' : 'Who is it for?',
+        !customer && <span className={`text-[12.5px] ${needed || proforma ? 'text-[#D70015] font-semibold' : 'text-[#8A8A8E]'}`}>
+          {proforma ? 'Needed for a proforma' : needed ? 'Needed for the ready message' : 'Optional · blank is a walk-in'}
+        </span>)}
+      <div className={`${card} overflow-hidden`}>
+        {customer ? (
+          <>
+            <div className="flex items-center gap-3 px-3.5 py-3">
+              <span className="w-11 h-11 rounded-full grid place-items-center text-[15px] font-semibold shrink-0" style={{ background: SOFT_AV[0], color: SOFT_AV[1] }}>{initials(customer)}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[16px] font-semibold text-[#1C1C1E] truncate">{nameOf(customer)}</span>
+                <span className="block text-[13.5px] text-[#8A8A8E] tabular-nums">{customer.phone}</span>
+              </span>
+              {!revise && (
+                <button type="button" onClick={() => { setCustomer(null); setOrderFor(null) }} className="text-[15px] font-semibold text-[#D70015] px-1">Change</button>
+              )}
+            </div>
+            {!revise && customer.customer_type === 'INDIVIDUAL' && customer.links?.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto px-3.5 pb-3 [&::-webkit-scrollbar]:hidden">
+                {[[null, customer.gender === 'FEMALE' ? 'Herself' : customer.gender === 'MALE' ? 'Himself' : 'Themself'],
+                  ...customer.links.map(l => [l, `${l.name} · ${ROLE[l.role] || l.role}`])].map(([l, label]) => {
+                  const on = (l?.organisation ?? null) === (orderFor?.organisation ?? null)
+                  return (
+                    <button key={label} type="button" onClick={() => setOrderFor(l)}
+                            className={`shrink-0 h-8 px-3 rounded-full text-[13.5px] font-semibold whitespace-nowrap ${on ? 'bg-[#1C1C1E] text-white' : 'bg-[#F2F2F4] text-[#1C1C1E]'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {arrivals.length > 0 && !chat && (
+              <div className="px-3.5 pt-3 flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                {arrivals.map(row => (
+                  <button key={row.conversation_id} type="button" onClick={() => pickArrival(row)}
+                          className="shrink-0 h-8 px-3 rounded-full bg-[#FFF4DC] text-[13px] font-semibold text-[#8A5A00] whitespace-nowrap">
+                    Files from {row.name} · {row.files.length}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className="mx-3.5 mt-3 h-[40px] px-3 rounded-[11px] bg-black/[0.05] flex items-center gap-2 text-[#8A8A8E]">
+              <Icon kind="search" size={17} />
+              <input id="job-customer" value={custSearch || (chat && !chat.phone ? `${chat.name} · WhatsApp` : '')}
+                     onChange={e => setCustSearch(e.target.value)} placeholder="Name or phone number" enterKeyHint="search"
+                     className="flex-1 min-w-0 bg-transparent outline-none text-[16px] text-[#111] placeholder:text-[#8A8A8E]" />
+            </label>
+            {custResults.length > 0 && (
+              <div className="mt-2">
+                {custResults.map((c, i) => (
+                  <button key={c.id} type="button" onClick={() => chooseCustomer(c)}
+                          className={`w-full flex items-center gap-3 pl-3.5 pr-3.5 py-2.5 text-left active:bg-black/[0.04] ${i ? 'border-t border-black/[0.06]' : ''}`}>
+                    <span className="w-9 h-9 rounded-full grid place-items-center text-[13px] font-semibold shrink-0 bg-[#F1F1F3] text-[#3A3A3C]">{initials(c)}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[15.5px] font-semibold text-[#1C1C1E] truncate">{nameOf(c)}</span>
+                      <span className="block text-[13px] text-[#8A8A8E] tabular-nums">{c.phone}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setRegistering(true)}
+                    className="mt-3 w-full flex items-center gap-3 px-3.5 h-[48px] border-t border-black/[0.06] text-[15.5px] font-semibold text-[#D70015] active:bg-black/[0.04]">
+              <span className="w-7 h-7 rounded-full grid place-items-center" style={{ background: '#FFE1E1' }}><Icon kind="plus" size={16} /></span>
+              Register a new customer
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  )
+
+  const phoneSources = !proforma && (
+    <>
+      {sectionTitle('Files came by')}
+      <div className={`${card} px-2 py-3 grid grid-cols-5`}>
+        {SOURCES.map(({ value, label, colour, path }) => {
+          const on = fileSource === value
+          return (
+            <button key={value} type="button" aria-pressed={on} onClick={() => setFileSource(x => (x === value ? '' : value))}
+                    className="flex flex-col items-center gap-1.5">
+              <span className="w-12 h-12 rounded-[14px] grid place-items-center transition-shadow"
+                    style={{ background: colour + '1F', boxShadow: on ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${colour}` : 'none' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={colour} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+              </span>
+              <span className={`text-[11.5px] leading-tight text-center ${on ? 'font-semibold text-[#1C1C1E]' : 'text-[#6E6E73]'}`}>
+                {label === 'Photocopy / paper' ? 'Paper' : label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+
+  const phoneServices = (
+    <>
+      {sectionTitle('Services')}
+      <label className="mx-4 h-[40px] px-3 rounded-[11px] bg-black/[0.06] flex items-center gap-2 text-[#8A8A8E]">
+        <Icon kind="search" size={17} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services" enterKeyHint="search"
+               className="flex-1 min-w-0 bg-transparent outline-none text-[16px] text-[#111] placeholder:text-[#8A8A8E]" />
+      </label>
+      {Object.keys(grouped).length === 0 && <p className="m-0 px-5 py-6 text-center text-[15px] text-[#8A8A8E]">Nothing matches</p>}
+      {Object.entries(grouped).map(([grp, items]) => {
+        const [bg, ink] = tintOf(grp)
+        return (
+          <div key={grp}>
+            <div className="px-5 pt-4 pb-1.5 text-[13px] font-semibold text-[#6E6E73]">{grp}</div>
+            <div className={`${card} overflow-hidden`}>
+              {items.map((sv, i) => (
+                <button key={sv.id} type="button" onClick={() => selectService(sv)}
+                        className="w-full flex items-center gap-3 pl-3.5 text-left active:bg-black/[0.04]">
+                  <span className="w-8 h-8 rounded-[9px] grid place-items-center shrink-0" style={{ background: bg, color: ink }}><Icon kind={iconOf(sv)} size={17} /></span>
+                  <span className={`flex-1 min-w-0 flex items-center gap-2 py-3 pr-3 ${i ? 'border-t border-black/[0.07]' : ''}`}>
+                    <span className="flex-1 min-w-0 text-[15.5px] text-[#1C1C1E] truncate">{plainName(sv)}</span>
+                    <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C4C4C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 1l6 6-6 6" /></svg>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </>
+  )
+
+  const cartCount = cart.length
+  const phoneSheet = createPortal(
+    <div className="ios fixed inset-0 z-[9999] flex flex-col animate-slideUp" style={{ background: '#F6F6F8' }}>
+      {navBar(
+        <button type="button" onClick={onClose} className="text-[17px] text-[#D70015] px-2">Cancel</button>,
+        revise ? `Revise ${source?.proforma_number || 'proforma'}` : proforma ? 'New Proforma' : 'New Job',
+        null,
+      )}
+
+      <div className="flex-1 overflow-y-auto pb-6">
+        {/* The kind of job, an iOS segmented control */}
+        <div className="mx-4 mt-3 p-[3px] rounded-[12px] bg-black/[0.06] flex" role="tablist" aria-label="Kind of job">
+          {TYPES.map(([v, label, icon]) => (
+            <button key={v} type="button" role="tab" aria-selected={jobType === v}
+                    onClick={() => { setJobType(v); if (!proforma) setCart([]); setSelected(null); setSelArtwork(null) }}
+                    className={`flex-1 h-[36px] rounded-[9px] inline-flex items-center justify-center gap-1.5 text-[14px] font-semibold transition-colors
+                                ${jobType === v ? 'bg-white text-[#111] shadow-[0_2px_6px_rgba(0,0,0,0.10)]' : 'text-[#3A3A3C]'}`}>
+              <Icon kind={icon} size={16} />{label}
+            </button>
+          ))}
+        </div>
+        {late && (
+          <div className="mx-4 mt-3 px-3.5 py-2.5 rounded-[14px] bg-[#FFF8EC] text-[13.5px] text-[#8A5A00] flex gap-2.5">
+            <Icon kind="clock" size={18} />
+            <span><b>Recording after closing.</b> {held ? 'The cashier has signed off: this job waits for the morning handover.' : 'The cashier is still on duty: it is paid for as usual.'}</span>
+          </div>
+        )}
+        {phoneCustomer}
+        {chatBand && <div className="mx-4 mt-3 rounded-[16px] overflow-hidden">{chatBand}</div>}
+        {phoneSources}
+        {proforma && (
+          <p className="m-0 mx-5 mt-4 text-[13px] text-[#8A8A8E]">
+            {revise ? 'Its lines are in the cart at today’s prices. Saving sends the next version (valid 14 days).' : 'Mix instant, production and design: the cart keeps everything as you switch. Saving issues it (valid 14 days).'}
+          </p>
+        )}
+        {phoneServices}
+      </div>
+
+      {footer(
+        <button type="button" onClick={() => setCartOpen(true)} disabled={!cartCount} className={redButton}
+                style={cartCount ? RED_FILL : { background: '#E5E5EA', color: '#8A8A8E', opacity: 1 }}>
+          <Icon kind="cart" size={19} />
+          {cartCount ? <>View cart · {cartCount} item{cartCount > 1 ? 's' : ''}<span className="opacity-60">·</span><span className="tabular-nums">{fmt(cartTotal)}</span></> : 'Cart is empty'}
+        </button>
+      )}
+
+      {/* A service, being set up */}
+      {selected && (
+        <section aria-label={plainName(selected)} className="ios-push absolute inset-0 z-10 flex flex-col" style={{ background: '#F6F6F8' }}>
+          {navBar(backButton('Services', () => setSelected(null)), BADGE[jobType], null)}
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">{editor}</div>
+          {footer(
+            <>
+              <div className="flex items-center justify-between mb-2.5 px-0.5">
+                <span className="text-[14px] text-[#6E6E73]">Item total{selAddons.length > 0 && selPrice ? ` · finishing ${fmt(addonQuote?.total || 0)}` : ''}</span>
+                <span className="text-[20px] font-bold tabular-nums text-[#111]" style={{ opacity: priceLoading || addonLoading ? 0.45 : 1 }}>{selPrice ? fmt(itemTotal) : '…'}</span>
+              </div>
+              <button type="button" onClick={addToCart} disabled={!canAdd} className={redButton} style={RED_FILL}>
+                <Icon kind="cart" size={18} />Add to cart
+              </button>
+              {needsFile && !fileReady && <p className="m-0 mt-1.5 text-center text-[13px] text-[#8A8A8E]">Adds once the file is checked and printable</p>}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* The cart */}
+      {cartOpen && (
+        <section aria-label="Cart" className="ios-push absolute inset-0 z-20 flex flex-col" style={{ background: '#F6F6F8' }}>
+          {navBar(backButton('Add more', () => setCartOpen(false)), 'Cart',
+            cartCount > 0 && <button type="button" onClick={() => setCart([])} className="text-[16px] text-[#D70015] px-2">Clear</button>)}
+          <div className="flex-1 overflow-y-auto pb-6">
+            {customer && (
+              <div className={`${card} mt-4 flex items-center gap-3 px-3.5 py-3`}>
+                <span className="w-9 h-9 rounded-full grid place-items-center text-[13px] font-semibold shrink-0" style={{ background: SOFT_AV[0], color: SOFT_AV[1] }}>{initials(customer)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15.5px] font-semibold truncate">{forName ? `${forName} · ordered by ${nameOf(customer)}` : nameOf(customer)}</span>
+                  <span className="block text-[13px] text-[#8A8A8E]">{BADGE[jobType]}</span>
+                </span>
+              </div>
+            )}
+            {sectionTitle(`${cartCount} item${cartCount === 1 ? '' : 's'}`)}
+            <div className={`${card} overflow-hidden`}>
+              {cartCount === 0 && <p className="m-0 px-4 py-6 text-center text-[15px] text-[#8A8A8E]">Nothing added yet.</p>}
+              {cart.map((item, i) => (
+                <div key={item._id} className={`flex items-start gap-3 px-3.5 py-3 ${i ? 'border-t border-black/[0.07]' : ''}`}>
+                  <span className="w-8 h-8 rounded-[9px] grid place-items-center shrink-0"
+                        style={{ background: tintOf(GROUP_OF[kindOf(item.service)])[0], color: tintOf(GROUP_OF[kindOf(item.service)])[1] }}>
+                    <Icon kind={iconOf(item.service)} size={17} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[15.5px] font-semibold text-[#1C1C1E]">{item.service.name}</div>
+                    <div className="text-[13px] text-[#8A8A8E]">{sizeOf(item)}</div>
+                    {item.addonsPriced?.length > 0 && <div className="text-[13px] text-[#8A8A8E] truncate">+ {item.addonsPriced.map(x => x.service_name).join(', ')}</div>}
+                    {item.artwork && <div className={`text-[13px] font-semibold truncate ${item.artwork.verdict === 'warn' ? 'text-[#B45309]' : 'text-[#15803D]'}`}>{item.artwork.filename}</div>}
+                    <div className="flex gap-4 mt-1.5">
+                      <button type="button" onClick={() => { editItem(item); setCartOpen(false) }} className="text-[14px] font-semibold text-[#1C1C1E]">Edit</button>
+                      <button type="button" onClick={() => removeFromCart(item._id)} className="text-[14px] font-semibold text-[#D70015]">Remove</button>
+                    </div>
+                  </div>
+                  <span className="text-[15.5px] font-semibold tabular-nums" style={{ opacity: item._quoting ? 0.4 : 1 }}>{fmt(item._price)}{item._quoteFailed ? ' ?' : ''}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className={`${card} mt-3 px-4 py-3 space-y-1.5`}>
+              <div className="flex items-baseline justify-between"><span className="text-[15px] text-[#6E6E73]">Total</span><span className="text-[20px] font-bold tabular-nums">{fmt(cartTotal)}</span></div>
+              {roomy && cartTotal > 0 && <div className="flex items-baseline justify-between"><span className="text-[14px] text-[#6E6E73]">Deposit to start (70%)</span><span className="text-[15px] font-semibold tabular-nums">{fmt(deposit)}</span></div>}
+              {roomy && (promiseError
+                ? <p className="m-0 text-[13.5px] text-[#B45309]">Octos couldn’t give a ready time: {promiseError.response?.data?.detail || 'it could not be reached.'}</p>
+                : promise?.ready_at ? <p className="m-0 text-[14px] text-[#1C1C1E]" style={{ opacity: promiseLoading ? 0.5 : 1 }}><b>Ready about {readyLabel(promise.ready_at)}</b></p> : null)}
+            </div>
+            {(lateBox || revise) && (
+              <div className={`${card} mt-3 px-4 py-3 space-y-2`}>
+                {lateBox}
+                {revise && withdrawn.length > 0 && <p className="m-0 text-[13.5px] text-[#B91C1C]">No longer offered: {withdrawn.join(', ')}. Raise a new proforma at current prices.</p>}
+                {revise && <input value={revNote} onChange={e => setRevNote(e.target.value)} maxLength={300} placeholder="What changed? (optional)"
+                                  className="w-full h-10 px-3 text-[15px] rounded-[10px] bg-black/[0.05] outline-none" />}
+              </div>
+            )}
+          </div>
+          {footer(
+            <>
+              {error && <p className="m-0 mb-2 text-[14px] text-[#B91C1C]">{error}</p>}
+              <button type="button" onClick={handleSubmit} disabled={isPending || cartCount === 0 || quoting} className={redButton} style={RED_FILL}>
+                <Icon kind="check" size={18} />{submitWords}{!proforma && !isPending ? <span className="opacity-80 tabular-nums">· {fmt(cartTotal)}</span> : null}
+              </button>
+            </>
+          )}
+        </section>
+      )}
+    </div>,
+    document.body,
   )
 
   // The whole window drawn at 96.3% (Khofi, 7 Nov: 10% smaller, then 7% back up). Its height is set in
@@ -1253,11 +1628,10 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   }, [])
   const SCALE = 0.963
 
-  const modal = createPortal(
+  const modal = phone ? phoneSheet : createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-0 sm:p-5 animate-fadeIn">
       <div className="relative bg-[var(--panel)] sm:rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1280px]"
-           style={phone ? { height: '100dvh', paddingTop: 'env(safe-area-inset-top)' }
-                        : { zoom: SCALE, height: `${Math.round(screenH * 0.94 / SCALE)}px` }}>
+           style={{ zoom: SCALE, height: `${Math.round(screenH * 0.94 / SCALE)}px` }}>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
@@ -1284,50 +1658,11 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           </div>
         )}
 
-        {phone ? (
-          // One pane at a time, and the cart as a bar along the bottom.
-          <div key={jobType} className="flex-1 min-h-0 flex flex-col animate-unfold">
-            {selected ? (
-              <div className="flex-1 overflow-y-auto min-h-0 p-4">
-                <button type="button" onClick={() => setSelected(null)}
-                        className="mb-3 inline-flex items-center gap-1 h-8 pr-2 text-[13px] font-semibold text-[var(--text-2)]">
-                  <span aria-hidden="true">‹</span> All services
-                </button>
-                {editor}
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0 p-4 flex flex-col">{serviceList}</div>
-            )}
-            <button type="button" onClick={() => setCartOpen(true)}
-                    className="shrink-0 mx-3 mb-3 h-14 px-4 rounded-2xl bg-zinc-900 text-white flex items-center gap-3"
-                    style={{ marginBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}>
-              <Icon kind="cart" size={18} />
-              <span className="text-[14px] font-semibold">
-                {cart.length ? `Cart · ${cart.length} item${cart.length > 1 ? 's' : ''}` : 'Cart is empty'}
-              </span>
-              <span className="ml-auto text-[15px] font-bold tabular-nums">{fmt(cartTotal)}</span>
-              <span aria-hidden="true" className="text-white/60 text-lg leading-none">›</span>
-            </button>
-            {cartOpen && (
-              <div className="absolute inset-0 z-10 bg-[#fafaf9] flex flex-col animate-slideUp"
-                   style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                <div className="flex items-center gap-2 px-3 h-14 border-b border-black/[0.07] shrink-0">
-                  <button type="button" onClick={() => setCartOpen(false)}
-                          className="inline-flex items-center gap-1 h-9 px-2 text-[14px] font-semibold">
-                    <span aria-hidden="true">‹</span> Add more
-                  </button>
-                </div>
-                <div className="flex-1 min-h-0 p-4">{cartPanel}</div>
-              </div>
-            )}
-          </div>
-        ) : (
           <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[300px_1fr_280px] animate-unfold">
             <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
             <div className="p-4 overflow-y-auto min-h-0">{editor}</div>
             <div className="p-3.5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
           </div>
-        )}
       </div>
     </div>,
     document.body,
