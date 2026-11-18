@@ -7,6 +7,7 @@ import { getJobs, getJobStats, getJobReceipt, sendReceiptWhatsApp } from '../../
 import client from '../../api/client'
 import { lifecycleState, serviceSummary } from './jobLifecycle'
 import JobsPhone from './JobsPhone'
+import ReceiptsPhone from './ReceiptsPhone'
 import usePhone from '../../hooks/usePhone'
 
 function fmt(n) {
@@ -394,8 +395,8 @@ const TYPE_FILTERS = [
 ]
 
 export default function Jobs({ focus = null, onOpenChat } = {}) {
-  // Phones get their own page (18 Nov 2026); Receipts keeps this one's for now.
-  if (usePhone()) return <JobsPhone focus={focus} onOpenChat={onOpenChat} receipts={<ReceiptsTab />} />
+  // Phones get their own page, Receipts included (18 Nov 2026).
+  if (usePhone()) return <JobsPhone focus={focus} onOpenChat={onOpenChat} receipts={<ReceiptsPhone />} />
   return <JobsComputer focus={focus} onOpenChat={onOpenChat} />
 }
 

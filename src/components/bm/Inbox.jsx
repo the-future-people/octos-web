@@ -23,6 +23,8 @@ import client from '../../api/client'
 import { getCustomers, getLockStatus } from '../../api/bm'
 import NewJobModal from './NewJobModal'
 import { useInboxCounts } from '../../hooks/useInboxBadge'
+import usePhone from '../../hooks/usePhone'
+import PhoneHeader from './PhoneHeader'
 
 // Octos's colours, from the logo (8 Nov 2026): black, and red only for what
 // needs attention. Octos's own messages are Mist grey with its mark beside its
@@ -922,8 +924,10 @@ function Panel({ conv, actions, files, onClose, reports, onToggleReports }) {
 }
 
 // ── The open chat ───────────────────────────────────────────────────────
-function Thread({ convId, onBack, panel, setPanel, onApproved }) {
+function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) {
   const queryClient = useQueryClient()
+  // Phone: the "+" menu beside the box (attach, staff note, emoji).
+  const [plus, setPlus] = useState(false)
   const wide = useWide()
   const [reply, setReply] = useState('')
   const [asNote, setAsNote] = useState(false)
@@ -1027,6 +1031,133 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const lastMail = [...messages].reverse().find(x => !['note', 'event'].includes(kindOf(x)))?.id
   const submit = () => { if ((reply.trim() || chips.length) && !send.isPending) send.mutate() }
 
+
+  // Shared by the computer's composer and the phone's.
+  const replyBlock = replyTo && (
+              <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 rounded-[10px] bg-black/[0.04]">
+                <span className="w-[3px] self-stretch rounded bg-[#080808] shrink-0" />
+                <span className="flex-1 min-w-0 flex flex-col">
+                  <b className="text-[11.5px]">Replying to {kindOf(replyTo) === 'octos' ? 'Octos' : kindOf(replyTo) === 'customer' ? nameOf(conv) : (replyTo.sent_by_name || 'Staff')}</b>
+                  <span className="text-xs text-[var(--text-3)] truncate">{(replyTo.body && replyTo.body !== replyTo.media_name ? replyTo.body : (isPhoto(replyTo) ? '📷 Photo' : replyTo.media_name || 'A file')).replace(/\n+/g, ' ')}</span>
+                </span>
+                <button type="button" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message" className="w-7 h-7 grid place-items-center rounded-full hover:bg-black/5"><I.close size={13} /></button>
+              </div>
+            )
+  const chipsBlock = chips.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {chips.map((f, i) => {
+                  const b = badge(f.name, f.type)
+                  return (
+                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-lg border border-black/10 bg-[#FAFAF9]">
+                      {f.type.startsWith('image/')
+                        ? <img src={URL.createObjectURL(f)} alt="" className="w-8 h-8 rounded object-cover" />
+                        : <span className="w-8 h-8 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>}
+                      <span className="flex flex-col"><span className="text-xs font-semibold max-w-[180px] truncate">{f.name}</span><span className="text-[10.5px] text-[var(--text-3)]">{size(f.size)}</span></span>
+                      <button type="button" onClick={() => setChips(c => c.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="w-6 h-6 grid place-items-center rounded hover:bg-black/5"><I.close size={13} /></button>
+                    </span>
+                  )
+                })}
+              </div>
+            )
+  const closedBlock = (() => {
+              // WhatsApp's rule, not Octos's: free messages only within 24 hours of the
+              // customer's last; after that, an approved message (8 Nov 2026).
+              const last = [...messages].reverse().find(x => x.direction === 'INBOUND')?.created_at
+              const when = last ? `${dayLabel(last) === 'Today' ? 'today' : dayLabel(last) === 'Yesterday' ? 'yesterday' : `on ${dayLabel(last)}`} at ${clock(last)}` : 'more than a day ago'
+              return (
+                <div className="flex flex-wrap items-center gap-3 px-3.5 py-3 rounded-xl bg-black/[0.035]">
+                  <span className="flex-1 min-w-[260px] text-[12.5px] leading-snug text-[var(--text-2)]">
+                    <b className="text-[var(--text)]">{nameOf(conv)} last wrote {when}.</b>{' '}
+                    WhatsApp only allows free messages within 24 hours of a customer’s last message.
+                    To reach them now, send an approved message; once they reply, you can write freely again.
+                  </span>
+                  <button type="button" onClick={() => onApproved?.(conv)}
+                    className="shrink-0 h-9 px-3.5 rounded-lg bg-[#080808] text-white text-xs font-semibold">Send an approved message</button>
+                </div>
+              )
+            })()
+
+
+  // The phone's foot (18 Nov 2026), after WhatsApp and Messages: who is
+  // answering, with Take over or Hand back, then "+", a round box and send.
+  // "+" holds attach, a staff note and emoji; the free-reply window shows in
+  // the strip, not as a line under every message.
+  const who = taken ? `${conv.assigned_to_name || 'A person'} is answering` : needsYou(conv) ? 'Octos asked for a person' : 'Octos is answering'
+  function onPlus(key) {
+    setPlus(false)
+    if (key === 'file') filePick.current?.click()
+    if (key === 'note') setAsNote(n => !n)
+    if (key === 'emoji') setEmojis(true)
+  }
+  const phoneComposer = (
+    <div style={{ background: theme.composer.background }}>
+      {whatsapp && (
+        <div className="flex items-center gap-2.5 px-3.5 py-2 border-t" style={{ borderColor: theme.header.borderColor, background: needsYou(conv) ? C.redSoft : '#FFFFFF' }}>
+          <img src="/octos-tile.svg" alt="" width={26} height={26} className="block rounded-full shrink-0" />
+          <span className="flex-1 min-w-0 leading-tight">
+            <span className="block text-[13.5px] font-semibold truncate" style={{ color: needsYou(conv) ? C.redDeep : '#1C1C1E' }}>{who}</span>
+            <span className="block text-[12px] truncate" style={{ color: windowOpen ? '#1E7A4C' : '#8A8A8E' }}>{windowOpen ? `Free replies until ${until(closes)}` : 'Free replies closed'}</span>
+          </span>
+          <button type="button" onClick={() => (taken ? handBack : takeOver).mutate()} disabled={takeOver.isPending || handBack.isPending}
+            className="h-8 px-3.5 rounded-full text-[13.5px] font-semibold whitespace-nowrap disabled:opacity-40"
+            style={taken ? { background: '#F2F2F4', color: '#1C1C1E' } : { background: '#1C1C1E', color: '#FFFFFF' }}>
+            {taken ? 'Hand back' : 'Take over'}
+          </button>
+        </div>
+      )}
+      <div className="px-2.5 pt-2 flex flex-col gap-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}>
+        {replyBlock}
+        {chipsBlock}
+        {asNote && (
+          <div className="self-start inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 rounded-full text-[12.5px] font-semibold" style={{ background: C.note, color: C.noteMeta, border: `1px dashed ${C.noteBorder}` }}>
+            <I.lock size={13} />Note, only staff see it
+            <button type="button" onClick={() => setAsNote(false)} aria-label="Back to replying" className="w-6 h-6 grid place-items-center rounded-full"><I.close size={12} /></button>
+          </div>
+        )}
+        {whatsapp && !windowOpen && !asNote ? closedBlock : (
+          <div className="flex items-end gap-2 relative">
+            <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+            <button type="button" onClick={() => setPlus(v => !v)} aria-label="Attach, note or emoji" aria-expanded={plus}
+              className="w-[38px] h-[38px] shrink-0 rounded-full grid place-items-center bg-black/[0.06]" style={{ color: theme.header.title }}>
+              <I.plus size={22} />
+            </button>
+            {plus && (
+              <div className="absolute bottom-[46px] left-0 z-30 w-[240px] rounded-[14px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] overflow-hidden">
+                {[
+                  ['file', <I.photo key="p" size={19} />, 'Photo or file'],
+                  ['note', <I.lock key="l" size={19} />, asNote ? 'Reply to the customer' : 'Note, staff only'],
+                  ['emoji', <I.smile key="s" size={19} />, 'Emoji'],
+                ].map(([key, icon, label], i) => (
+                  <button key={key} type="button" onClick={() => onPlus(key)}
+                    className={`w-full h-[46px] px-4 flex items-center gap-3 text-[15.5px] text-[#1C1C1E] active:bg-black/[0.05] ${i ? 'border-t border-black/[0.07]' : ''}`}>
+                    <span className="text-[#6E6E73]">{icon}</span>{label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {emojis && (
+              <div className="absolute bottom-[46px] left-0 z-30 w-full p-2 rounded-[14px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] grid grid-cols-8 gap-0.5">
+                {EMOJIS.map(e => (
+                  <button key={e} type="button" onClick={() => addEmoji(e)} aria-label={e} className="h-10 rounded-md text-xl grid place-items-center">{e}</button>
+                ))}
+              </div>
+            )}
+            <label htmlFor="reply-phone" className="sr-only">{asNote ? 'Note' : 'Reply'}</label>
+            <textarea id="reply-phone" ref={box} rows={1} value={reply}
+              onChange={e => { setReply(e.target.value); setError(''); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px` }}
+              placeholder={asNote ? 'Note only staff see' : 'Message'}
+              className="flex-1 min-h-[38px] max-h-32 px-3.5 py-[8px] text-[16px] leading-[21px] rounded-[20px] outline-none resize-none"
+              style={asNote ? { background: C.note, border: `1px dashed ${C.noteBorder}` } : { background: theme.composer.input, border: '1px solid rgba(0,0,0,0.10)' }} />
+            <button type="button" onClick={submit} disabled={(!reply.trim() && !chips.length) || send.isPending} aria-label={asNote ? 'Save note' : 'Send'}
+              className="w-[38px] h-[38px] shrink-0 rounded-full grid place-items-center text-white disabled:opacity-35"
+              style={{ background: asNote ? C.noteMeta : theme.send }}>{asNote ? <I.check size={19} /> : <I.send size={18} />}</button>
+          </div>
+        )}
+        {error && <p className="m-0 px-1 text-[13px]" style={{ color: C.redText }}>{error}</p>}
+      </div>
+    </div>
+  )
+
   let lastWho = '', lastDay = ''
   return (
     <div className="flex-1 min-w-0 flex relative">
@@ -1034,17 +1165,21 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
         onDragOver={e => { e.preventDefault(); if (!resolved) setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); if (!resolved) addFiles(e.dataTransfer.files) }}>
-        <div className="flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2.5 border-b" style={{ background: theme.header.background, borderColor: theme.header.borderColor }}>
-          <button type="button" onClick={onBack} aria-label="All conversations" className="lg:hidden w-8 h-8 -ml-1 grid place-items-center rounded-lg"><I.back size={18} /></button>
-          <Avatar c={conv} s={38} />
+        <div className="flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2.5 border-b"
+          style={{ background: theme.header.background, borderColor: theme.header.borderColor, ...(phone ? { paddingTop: 'calc(env(safe-area-inset-top) + 8px)' } : {}) }}>
+          {phone
+            ? <button type="button" onClick={onBack} aria-label="All conversations" className="h-10 -ml-2 pr-0.5 grid place-items-center" style={{ color: theme.accent }}><I.back size={28} /></button>
+            : <button type="button" onClick={onBack} aria-label="All conversations" className="lg:hidden w-8 h-8 -ml-1 grid place-items-center rounded-lg"><I.back size={18} /></button>}
+          <Avatar c={conv} s={phone ? 36 : 38} />
           <div className="flex-1 min-w-0 flex flex-col">
-            <h2 className="m-0 text-[14.5px] font-bold truncate" style={{ color: theme.header.title }}>{email ? (conv.subject || nameOf(conv)) : nameOf(conv)}</h2>
+            <h2 className={`m-0 ${phone ? 'text-[16px] font-semibold' : 'text-[14.5px] font-bold'} truncate`} style={{ color: theme.header.title }}>{email ? (conv.subject || nameOf(conv)) : nameOf(conv)}</h2>
             <span className="text-[11.5px] truncate" style={{ color: theme.header.sub }}>{email && conv.subject ? `${nameOf(conv)}, ` : `${channelOf(conv).label}, `}{conv.contact_phone || conv.contact_email || (conv.contact_username ? '@' + conv.contact_username : 'WhatsApp username, number hidden')}</span>
           </div>
-          {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
+          {/* On a phone, Take over sits above the box instead (18 Nov 2026). */}
+          {!phone && !resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
           {/* Record the job without leaving the chat (9 Nov 2026). */}
           <button type="button" onClick={() => setRecording(true)}
-            className="inline-flex items-center gap-1.5 h-[34px] px-2.5 sm:px-3.5 rounded-lg text-[13px] font-semibold text-white whitespace-nowrap" style={{ background: theme.accent }}>
+            className={`inline-flex items-center gap-1.5 font-semibold text-white whitespace-nowrap ${phone ? 'h-9 px-3 rounded-full text-[14px]' : 'h-[34px] px-2.5 sm:px-3.5 rounded-lg text-[13px]'}`} style={{ background: theme.accent }}>
             <I.plus size={14} /><span className="hidden sm:inline">Record a job</span><span className="sm:hidden">Job</span>
           </button>
           {recording && (
@@ -1061,9 +1196,14 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                   .map(x => ({ id: x.id, name: x.media_name || 'File', pages: x.media_pages, info: fileInfo(x) })),
               }} />
           )}
+          {phone ? (
+            <button type="button" onClick={() => setPanel(p => !p)} aria-label="Details" aria-pressed={panel}
+              className="w-9 h-9 rounded-full grid place-items-center bg-black/[0.05]" style={{ color: theme.header.title }}><I.info size={19} /></button>
+          ) : (
           <button type="button" onClick={() => setPanel(p => !p)} aria-label="Details" title="Details" aria-pressed={panel}
             className="w-[34px] h-[34px] rounded-lg grid place-items-center"
             style={panel ? { background: '#16181D', color: '#fff' } : { border: '1px solid var(--border)' }}><I.panel size={17} /></button>
+          )}
         </div>
 
         <div ref={scroller} className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col relative ${email ? '' : 'px-5 py-3 gap-1'}`} style={theme.wall}>
@@ -1113,18 +1253,10 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
           )}
         </div>
 
-        {!resolved && (
+        {!resolved && phone && phoneComposer}
+        {!resolved && !phone && (
           <div className="border-t px-4 pt-2 pb-2.5 flex flex-col gap-2" style={{ background: theme.composer.background, borderColor: theme.header.borderColor }}>
-            {replyTo && (
-              <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 rounded-[10px] bg-black/[0.04]">
-                <span className="w-[3px] self-stretch rounded bg-[#080808] shrink-0" />
-                <span className="flex-1 min-w-0 flex flex-col">
-                  <b className="text-[11.5px]">Replying to {kindOf(replyTo) === 'octos' ? 'Octos' : kindOf(replyTo) === 'customer' ? nameOf(conv) : (replyTo.sent_by_name || 'Staff')}</b>
-                  <span className="text-xs text-[var(--text-3)] truncate">{(replyTo.body && replyTo.body !== replyTo.media_name ? replyTo.body : (isPhoto(replyTo) ? '📷 Photo' : replyTo.media_name || 'A file')).replace(/\n+/g, ' ')}</span>
-                </span>
-                <button type="button" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message" className="w-7 h-7 grid place-items-center rounded-full hover:bg-black/5"><I.close size={13} /></button>
-              </div>
-            )}
+            {replyBlock}
             <div className="flex items-center gap-2.5 flex-wrap">
               <div role="tablist" aria-label="Write" className="flex gap-0.5 p-[3px] rounded-lg bg-black/[0.05]">
                 {[[false, 'Reply'], [true, 'Note, staff only']].map(([note, label]) => (
@@ -1136,39 +1268,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
                 {asNote ? 'Only staff see notes.' : `${!taken && whatsapp ? 'Sending takes this chat over from Octos. ' : ''}${windowLine}`}
               </span>
             </div>
-            {chips.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {chips.map((f, i) => {
-                  const b = badge(f.name, f.type)
-                  return (
-                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-lg border border-black/10 bg-[#FAFAF9]">
-                      {f.type.startsWith('image/')
-                        ? <img src={URL.createObjectURL(f)} alt="" className="w-8 h-8 rounded object-cover" />
-                        : <span className="w-8 h-8 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>}
-                      <span className="flex flex-col"><span className="text-xs font-semibold max-w-[180px] truncate">{f.name}</span><span className="text-[10.5px] text-[var(--text-3)]">{size(f.size)}</span></span>
-                      <button type="button" onClick={() => setChips(c => c.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="w-6 h-6 grid place-items-center rounded hover:bg-black/5"><I.close size={13} /></button>
-                    </span>
-                  )
-                })}
-              </div>
-            )}
-            {whatsapp && !windowOpen && !asNote ? (() => {
-              // WhatsApp's rule, not Octos's: free messages only within 24 hours of the
-              // customer's last; after that, an approved message (8 Nov 2026).
-              const last = [...messages].reverse().find(x => x.direction === 'INBOUND')?.created_at
-              const when = last ? `${dayLabel(last) === 'Today' ? 'today' : dayLabel(last) === 'Yesterday' ? 'yesterday' : `on ${dayLabel(last)}`} at ${clock(last)}` : 'more than a day ago'
-              return (
-                <div className="flex flex-wrap items-center gap-3 px-3.5 py-3 rounded-xl bg-black/[0.035]">
-                  <span className="flex-1 min-w-[260px] text-[12.5px] leading-snug text-[var(--text-2)]">
-                    <b className="text-[var(--text)]">{nameOf(conv)} last wrote {when}.</b>{' '}
-                    WhatsApp only allows free messages within 24 hours of a customer’s last message.
-                    To reach them now, send an approved message; once they reply, you can write freely again.
-                  </span>
-                  <button type="button" onClick={() => onApproved?.(conv)}
-                    className="shrink-0 h-9 px-3.5 rounded-lg bg-[#080808] text-white text-xs font-semibold">Send an approved message</button>
-                </div>
-              )
-            })() : (
+            {chipsBlock}
+            {whatsapp && !windowOpen && !asNote ? closedBlock : (
             <div className="flex items-end gap-2">
               <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
               <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach photos or documents" title="Attach photos or documents"
@@ -1205,7 +1306,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
       </section>
 
       {panel && (
-        <div className={wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}>
+        <div className={wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}
+          style={phone ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', background: 'var(--panel)' } : undefined}>
           <Panel conv={conv} files={files} onClose={wide ? null : () => setPanel(false)}
             reports={reports} onToggleReports={toggleReports} actions={{
             atCounter: () => atCounter.mutate(),
@@ -1232,6 +1334,51 @@ const FILTERS = [
   { key: 'people', label: 'People', test: withPerson },
 ]
 
+// ── The phone's list (18 Nov 2026) ──────────────────────────────────────
+// In the Overview's look: soft initials, the name and time, the last
+// message, and a red count for unread. Red text when a chat needs a person.
+const SOFT = [['#DCE9FF', '#1D4ED8'], ['#D3F2DE', '#15803D'], ['#FFEDB8', '#B45309'], ['#E7DCFF', '#6D28D9'], ['#FCE7F3', '#BE185D'], ['#F1F1F3', '#3A3A3C']]
+function SoftAvatar({ c, s = 48 }) {
+  const [bg, ink] = SOFT[(c?.id || 0) % SOFT.length]
+  return (
+    <span className="shrink-0 rounded-full grid place-items-center font-semibold" style={{ width: s, height: s, fontSize: s / 2.7, background: bg, color: ink }}>
+      {initialsOf(c)}
+    </span>
+  )
+}
+
+function PhoneRow({ c, first, onOpen }) {
+  const asked = needsYou(c)
+  const unread = c.unread_count > 0
+  return (
+    <button type="button" onClick={() => onOpen(c.id)} className="w-full flex items-center gap-3 pl-3.5 text-left active:bg-black/[0.04]">
+      <SoftAvatar c={c} />
+      <span className={`flex-1 min-w-0 py-3 pr-3 ${first ? '' : 'border-t border-black/[0.07]'}`}>
+        <span className="flex items-baseline gap-2">
+          <span className={`flex-1 min-w-0 text-[16px] leading-[21px] truncate text-[#1C1C1E] ${unread ? 'font-bold' : 'font-semibold'}`}>{nameOf(c)}</span>
+          <span className={`text-[13px] whitespace-nowrap ${unread ? 'font-semibold text-[#D70015]' : 'text-[#8A8A8E]'}`}>{ago(c.last_message_at)}</span>
+        </span>
+        <span className="flex items-center gap-2 mt-0.5">
+          <span className={`flex-1 min-w-0 text-[14px] leading-[19px] truncate ${asked ? 'font-semibold' : ''}`}
+            style={{ color: asked ? '#D70015' : unread ? '#1C1C1E' : '#6E6E73' }}>
+            {asked ? `Needs you: ${c.handoff_reason}` : (c.last_message_preview || 'No messages yet')}
+          </span>
+          {unread && (
+            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#D70015] text-white text-[12px] font-semibold grid place-items-center">
+              {c.unread_count > 99 ? '99+' : c.unread_count}
+            </span>
+          )}
+        </span>
+        <span className="flex items-center gap-1.5 mt-1 text-[12px] text-[#8A8A8E]">
+          {withPerson(c) ? <><I.user size={12} />{c.assigned_to_name || 'Staff'}</>
+            : !asked && c.channel === 'WHATSAPP' ? <><OctosMark s={13} />Octos</> : null}
+          {c.job && <span className="truncate">{(withPerson(c) || (!asked && c.channel === 'WHATSAPP')) ? '· ' : ''}Job {c.job.ref}</span>}
+        </span>
+      </span>
+    </button>
+  )
+}
+
 // Recording a job from a chat follows the same rule as the dashboard's
 // New Job button: once recording has closed, the Branch Manager gives a
 // reason (and the job is held if the cashier has already signed off).
@@ -1251,6 +1398,7 @@ function ChatJobModal(props) {
 
 export default function Inbox({ focus = null } = {}) {
   const queryClient = useQueryClient()
+  const phone = usePhone()
   const [channel, setChannelState] = useState(savedChannel)
   const setChannel = t => { setChannelState(t); try { localStorage.setItem('octos.inbox.channel', t) } catch { /* private */ } }
   const [filter, setFilter] = useState(null)
@@ -1333,6 +1481,105 @@ export default function Inbox({ focus = null } = {}) {
   const shown = useMemo(() => conversations.filter(c => c.channel === channel), [conversations, channel])
 
   // No chat opens by itself (9 Nov 2026): staff choose. Opening one marks it read.
+
+  // The phone (18 Nov 2026): its own page in the Overview's look. Only the
+  // channels that are connected; an open chat slides in over the list.
+  if (phone) {
+    const LIVE = TABS.filter(t => !SOON.includes(t))
+    return (
+      <div className="ios min-h-full pb-6" style={{ background: '#F6F6F8' }}>
+        <PhoneHeader />
+        <div className="px-4 pt-1 flex items-center justify-between">
+          <h1 className="m-0 text-[30px] leading-[36px] font-extrabold tracking-[-0.02em] text-[#111]">Inbox</h1>
+          <button type="button" onClick={() => setStarting(true)} aria-label="New message"
+            className="w-10 h-10 rounded-full bg-white grid place-items-center shadow-[0_2px_10px_rgba(0,0,0,0.08)] text-[#D70015]">
+            <Svg size={20} strokeWidth={2.1}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Svg>
+          </button>
+        </div>
+        <div className="px-4 text-[14px]" style={{ color: needsCount ? '#D70015' : '#8A8A8E', fontWeight: needsCount ? 600 : 400 }}>
+          {needsCount ? `${needsCount} need${needsCount === 1 ? 's' : ''} you` : `${unread} unread · Octos is answering the rest`}
+        </div>
+
+        {/* The channels, each with what is waiting */}
+        <div className="mx-4 mt-3 p-[3px] rounded-[12px] bg-black/[0.06] flex" role="tablist" aria-label="Channel">
+          {LIVE.map(t => {
+            const on = channel === t, n = waitingOn(t)
+            return (
+              <button key={t} type="button" role="tab" aria-selected={on} onClick={() => setChannel(t)}
+                className={`flex-1 h-[36px] rounded-[9px] inline-flex items-center justify-center gap-1.5 text-[14px] font-semibold
+                  ${on ? 'bg-white text-[#111] shadow-[0_2px_6px_rgba(0,0,0,0.10)]' : 'text-[#3A3A3C]'}`}>
+                <ChannelMark ch={t} s={18} />{CHANNEL[t].label}
+                {n > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#D70015] text-white text-[11px] font-bold grid place-items-center">{n > 99 ? '99+' : n}</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        <label className="mx-4 mt-3 h-[38px] px-3 rounded-[11px] bg-black/[0.06] flex items-center gap-2 text-[#8A8A8E]">
+          <I.search size={17} />
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={`Search ${CHANNEL[channel].label} chats`}
+            enterKeyHint="search" className="flex-1 min-w-0 bg-transparent outline-none text-[16px] text-[#111] placeholder:text-[#8A8A8E]" />
+        </label>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+          {[{ key: null, label: 'All' }, ...FILTERS].map(f => {
+            const on = filter === f.key, n = f.key === 'needs' ? needsCount : 0
+            return (
+              <button key={f.label} type="button" onClick={() => setFilter(f.key)} aria-pressed={on}
+                className={`shrink-0 h-[34px] px-3.5 rounded-full flex items-center gap-1.5 text-[14px] font-semibold whitespace-nowrap
+                  ${on ? 'bg-[#1C1C1E] text-white' : 'bg-white text-[#1C1C1E] border border-black/[0.06]'}`}>
+                {f.label}{n > 0 && <span className="tabular-nums" style={{ color: on ? 'rgba(255,255,255,0.75)' : '#D70015' }}>{n}</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-3">
+          {isLoading ? (
+            <div className="mx-4 rounded-[16px] bg-white animate-pulse h-[300px]" aria-hidden="true" />
+          ) : shown.length === 0 ? (
+            <div className="mx-4 rounded-[16px] bg-white py-12 px-6 text-center">
+              <div className="text-[16px] font-semibold text-[#1C1C1E]">{query || filter ? 'Nothing matches' : 'No chats yet'}</div>
+              <div className="text-[13.5px] text-[#8A8A8E] mt-1">
+                {query || filter ? 'Clear the search or choose All.' : `${CHANNEL[channel].label} messages from customers will appear here.`}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mx-4 rounded-[16px] bg-white overflow-hidden border border-black/[0.04] shadow-[0_3px_12px_rgba(17,24,39,0.05)]">
+                {shown.map((c, i) => <PhoneRow key={c.id} c={c} first={i === 0} onOpen={setSelectedId} />)}
+              </div>
+              <div ref={listEnd} className="px-4 py-4 text-center text-[13px] text-[#8A8A8E]">
+                {isFetchingNextPage ? 'Loading older chats…'
+                  : hasNextPage ? <button type="button" onClick={() => fetchNextPage()} className="font-semibold text-[#D70015]">Show older chats</button>
+                  : null}
+              </div>
+            </>
+          )}
+        </div>
+
+        {selectedId && createPortal(
+          <div className="ios-push fixed inset-0 z-[65] flex bg-white">
+            <Thread key={selectedId} convId={selectedId} phone onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel}
+              onApproved={c => { setPrefill({ name: nameOf(c), phone: c.contact_phone }); setStarting(true) }} />
+          </div>,
+          document.body,
+        )}
+        {starting && createPortal(
+          <div className="fixed inset-0 z-[70] flex flex-col bg-white animate-slideUp" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            <div className="relative flex-1">
+              <NewMessage prefill={prefill} onClose={() => { setStarting(false); setPrefill(null) }} onStarted={id => {
+                setStarting(false)
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                setSelectedId(id)
+              }} />
+            </div>
+          </div>,
+          document.body,
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col text-[13.5px] bg-[#F6F6F4] border border-[var(--border)] rounded-2xl overflow-hidden m-2"

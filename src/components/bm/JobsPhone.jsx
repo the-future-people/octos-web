@@ -234,7 +234,7 @@ export default function JobsPhone({ focus = null, onOpenChat, receipts }) {
         ))}
       </div>
 
-      {tab === 'receipts' ? <div className="mt-2">{receipts}</div> : (
+      {tab === 'receipts' ? receipts : (
         <>
           <label className="mx-4 mt-3 h-[38px] px-3 rounded-[11px] bg-black/[0.06] flex items-center gap-2 text-[#8A8A8E]">
             <Svg d={<path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.3-4.3" />} size={17} />
