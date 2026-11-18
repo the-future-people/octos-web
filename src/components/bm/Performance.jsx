@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
+import usePhone from '../../hooks/usePhone'
+import PerformancePhone from './PerformancePhone'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -15,69 +17,6 @@ function fmtK(n) {
 
 const getPerformance = (period) =>
   client.get(`/api/v1/jobs/performance/?period=${period}`).then(r => r.data)
-
-// ── Bar chart (canvas) ────────────────────────────────────────────────────────
-function HourlyChart({ data, height = 160 }) {
-  const canvasRef = useRef(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !data?.length) return
-
-    const maxCount = Math.max(...data.map(d => d.count), 1)
-    const dpr = window.devicePixelRatio || 1
-    const W   = canvas.offsetWidth
-    const H   = height
-
-    canvas.width  = W * dpr
-    canvas.height = H * dpr
-    canvas.style.width  = W + 'px'
-    canvas.style.height = H + 'px'
-
-    const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
-
-    const padL = 8, padR = 8, padT = 10, padB = 28
-    const cW   = W - padL - padR
-    const cH   = H - padT - padB
-    const barW = (cW / data.length) * 0.55
-    const gap  = cW / data.length
-
-    const isDark  = document.documentElement.dataset.theme === 'dark'
-    const lblClr  = isDark ? '#6b6b69' : '#a3a3a3'
-    const peakIdx = data.reduce((mi, d, i) => d.count > data[mi].count ? i : mi, 0)
-
-    ctx.clearRect(0, 0, W, H)
-
-    data.forEach((d, i) => {
-      const bH = d.count > 0 ? Math.max((d.count / maxCount) * cH, 4) : 2
-      const x  = padL + i * gap + (gap - barW) / 2
-      const y  = padT + cH - bH
-
-      const isPeak = i === peakIdx && d.count > 0
-      ctx.fillStyle = isPeak ? '#6366f1' : (d.count > 0 ? '#c7d2fe' : '#f1f5f9')
-      ctx.beginPath()
-      ctx.roundRect(x, y, barW, bH, 3)
-      ctx.fill()
-
-      // Count label on top
-      if (d.count > 0) {
-        ctx.fillStyle = isPeak ? '#4338ca' : '#94a3b8'
-        ctx.font      = `bold ${dpr > 1 ? 9 : 10}px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.fillText(d.count, padL + i * gap + gap / 2, y - 3)
-      }
-
-      // Hour label
-      ctx.fillStyle = lblClr
-      ctx.font      = '10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText(d.label, padL + i * gap + gap / 2, H - 8)
-    })
-  }, [data, height])
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: `${height}px`, display: 'block' }} />
-}
 
 // ── Service bar ───────────────────────────────────────────────────────────────
 function ServiceBar({ name, count, revenue, percentage, rank }) {
@@ -160,9 +99,15 @@ const PERIODS = [
 ]
 
 export default function Performance() {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <PerformancePhone />
+  return <PerformanceComputer />
+}
+
+function PerformanceComputer() {
   const [period, setPeriod] = useState('day')
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['performance', period],
     queryFn:  () => getPerformance(period),
     refetchInterval: 60_000,

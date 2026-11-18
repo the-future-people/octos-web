@@ -26,7 +26,7 @@ import Workload from '../../components/bm/Workload'
 import ErrorBoundary from '../../components/shared/ErrorBoundary'
 
 // Pages with their own iOS-style phone layout (18 Nov 2026).
-const IOS_PAGES = ['overview', 'jobs', 'inbox', 'proformas', 'daysheet', 'customers', 'staff']
+const IOS_PAGES = ['overview', 'jobs', 'inbox', 'proformas', 'daysheet', 'customers', 'staff', 'inventory', 'performance']
 
 const SECTIONS = [
   {

@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getStock, getStockMovements, receiveStock } from '../../api/bm'
 import client from '../../api/client'
+import usePhone from '../../hooks/usePhone'
+import InventoryPhone from './InventoryPhone'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 
 function fmt(n) {
@@ -182,12 +184,6 @@ function ReportWasteModal({ items, onClose }) {
     onDone={onClose}
   />
 
-  if (success) return <JobSuccessOverlay
-    message="Stock received"
-    jobNumber={`+${qty} ${item.unit_label} · ${item.name}`}
-    onDone={onClose}
-  />
-
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
@@ -277,6 +273,12 @@ function ReportWasteModal({ items, onClose }) {
 
 // ── Main Inventory Component ──────────────────────────────────────────────────
 export default function Inventory() {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <InventoryPhone />
+  return <InventoryComputer />
+}
+
+function InventoryComputer() {
   const [tab,         setTab]         = useState('stock')
   const [receiveItem, setReceiveItem] = useState(null)
   const [showWaste,   setShowWaste]   = useState(false)
