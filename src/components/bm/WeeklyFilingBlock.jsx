@@ -8,10 +8,11 @@
 // nothing ever asked for them, and a branch that cannot trade because a
 // filing is late would be a worse outcome than a late filing.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
+import usePhone from '../../hooks/usePhone'
 
 const getOutstanding = () =>
   client.get('/api/v1/finance/weekly/outstanding/')
@@ -41,14 +42,19 @@ const span = (from, to) => {
 
 export default function WeeklyFilingBlock({ onGoToDaySheet }) {
   const queryClient = useQueryClient()
+  const phone = usePhone()
   const [error, setError] = useState('')
 
   // Stepping aside to let the day be settled, not dismissing. The block
   // covers the screen, so sending someone to the day sheet while staying
   // in front of it is a trap. Half an hour is long enough to close a day
   // and short enough that it returns in the same sitting.
-  const [standBackUntil, setStandBackUntil] = useState(0)
-  const standingBack = Date.now() < standBackUntil
+  const [standingBack, setStandingBack] = useState(false)
+  useEffect(() => {
+    if (!standingBack) return
+    const t = setTimeout(() => setStandingBack(false), 30 * 60 * 1000)
+    return () => clearTimeout(t)
+  }, [standingBack])
 
   const { data } = useQuery({
     queryKey: ['outstanding-week'],
@@ -81,10 +87,14 @@ export default function WeeklyFilingBlock({ onGoToDaySheet }) {
   const blocked  = !week.can_submit
 
   return createPortal(
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 p-4"
+    // On a phone it rises from the bottom like the other sheets, with the
+    // same words; it still covers the screen until the week is filed.
+    <div className={phone ? 'ios fixed inset-0 z-[9998] flex items-end bg-black/40'
+      : 'fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 p-4'}
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md
-        overflow-hidden animate-slideUp">
+      <div className={phone ? 'bg-white rounded-t-[24px] w-full overflow-hidden animate-slideUp'
+        : 'bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slideUp'}
+        style={phone ? { paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
 
         <div className="px-6 pt-6">
           <div className="w-11 h-11 rounded-full bg-amber-50 flex items-center
@@ -99,10 +109,10 @@ export default function WeeklyFilingBlock({ onGoToDaySheet }) {
               <polyline points="9 16 11 18 15 14" />
             </svg>
           </div>
-          <div className="text-lg font-bold text-[var(--text)]">
+          <div className={phone ? 'text-[22px] font-bold text-[#111]' : 'text-lg font-bold text-[var(--text)]'}>
             Last week needs filing
           </div>
-          <div className="text-[13px] text-[var(--text-2)] leading-relaxed mt-1.5">
+          <div className={`${phone ? 'text-[15.5px]' : 'text-[13px]'} text-[var(--text-2)] leading-relaxed mt-1.5`}>
             Monday to Saturday, {span(week.date_from, week.date_to)}.
             {!blocked && ' Finance cannot review the month until every week in it is filed.'}
           </div>
@@ -145,11 +155,11 @@ export default function WeeklyFilingBlock({ onGoToDaySheet }) {
             <>
                             <button
                 onClick={() => {
-                  setStandBackUntil(Date.now() + 30 * 60 * 1000)
+                  setStandingBack(true)
                   onGoToDaySheet()
                 }}
-                className="w-full py-2.5 bg-[var(--text)] text-white text-sm
-                  font-bold rounded-xl hover:opacity-90 transition-opacity">
+                className={`w-full text-white hover:opacity-90 transition-opacity
+                  ${phone ? 'h-[50px] rounded-[16px] text-[16.5px] font-semibold bg-[#D70015]' : 'py-2.5 bg-[var(--text)] text-sm font-bold rounded-xl'}`}>
                 Settle {dayName(openDays[0])} first
               </button>
               <p className="text-[11px] text-[var(--text-3)] text-center mt-2 leading-relaxed">
@@ -159,9 +169,8 @@ export default function WeeklyFilingBlock({ onGoToDaySheet }) {
           ) : (
             <>
               <button onClick={() => { setError(''); file() }} disabled={isPending}
-                className="w-full py-2.5 bg-[var(--text)] text-white text-sm
-                  font-bold rounded-xl hover:opacity-90 disabled:opacity-40
-                  transition-opacity">
+                className={`w-full text-white hover:opacity-90 disabled:opacity-40
+                  transition-opacity ${phone ? 'h-[50px] rounded-[16px] text-[16.5px] font-semibold bg-[#D70015]' : 'py-2.5 bg-[var(--text)] text-sm font-bold rounded-xl'}`}>
                 {isPending ? 'Filing…' : 'File the week'}
               </button>
               <p className="text-[11px] text-[var(--text-3)] text-center mt-2 leading-relaxed">

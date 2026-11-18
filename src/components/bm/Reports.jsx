@@ -9,6 +9,8 @@ import { downloadBranchStatement } from '../../api/bm'
 import ShareDocumentModal from '../shared/ShareDocumentModal'
 import MonthReview from './MonthReview'
 import { saveFile } from '../../api/saveFile'
+import usePhone from '../../hooks/usePhone'
+import ReportsPhone from './ReportsPhone'
 
 const fmt = (n) =>
   `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -724,8 +726,6 @@ function WeeklyExpandedDetail({ report }) {
 function WeeklyTab() {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(null)
-  const [notesId, setNotesId] = useState(null)
-  const [notesText, setNotesText] = useState('')
   const [submitId, setSubmitId] = useState(null)
   const [submitNotes, setSubmitNotes] = useState('')
   const [error, setError] = useState('')
@@ -779,15 +779,6 @@ function WeeklyTab() {
       queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
       setSubmitId(null)
       setSubmitNotes('')
-    },
-    onError: (err) => setError(extractError(err)),
-  })
-
-  const notesMut = useMutation({
-    mutationFn: ({ id, notes }) => client.patch(`/api/v1/finance/weekly/${id}/notes/`, { bm_notes: notes }),
-    onSuccess: () => {
-      setError('')
-      queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
     },
     onError: (err) => setError(extractError(err)),
   })
@@ -938,7 +929,9 @@ function WeeklyTab() {
                             {fmt(r.total_collected)}
                           </div>
                         </div>
-                        {r.pdf_path && (
+                        {/* Every filed week has a PDF: the PDF view builds one
+                            when the week has none on disk. */}
+                        {r.status !== 'DRAFT' && (
                             <button onClick={() => setSharing(r)}
                             title="Share this filing"
                             className="text-red-600 hover:text-red-700
@@ -1000,7 +993,6 @@ function WeeklyTab() {
 // ── Monthly Tab ───────────────────────────────────────────────────────────────
 
 function MonthlyTab() {
-  const queryClient = useQueryClient()
   const now = new Date()
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year,  setYear]  = useState(now.getFullYear())
@@ -1031,22 +1023,6 @@ function MonthlyTab() {
     queryFn: () => getMonthlyClose(month, year).then(r => r.data),
     staleTime: 30_000,
   })
-
-  // The weeks this month consolidates. The close carries totals but not
-  // its parts, so a figure has to be taken on trust — showing the weeks
-  // makes the total visibly the sum of six rows instead.
-  const { data: allWeeks = [] } = useQuery({
-    queryKey: ['weekly-reports'],
-    queryFn: () => getWeeklyList().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.results || []) }),
-    staleTime: 30_000,
-  })
-
-  const monthWeeks = allWeeks
-    .filter(w => {
-      const d = new Date(w.date_from)
-      return d.getMonth() + 1 === month && d.getFullYear() === year
-    })
-    .sort((a, b) => b.date_from.localeCompare(a.date_from))
 
   const prepareMut = useMutation({
     mutationFn: () => prepareMonthly(month, year),
@@ -1574,7 +1550,7 @@ function WeekHeatmap({ heatmap }) {
     <div className="flex gap-1">
       {heatmap.map((week, wi) => (
         <div key={wi} className="flex flex-col gap-1 flex-1">
-          {week.map((day, di) => (
+          {week.map((day) => (
             <div key={day.date} title={`${day.date}: ${day.count} jobs`}
               className="rounded aspect-square flex items-center justify-center"
               style={{ backgroundColor: `rgba(99,102,241,${opacity(day.count)})` }}>
@@ -1630,7 +1606,6 @@ function KpiCards({ kpis }) {
 // ── Job Ledger Tab ─────────────────────────────────────────────────────────────
 
 function JobLedgerTab() {
-  const now = new Date()
   const [level,         setLevel]         = useState('years')
   const [selectedYear,  setSelectedYear]  = useState(null)
   const [selectedMonth, setSelectedMonth] = useState(null)
@@ -1658,8 +1633,6 @@ function JobLedgerTab() {
     staleTime: 60_000,
   })
 
-  const activeData = level === 'years' ? yearsData : level === 'months' ? monthsData : weeksData
-  const isLoading  = loadingYears || loadingMonths || loadingWeeks
 
   const drillYear  = (y) => { setSelectedYear(y);  setLevel('months') }
   const drillMonth = (m) => { setSelectedMonth(m); setLevel('weeks')  }
@@ -1987,6 +1960,11 @@ function InvestorStatementTab() {
 const TABS = ['Daily', 'Weekly', 'Monthly', 'Yearly', 'Job Ledger']
 
 export default function Reports() {
+  if (usePhone()) return <ReportsPhone />
+  return <ReportsComputer />
+}
+
+function ReportsComputer() {
   const { user } = useAuth()
   const canGenerateStatement = user?.can_generate_branch_statement
 
