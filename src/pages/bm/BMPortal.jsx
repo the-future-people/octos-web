@@ -25,6 +25,9 @@ import useReminders from '../../hooks/useReminders'
 import Workload from '../../components/bm/Workload'
 import ErrorBoundary from '../../components/shared/ErrorBoundary'
 
+// Pages with their own iOS-style phone layout (18 Nov 2026).
+const IOS_PAGES = ['overview']
+
 const SECTIONS = [
   {
     group: 'WORKSPACE',
@@ -109,13 +112,16 @@ export default function BMPortal() {
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-[var(--bg)]">
       <DailyGreeting />
 
-      {/* Topbar */}
+      {/* Topbar. On a phone, pages built in the iOS manner carry their own
+          bar (large title, bell, profile), so this one steps aside (18 Nov 2026). */}
+      <div className={IOS_PAGES.includes(activeSection) ? 'hidden sm:block' : ''}>
       <BMTopbar
         user={user}
         onLogout={logout}
         onMenuToggle={() => setMobileOpen(o => !o)}
         showMenu={mobileOpen}
       />
+      </div>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden justify-center">
@@ -134,7 +140,7 @@ export default function BMPortal() {
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             <BMInfoStrip user={user} />
             {/* Room at the bottom on phones for the bottom bar. */}
-            <div className="flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0">
+            <div className="flex-1 overflow-y-auto pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:pb-0">
               <div key={activeSection} className="animate-pageFade">
 <ErrorBoundary key={activeSection} onBack={() => setActiveSection('overview')}>{renderContent()}</ErrorBoundary>
               </div>

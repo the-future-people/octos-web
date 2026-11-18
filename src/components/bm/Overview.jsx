@@ -6,6 +6,8 @@ import NewJobModal from './NewJobModal'
 import NewCustomerModal from './NewCustomerModal'
 import StrandedSheetsCard from './StrandedSheetsCard'
 import RecoverSheetModal from './RecoverSheetModal'
+import OverviewPhone from './OverviewPhone'
+import usePhone from '../../hooks/usePhone'
 
 function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -88,6 +90,8 @@ export default function Overview({ onNavigate }) {
   const [showNewJob,      setShowNewJob]      = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [recoveringSheet, setRecoveringSheet] = useState(null)
+  // On a phone, the iOS-style Overview (18 Nov 2026); the same figures.
+  const phone = usePhone()
 
   const { data: summaryData } = useQuery({
     queryKey: ['todaySummary'],
@@ -144,14 +148,8 @@ export default function Overview({ onNavigate }) {
   const pickupGlow     = (workload?.ready_for_pickup ?? 0) > 0 ? 'amber' : 'none'
   const feedbackGlow   = (workload?.awaiting_feedback ?? 0) > 0 ? 'blue' : 'none'
 
-  return (
-    <div className="p-5 sm:p-6 space-y-6">
-
-      {/* Days that never closed. Sits above everything else — an unclosed
-          sheet blocks the next day's float, so it cannot wait behind the
-          day's ordinary work. */}
-      <StrandedSheetsCard onRecover={setRecoveringSheet} />
-
+  const modals = (
+    <>
       {recoveringSheet && (
         <RecoverSheetModal
           sheet={recoveringSheet}
@@ -159,6 +157,42 @@ export default function Overview({ onNavigate }) {
           onSuccess={() => setRecoveringSheet(null)}
         />
       )}
+      {showNewJob && (
+        <NewJobModal
+          late={isPostClose}
+          held={isPostClose && cashierSignedOff}
+          onClose={() => setShowNewJob(false)}
+          onSuccess={() => setShowNewJob(false)}
+        />
+      )}
+      {showNewCustomer && (
+        <NewCustomerModal
+          onClose={() => setShowNewCustomer(false)}
+          onSuccess={() => setShowNewCustomer(false)}
+        />
+      )}
+    </>
+  )
+
+  if (phone) {
+    return (
+      <>
+        <OverviewPhone summary={summaryData} stats={stats} revenue={revenue} workload={workload}
+          loading={workloadLoading} onNavigate={onNavigate}
+          onNewJob={() => setShowNewJob(true)} onNewCustomer={() => setShowNewCustomer(true)}
+          stranded={<StrandedSheetsCard onRecover={setRecoveringSheet} />} />
+        {modals}
+      </>
+    )
+  }
+
+  return (
+    <div className="p-5 sm:p-6 space-y-6">
+
+      {/* Days that never closed. Sits above everything else — an unclosed
+          sheet blocks the next day's float, so it cannot wait behind the
+          day's ordinary work. */}
+      <StrandedSheetsCard onRecover={setRecoveringSheet} />
 
       {/* ── Hero Buttons ── */}
       <div className="grid grid-cols-2 gap-3">
@@ -360,21 +394,7 @@ export default function Overview({ onNavigate }) {
         )}
       </div>
 
-      {/* ── Modals ── */}
-      {showNewJob && (
-        <NewJobModal
-          late={isPostClose}
-          held={isPostClose && cashierSignedOff}
-          onClose={() => setShowNewJob(false)}
-          onSuccess={() => setShowNewJob(false)}
-        />
-      )}
-      {showNewCustomer && (
-        <NewCustomerModal
-          onClose={() => setShowNewCustomer(false)}
-          onSuccess={() => setShowNewCustomer(false)}
-        />
-      )}
+      {modals}
     </div>
   )
 }

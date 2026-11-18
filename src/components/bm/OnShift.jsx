@@ -71,7 +71,7 @@ function Panel({ anchor, data, onClose }) {
   const staff = data.staff || []
   return createPortal(
     <div ref={ref} role="dialog" aria-label="On shift"
-      className="animate-slideUp fixed z-50 rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl overflow-hidden"
+      className="animate-slideUp fixed z-[70] rounded-2xl border border-[var(--border)] bg-[var(--panel)] shadow-2xl overflow-hidden"
       style={{ ...pos, width: PANEL_W, maxHeight: 'min(70vh, 520px)' }}>
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
         <div>
@@ -111,7 +111,7 @@ function Panel({ anchor, data, onClose }) {
   )
 }
 
-export default function OnShift() {
+export default function OnShift({ light = false }) {
   const [open, setOpen] = useState(false)
   const anchor = useRef(null)
   const { data, isError } = useQuery({
@@ -132,6 +132,40 @@ export default function OnShift() {
 
   const off = staff.length - here.length
   const summary = [idle && `${idle} idle`, onBreak && `${onBreak} on break`, off && `${off} signed off`].filter(Boolean).join(' · ')
+
+  // On the phone's More sheet (18 Nov 2026): a white card like the rest of the sheet.
+  if (light) return (
+    <>
+      <button ref={anchor} onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="dialog"
+        className="w-full flex items-center gap-3 rounded-[16px] bg-white border border-black/[0.04] px-3.5 py-3 text-left
+          shadow-[0_2px_10px_rgba(17,24,39,0.04)] active:bg-black/[0.03]">
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-1.5 text-[16px] leading-[21px] font-medium text-[#1C1C1E]">
+            <span className="w-2 h-2 rounded-full bg-[#22C55E]" />{data.on} in now
+          </span>
+          <span className="block text-[12.5px] leading-[16px] text-[#8A8A8E] truncate">
+            {staff.length === 0 ? 'Nobody else in yet' : (summary || 'Everyone signed in is working')}
+          </span>
+        </span>
+        <span className="flex items-center">
+          {faces.map((p, i) => (
+            <span key={p.id} className="relative rounded-full"
+              style={{ marginLeft: i ? -8 : 0, zIndex: STACK - i, boxShadow: '0 0 0 2px #fff', opacity: p.state === 'off' ? 0.55 : 1 }}>
+              <Face person={p} size={30} dot={false} />
+            </span>
+          ))}
+          {more > 0 && (
+            <span className="relative grid place-items-center rounded-full bg-[#F1F1F3] text-[#52525B] text-[11px] font-bold"
+              style={{ width: 30, height: 30, marginLeft: -8, boxShadow: '0 0 0 2px #fff' }}>+{more}</span>
+          )}
+        </span>
+        <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C4C4C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 1l6 6-6 6" />
+        </svg>
+      </button>
+      {open && <Panel anchor={anchor} data={data} onClose={() => setOpen(false)} />}
+    </>
+  )
 
   // A dark tile, like Today's band, so who is here stands out from the menu (16 Nov 2026).
   return (

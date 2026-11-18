@@ -275,3 +275,43 @@ html.octos-desktop .octos-topbar { box-shadow: inset 0 -5px 0 #E3000F; }
 
 /* A screen that takes the whole phone (an open chat) hides the bottom bar (18 Nov 2026). */
 body[data-fullscreen] .octos-bottombar { display: none; }
+
+/* ── iOS look for phone pages (18 Nov 2026) ───────────────────────────────
+   The phone's own font (San Francisco on an iPhone), Apple's grouped
+   background, white cells, hairline separators and translucent bars.
+   Used only by the phone versions of pages (src/components/ios). */
+.ios {
+  --ios-bg: #F2F2F7;
+  --ios-cell: #FFFFFF;
+  --ios-sep: rgba(60, 60, 67, 0.2);
+  --ios-label: #000000;
+  --ios-secondary: rgba(60, 60, 67, 0.6);
+  --ios-tertiary: rgba(60, 60, 67, 0.3);
+  --ios-fill: rgba(120, 120, 128, 0.12);
+  --ios-bar: rgba(242, 242, 247, 0.97);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  background: var(--ios-bg);
+  color: var(--ios-label);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+:is(.dark, [data-theme="dark"]) .ios {
+  --ios-bg: #000000;
+  --ios-cell: #1C1C1E;
+  --ios-sep: rgba(84, 84, 88, 0.65);
+  --ios-label: #FFFFFF;
+  --ios-secondary: rgba(235, 235, 245, 0.6);
+  --ios-tertiary: rgba(235, 235, 245, 0.3);
+  --ios-fill: rgba(118, 118, 128, 0.24);
+  --ios-bar: rgba(10, 10, 10, 0.78);
+}
+.ios-bar {
+  background: var(--ios-bar);
+  -webkit-backdrop-filter: saturate(120%) blur(20px);
+  backdrop-filter: saturate(120%) blur(20px);
+  box-shadow: 0 0.5px 0 var(--ios-sep);
+}
+.ios-num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+/* A row's separator starts after its icon, as in Settings. */
+.ios-row + .ios-row .ios-row-body { box-shadow: inset 0 0.5px 0 var(--ios-sep); }
+.ios-press:active { background: var(--ios-fill); }

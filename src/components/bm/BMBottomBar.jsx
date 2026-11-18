@@ -12,6 +12,13 @@ import useInboxBadge from '../../hooks/useInboxBadge'
 
 const PRIMARY = ['overview', 'jobs', 'inbox', 'proformas']
 
+// Overview is a house on the phone's bar (Khofi's reference, 18 Nov 2026).
+const HOME_ICON = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+    <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />
+  </svg>
+)
+
 const MORE_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
@@ -21,14 +28,13 @@ const MORE_ICON = (
 function Tab({ icon, label, on, onClick, badge }) {
   return (
     <button onClick={onClick} aria-current={on ? 'page' : undefined}
-      className={`relative flex-1 flex flex-col items-center justify-center gap-1 h-14 select-none
-        ${on ? 'text-[var(--text)]' : 'text-[var(--text-3)]'}`}>
-      {on && <span className="absolute top-0 h-[3px] w-8 rounded-b-full bg-[#CC0000]" aria-hidden="true" />}
-      <span className={`relative [&>svg]:w-[22px] [&>svg]:h-[22px] ${on ? '[&>svg]:stroke-[2.3]' : ''}`}>
+      className={`relative flex-1 flex flex-col items-center justify-center gap-1 h-[62px] select-none
+        ${on ? 'text-[#D70015]' : 'text-[#6E6E73]'}`}>
+      <span className={`relative [&>svg]:w-[25px] [&>svg]:h-[25px] ${on ? '[&>svg]:stroke-[2.4] [&_path]:fill-current [&_path]:fill-opacity-15' : '[&>svg]:stroke-[1.8]'}`}>
         {icon}
         {badge}
       </span>
-      <span className={`text-[10.5px] leading-none ${on ? 'font-bold' : 'font-medium'}`}>{label}</span>
+      <span className={`text-[11px] leading-none ${on ? 'font-bold' : 'font-medium'}`}>{label}</span>
     </button>
   )
 }
@@ -36,10 +42,80 @@ function Tab({ icon, label, on, onClick, badge }) {
 function InboxBadge({ unread = 0, needs = 0 }) {
   if (!unread && !needs) return null
   return (
-    <span className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#CC0000] text-white
-      text-[10px] font-bold grid place-items-center ring-2 ring-[var(--panel)] ${needs ? 'octos-pulse' : ''}`}>
+    <span className={`absolute -top-1 -right-3 min-w-[18px] h-[18px] px-[5px] rounded-full bg-[#FF3B30] text-white
+      text-[12px] font-medium grid place-items-center ${needs ? 'octos-pulse' : ''}`}>
       {needs ? '!' : unread > 99 ? '99+' : unread}
     </span>
+  )
+}
+
+// The "More" sheet, drawn to match the Overview (18 Nov 2026): a light grey
+// sheet, the pages as white tiles in their groups (Khofi chose tiles over a
+// list: everything on one screen), colour only in the small icon squares.
+const TILE = {
+  daysheet:    ['#DCE9FF', '#2563EB'],
+  notes:       ['#F1F1F3', '#52525B'],
+  performance: ['#D3F2DE', '#16A34A'],
+  catalogue:   ['#E7DCFF', '#7C3AED'],
+  staff:       ['#DCE9FF', '#2563EB'],
+  inventory:   ['#FFEDB8', '#D97706'],
+  customers:   ['#D3F2DE', '#16A34A'],
+  reports:     ['#F1F1F3', '#52525B'],
+}
+
+function Tile({ id, icon, size = 38 }) {
+  const [bg, ink] = TILE[id] || TILE.notes
+  return (
+    <span className="grid place-items-center shrink-0 rounded-[9px] [&>svg]:w-[18px] [&>svg]:h-[18px]"
+      style={{ width: size, height: size, background: bg, color: ink }}>{icon}</span>
+  )
+}
+
+function MoreSheet({ sections, active, onGo, onClose }) {
+  const groups = sections
+    .map(s => ({ title: s.group, items: s.items.filter(i => !PRIMARY.includes(i.id) && i.id !== 'overview') }))
+    .filter(g => g.items.length)
+  return (
+    <div className="sm:hidden fixed inset-0 z-[60]" role="dialog" aria-label="More pages">
+      <div className="absolute inset-0 bg-black/30 animate-fadeIn" onClick={onClose} />
+      <div className="ios absolute inset-x-0 bottom-0 rounded-t-[22px] shadow-2xl animate-slideUp max-h-[88dvh] overflow-y-auto"
+        style={{ background: '#F2F2F7', paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
+        <div className="flex justify-center pt-2"><span className="w-9 h-[5px] rounded-full bg-black/15" aria-hidden="true" /></div>
+        <div className="flex items-center justify-between px-5 pt-2 pb-1">
+          <h2 className="text-[22px] font-bold tracking-[-0.01em] text-[#111]">More</h2>
+          <button onClick={onClose} aria-label="Close"
+            className="w-8 h-8 rounded-full bg-black/[0.06] grid place-items-center text-[#6E6E73]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {groups.map(g => (
+          <section key={g.title} className="px-4 pt-3">
+            <div className="px-1 pb-1.5 text-[12.5px] font-semibold uppercase tracking-[0.04em] text-[#8A8A8E]">
+              {g.title.charAt(0) + g.title.slice(1).toLowerCase()}
+            </div>
+            <div className="grid grid-cols-3 gap-2.5">
+              {g.items.map(item => (
+                <button key={item.id} onClick={() => onGo(item.id)}
+                  className={`flex flex-col items-center justify-center gap-2 h-[92px] rounded-[16px] bg-white px-1 text-center
+                    shadow-[0_2px_10px_rgba(17,24,39,0.04)] border active:scale-[0.97] transition-transform
+                    ${active === item.id ? 'border-[#D70015]/40' : 'border-black/[0.04]'}`}>
+                  <Tile id={item.id} icon={ICONS[item.icon]} />
+                  <span className="text-[13px] font-semibold leading-tight text-[#1C1C1E]">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <section className="px-4 pt-5">
+          <div className="px-1 pb-1.5 text-[12.5px] font-semibold uppercase tracking-[0.04em] text-[#8A8A8E]">On shift</div>
+          <OnShift light />
+        </section>
+      </div>
+    </div>
   )
 }
 
@@ -48,18 +124,17 @@ export default function BMBottomBar({ sections, active, onNavigate }) {
   const badge = useInboxBadge()
   const items = sections.flatMap(s => s.items)
   const primary = PRIMARY.map(id => items.find(i => i.id === id)).filter(Boolean)
-  const rest = items.filter(i => !PRIMARY.includes(i.id))
   const go = id => { setMore(false); onNavigate(id) }
   const onMore = !PRIMARY.includes(active)
 
   return (
     <>
       <nav aria-label="Pages"
-        className="octos-bottombar sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[var(--panel)] border-t border-[var(--border)]
-          flex shadow-[0_-4px_16px_rgba(0,0,0,0.04)]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        className="octos-bottombar ios sm:hidden fixed inset-x-3 z-40 flex px-1 rounded-[26px] !bg-white/95
+          backdrop-blur-xl shadow-[0_8px_30px_rgba(17,24,39,0.12)] border border-black/[0.04]"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}>
         {primary.map(item => (
-          <Tab key={item.id} icon={ICONS[item.icon]} label={item.label} on={active === item.id && !more}
+          <Tab key={item.id} icon={item.id === 'overview' ? HOME_ICON : ICONS[item.icon]} label={item.label} on={active === item.id && !more}
             onClick={() => go(item.id)}
             badge={item.id === 'inbox' ? <InboxBadge {...badge} /> : null} />
         ))}
@@ -67,27 +142,7 @@ export default function BMBottomBar({ sections, active, onNavigate }) {
       </nav>
 
       {more && createPortal(
-        <div className="sm:hidden fixed inset-0 z-[60]" role="dialog" aria-label="More pages">
-          <div className="absolute inset-0 bg-black/35 animate-fadeIn" onClick={() => setMore(false)} />
-          <div className="absolute inset-x-0 bottom-0 bg-[var(--panel)] rounded-t-[22px] shadow-2xl animate-slideUp
-            max-h-[85dvh] overflow-y-auto"
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}>
-            <div className="flex justify-center pt-2.5 pb-1">
-              <span className="w-10 h-1.5 rounded-full bg-[var(--border)]" aria-hidden="true" />
-            </div>
-            <div className="px-4 pt-1 pb-3 grid grid-cols-3 gap-2">
-              {rest.map(item => (
-                <button key={item.id} onClick={() => go(item.id)}
-                  className={`flex flex-col items-center justify-center gap-2 h-[84px] rounded-2xl text-center px-1
-                    ${active === item.id ? 'bg-[var(--text)] text-[var(--panel)]' : 'bg-[var(--bg)] text-[var(--text)]'}`}>
-                  <span className="[&>svg]:w-[22px] [&>svg]:h-[22px]">{ICONS[item.icon]}</span>
-                  <span className="text-[12px] font-semibold leading-tight">{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="px-2"><OnShift /></div>
-          </div>
-        </div>,
+        <MoreSheet sections={sections} active={active} onGo={go} onClose={() => setMore(false)} />,
         document.body,
       )}
     </>
