@@ -6,11 +6,8 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import client from '../../api/client'
-import { createInvoice, getInvoicePdfUrl, sendInvoice } from '../../api/bm'
-import { fileQuery, invoicesQuery } from './jobFileQuery'
-import { saveFile } from '../../api/saveFile'
+import { getInvoicePdfUrl } from '../../api/bm'
+import { download, printReceipt, useJobFile } from './jobFileQuery'
 import DiscountPanel from './DiscountPanel'
 import { useAuth } from '../../context/AuthContext'
 import { mayDiscount } from '../../api/discounts'
@@ -47,19 +44,6 @@ const TAG_TONES = {
   'One side': 'bg-indigo-50 text-indigo-800 border-indigo-200', 'Two sides': 'bg-sky-50 text-sky-800 border-sky-200',
 }
 
-async function download(path, filename) {
-  const { data } = await client.get(path, { responseType: 'blob' })
-  await saveFile(filename, data)
-}
-
-async function printReceipt(id) {
-  const { data } = await client.get(`/api/v1/finance/receipts/${id}/thermal/`)
-  const win = window.open('', '_blank', 'width=400,height=600')
-  if (!win) return
-  win.document.write(`<html><head><title>Receipt</title><style>body{font-family:'Courier New',monospace;font-size:12px;white-space:pre;margin:10px;}</style></head><body>${(data.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</body></html>`)
-  win.document.close(); win.focus(); win.print(); win.close()
-}
-
 function Fact({ label, value, sub }) {
   return (
     <div className="rounded-xl bg-[var(--bg)] px-3 py-2.5 min-w-0">
@@ -81,44 +65,11 @@ function Button({ icon, children, onClick, dark, disabled }) {
 }
 
 export default function JobFile({ jobId, onClose, onOpenChat }) {
-  const queryClient = useQueryClient()
   const [tab, setTab] = useState('order')
-  const [note, setNote] = useState({ text: '', bad: false })
   // Lowering the price before any payment (17 Nov 2026).
   const [pricing, setPricing] = useState(false)
   const { user } = useAuth()
-  const say = (text, bad = false) => setNote({ text, bad })
-
-  const { data: file, isLoading, error } = useQuery({ ...fileQuery(jobId), enabled: !!jobId })
-  const { data: invData } = useQuery({ ...invoicesQuery(jobId), enabled: !!jobId })
-  const invoices = Array.isArray(invData) ? invData : (invData?.results || [])
-  const invoice = invoices[0] || null
-
-  const fail = err => say(err?.response?.data?.detail || 'That did not work. Try again.', true)
-  const sendReceipt = useMutation({
-    mutationFn: id => client.post(`/api/v1/finance/receipts/${id}/send-whatsapp/`),
-    onSuccess: r => { say(r.data?.detail || 'Receipt sent on WhatsApp.'); queryClient.invalidateQueries({ queryKey: ['job-file', jobId] }) },
-    onError: fail,
-  })
-  const makeInvoice = useMutation({
-    mutationFn: () => createInvoice({
-      job_id: jobId, invoice_type: 'PROFORMA', delivery_channel: 'DOWNLOAD',
-      bill_to_name: file?.owner?.name || '', bill_to_phone: file?.owner?.phone || '',
-      bill_to_email: '', bill_to_company: '', bm_note: '',
-    }),
-    onSuccess: () => { say('Invoice generated.'); queryClient.invalidateQueries({ queryKey: ['job-invoices', jobId] }) },
-    onError: fail,
-  })
-  const sendInv = useMutation({
-    mutationFn: id => sendInvoice(id),
-    onSuccess: r => { say(r?.data?.detail || 'Invoice sent.'); queryClient.invalidateQueries({ queryKey: ['job-invoices', jobId] }) },
-    onError: fail,
-  })
-  const remind = useMutation({
-    mutationFn: () => client.post(`/api/v1/jobs/${jobId}/remind/`),
-    onSuccess: r => { say(r.data?.detail || 'Reminder sent.'); queryClient.invalidateQueries({ queryKey: ['job-file', jobId] }) },
-    onError: fail,
-  })
+  const { file, isLoading, error, invoice, note, fail, sendReceipt, makeInvoice, sendInv, remind } = useJobFile(jobId)
 
   if (!jobId) return null
   const latest = file?.payments?.[file.payments.length - 1]

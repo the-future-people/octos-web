@@ -315,3 +315,10 @@ body[data-fullscreen] .octos-bottombar { display: none; }
 /* A row's separator starts after its icon, as in Settings. */
 .ios-row + .ios-row .ios-row-body { box-shadow: inset 0 0.5px 0 var(--ios-sep); }
 .ios-press:active { background: var(--ios-fill); }
+/* A page pushed in from the right, as iOS opens a row (18 Nov 2026). */
+@keyframes iosPush {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.ios-push { animation: iosPush 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .ios-push { animation: none; } }

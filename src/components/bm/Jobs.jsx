@@ -1,17 +1,20 @@
-﻿// src/components/bm/Jobs.jsx
+// src/components/bm/Jobs.jsx
 import JobFile from './JobFile'
 import { usePrefetchJobFile } from './jobFileQuery'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getJobs, getJobStats, getJobReceipt, sendReceiptWhatsApp } from '../../api/bm'
 import client from '../../api/client'
+import { lifecycleState, serviceSummary } from './jobLifecycle'
+import JobsPhone from './JobsPhone'
+import usePhone from '../../hooks/usePhone'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
 
 function timeAgo(iso) {
-  if (!iso) return 'â€”'
+  if (!iso) return '—'
   const diff = Math.floor((Date.now() - new Date(iso)) / 60000)
   if (diff < 1)  return 'Just now'
   if (diff < 60) return `${diff}m ago`
@@ -24,27 +27,6 @@ function toTitleCase(str) {
   return (str || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-/**
- * Job titles are joined and truncated at creation, so a long job can
- * lose services twice over — once to the "+N more" baked into the
- * title, again to CSS truncation. Line items are the real record, so
- * read those and collapse repeats: two of the same service is "×2",
- * not the same words printed twice.
- */
-function serviceSummary(job) {
-  const items = job.line_items || []
-  if (!items.length) return job.title || '—'
-
-  const counts = new Map()
-  for (const it of items) {
-    const name = it.service_name || it.label || 'Service'
-    counts.set(name, (counts.get(name) || 0) + 1)
-  }
-
-  return [...counts.entries()]
-    .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
-    .join(', ')
-}
 
 const STATUS_CONFIG = {
   DRAFT:               { label: 'Draft',             bg: 'bg-zinc-100',    text: 'text-zinc-600'    },
@@ -74,63 +56,6 @@ const TYPE_CONFIG = {
   DESIGN:     { label: 'Design',     color: 'text-violet-700', bg: 'bg-violet-100' },
 }
 
-const WORK_LABELS = {
-  RECEIVED:      'Received',
-  IN_PRODUCTION: 'In production',
-  FINISHING:     'Finishing',
-  QUALITY_CHECK: 'Quality check',
-  DONE:          'Done',
-}
-
-/**
- * A job now holds three states at once. Rather than show three columns,
- * the badge answers one question — what is this job waiting on — by
- * precedence: halted beats unpaid beats unfinished beats uncollected.
- * The full picture lives in the detail view.
- */
-function lifecycleState(job) {
-  if (job.status === 'CANCELLED') return { label: 'Cancelled', bg: 'bg-red-100',  text: 'text-red-600'  }
-  if (job.status === 'DRAFT')     return { label: 'Draft',     bg: 'bg-zinc-100', text: 'text-zinc-600' }
-  if (job.status === 'INTAKE_HELD')
-    return { label: 'Intake held', bg: 'bg-amber-100', text: 'text-amber-700' }
-
-  const settled = job.payment_state === 'SETTLED'
-
-  if (job.is_halted) {
-    return { label: 'Halted', bg: 'bg-red-100', text: 'text-red-600', sub: 'Work stopped' }
-  }
-  if (job.work_state === 'DONE' && job.handover_state === 'AWAITING_COLLECTION') {
-    return {
-      label: 'Ready for pickup',
-      bg: 'bg-emerald-100', text: 'text-emerald-700',
-      sub: settled ? null : 'Balance outstanding',
-      subTone: settled ? null : 'text-red-600',
-    }
-  }
-  if (job.handover_state === 'OUT_FOR_DELIVERY') {
-    return { label: 'Out for delivery', bg: 'bg-blue-100', text: 'text-blue-700' }
-  }
-  if (job.handover_state === 'HANDED_OVER') {
-    return {
-      label: 'Handed over',
-      bg: 'bg-zinc-100', text: 'text-zinc-600',
-      sub: settled ? null : 'Balance outstanding',
-      subTone: settled ? null : 'text-red-600',
-    }
-  }
-  if (!settled) {
-    return {
-      label: 'Awaiting payment',
-      bg: 'bg-amber-100', text: 'text-amber-700',
-      sub: job.payment_state === 'DEPOSIT_PAID' ? 'Deposit paid' : null,
-    }
-  }
-  return {
-    label: 'In production',
-    bg: 'bg-violet-100', text: 'text-violet-700',
-    sub: WORK_LABELS[job.work_state] || null,
-  }
-}
 
 /**
  * One horizontal track per axis. The axes are independent — a job can be
@@ -288,7 +213,7 @@ function ReceiptsTab() {
                   <span className="text-[10px] text-[var(--text-3)] font-mono">
                     {r.created_at
                       ? new Date(r.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' })
-                      : 'â€”'}
+                      : '—'}
                   </span>
                 </div>
               </div>
@@ -334,7 +259,7 @@ function ReceiptsTab() {
                       {r.created_at ? new Date(r.created_at).toLocaleString('en-GH', {
                         day: 'numeric', month: 'short', year: 'numeric',
                         hour: '2-digit', minute: '2-digit'
-                      }) : 'â€”'}
+                      }) : '—'}
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
@@ -343,7 +268,7 @@ function ReceiptsTab() {
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-widest mb-2">Job</div>
-                  <div className="text-sm font-bold text-[var(--text)]">{r.job_title || 'â€”'}</div>
+                  <div className="text-sm font-bold text-[var(--text)]">{r.job_title || '—'}</div>
                   <div className="font-mono text-xs text-[var(--text-3)] mt-0.5">{r.job_number}</div>
                 </div>
                 {r.line_items?.length > 0 && (
@@ -404,8 +329,8 @@ function ReceiptsTab() {
                   {[
                     ['Customer',  r.customer_name || 'Walk-in'],
                     r.customer_phone ? ['Phone', r.customer_phone] : null,
-                    ['Cashier',   r.cashier_name  || 'â€”'],
-                    ['Attendant', r.intake_by_name || 'â€”'],
+                    ['Cashier',   r.cashier_name  || '—'],
+                    ['Attendant', r.intake_by_name || '—'],
                   ].filter(Boolean).map(([label, val]) => (
                     <div key={label} className="flex items-center justify-between border-b border-[var(--border)] pb-1.5 last:border-0 last:pb-0">
                       <span className="text-xs text-[var(--text-3)]">{label}</span>
@@ -469,6 +394,12 @@ const TYPE_FILTERS = [
 ]
 
 export default function Jobs({ focus = null, onOpenChat } = {}) {
+  // Phones get their own page (18 Nov 2026); Receipts keeps this one's for now.
+  if (usePhone()) return <JobsPhone focus={focus} onOpenChat={onOpenChat} receipts={<ReceiptsTab />} />
+  return <JobsComputer focus={focus} onOpenChat={onOpenChat} />
+}
+
+function JobsComputer({ focus, onOpenChat }) {
   const [tab, setTab] = useState('jobs')
   const [queue, setQueue] = useState('ALL')
   const [jobType, setJobType] = useState('ALL')
