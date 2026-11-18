@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/octos-tile.svg" />
     <meta name="theme-color" content="#080808" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: in the phone app, Octos runs to the screen's edges
+         and keeps clear of the notch with safe-area insets (18 Nov 2026). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Installable: "Add to Home Screen" opens Octos full screen, like an app. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Octos" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Octos</title>
   </head>
   <body>

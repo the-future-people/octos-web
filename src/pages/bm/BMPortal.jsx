@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import useBranchSocket from '../../hooks/useBranchSocket'
 import BMTopbar from '../../components/bm/BMTopbar'
 import BMSidebar from '../../components/bm/BMSidebar'
+import BMBottomBar from '../../components/bm/BMBottomBar'
 import BMInfoStrip from '../../components/bm/BMInfoStrip'
 import Overview from '../../components/bm/Overview'
 import DaySheet from '../../components/bm/DaySheet'
@@ -104,7 +105,8 @@ export default function BMPortal() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[var(--bg)]">
+    // 100dvh, not 100vh: on a phone the browser's own bars come and go (18 Nov 2026).
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-[var(--bg)]">
       <DailyGreeting />
 
       {/* Topbar */}
@@ -131,7 +133,8 @@ export default function BMPortal() {
           {/* Main */}
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             <BMInfoStrip user={user} />
-            <div className="flex-1 overflow-y-auto">
+            {/* Room at the bottom on phones for the bottom bar. */}
+            <div className="flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-0">
               <div key={activeSection} className="animate-pageFade">
 <ErrorBoundary key={activeSection} onBack={() => setActiveSection('overview')}>{renderContent()}</ErrorBoundary>
               </div>
@@ -144,6 +147,9 @@ export default function BMPortal() {
           meant to stop work, not wait until the manager happens to open
           the filing page. */}
       <WeeklyFilingBlock onGoToDaySheet={() => handleNav('daysheet')} />
+
+      {/* Phones: the pages along the bottom (18 Nov 2026). */}
+      <BMBottomBar sections={SECTIONS} active={activeSection} onNavigate={handleNav} />
 
     {reminder.hasReminder && (
         <ReminderModal

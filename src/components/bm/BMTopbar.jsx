@@ -82,7 +82,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   // ── Authentication check ───────────────────────────────────────────
   if (!user) {
     return (
-      <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
+      <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" style={{ paddingTop: 'env(safe-area-inset-top)' }} data-tauri-drag-region>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-center">
           <span className="text-sm text-[var(--text-3)]">
             Session expired — please sign in again
@@ -93,7 +93,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
   }
 
   return (
-    <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" data-tauri-drag-region>
+    <header className="octos-topbar bg-[var(--panel)] border-b border-[var(--border)] shrink-0" style={{ paddingTop: 'env(safe-area-inset-top)' }} data-tauri-drag-region>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between" data-tauri-drag-region>
 
         {/* ── Left section ────────────────────────────────────────── */}
@@ -102,7 +102,7 @@ export default function BMTopbar({ user, onLogout, onMenuToggle, showMenu }) {
             onClick={onMenuToggle}
             aria-label={showMenu ? 'Close menu' : 'Open menu'}
             aria-expanded={showMenu}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg
+            className="hidden sm:flex md:hidden w-8 h-8 items-center justify-center rounded-lg
               hover:bg-[var(--bg)] text-[var(--text-2)] transition-colors
               focus:outline-none focus:ring-2 focus:ring-[var(--text-3)]"
           >

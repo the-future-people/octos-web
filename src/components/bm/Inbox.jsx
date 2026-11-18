@@ -1017,7 +1017,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
   const taken = withPerson(conv)
   const mainButton = (
     <button type="button" onClick={() => (taken ? handBack : takeOver).mutate()} disabled={takeOver.isPending || handBack.isPending}
-      className="w-full h-[34px] px-3.5 rounded-lg text-[12.5px] font-semibold disabled:opacity-40"
+      className="w-full h-[34px] px-2.5 sm:px-3.5 rounded-lg text-[12.5px] font-semibold whitespace-nowrap disabled:opacity-40"
       style={taken ? { background: C.mintStrip, border: `1px solid ${C.mintBorder}`, color: C.mintIcon } : { background: '#FFFFFF', border: '1px solid #D1D7DB', color: theme.header.title }}>
       {taken ? 'Hand back to Octos' : 'Take over'}
     </button>
@@ -1034,7 +1034,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
         onDragOver={e => { e.preventDefault(); if (!resolved) setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); if (!resolved) addFiles(e.dataTransfer.files) }}>
-        <div className="flex items-center gap-2.5 px-4 py-2.5 border-b" style={{ background: theme.header.background, borderColor: theme.header.borderColor }}>
+        <div className="flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2.5 border-b" style={{ background: theme.header.background, borderColor: theme.header.borderColor }}>
           <button type="button" onClick={onBack} aria-label="All conversations" className="lg:hidden w-8 h-8 -ml-1 grid place-items-center rounded-lg"><I.back size={18} /></button>
           <Avatar c={conv} s={38} />
           <div className="flex-1 min-w-0 flex flex-col">
@@ -1044,8 +1044,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
           {!resolved && whatsapp && <div className="w-auto">{mainButton}</div>}
           {/* Record the job without leaving the chat (9 Nov 2026). */}
           <button type="button" onClick={() => setRecording(true)}
-            className="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: theme.accent }}>
-            <I.plus size={14} />Record a job
+            className="inline-flex items-center gap-1.5 h-[34px] px-2.5 sm:px-3.5 rounded-lg text-[13px] font-semibold text-white whitespace-nowrap" style={{ background: theme.accent }}>
+            <I.plus size={14} /><span className="hidden sm:inline">Record a job</span><span className="sm:hidden">Job</span>
           </button>
           {recording && (
 <ChatJobModal onClose={() => setRecording(false)} onSuccess={() => setRecording(false)}
@@ -1199,7 +1199,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved }) {
             </div>
             )}
             {error && <p className="m-0 text-xs" style={{ color: C.redText }}>{error}</p>}
-            <span className="text-[11px] text-[var(--text-3)]">Enter sends, Shift+Enter adds a line. Drop files here, or paste a screenshot.</span>
+            <span className="hidden sm:inline text-[11px] text-[var(--text-3)]">Enter sends, Shift+Enter adds a line. Drop files here, or paste a screenshot.</span>
           </div>
         )}
       </section>
@@ -1261,6 +1261,12 @@ export default function Inbox({ focus = null } = {}) {
   const [searchOpen, setSearchOpen] = useState(false)
   const searchBox = useRef(null)
   const [selectedId, setSelectedId] = useState(null)
+  // An open chat takes the whole phone: the bottom bar steps aside (18 Nov 2026).
+  useEffect(() => {
+    if (!selectedId) return undefined
+    document.body.dataset.fullscreen = 'chat'
+    return () => { delete document.body.dataset.fullscreen }
+  }, [selectedId])
   const [panel, setPanel] = useState(() => window.matchMedia(WIDE).matches)
   const [starting, setStarting] = useState(false)
   const [prefill, setPrefill] = useState(null)
@@ -1429,7 +1435,9 @@ export default function Inbox({ focus = null } = {}) {
           )}
         </section>
 
-        <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-1 min-w-0`}>
+        {/* On a phone an open chat fills the screen, like WhatsApp (18 Nov 2026). */}
+        <div className={`${selectedId ? 'flex max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:bg-[var(--panel)]' : 'hidden lg:flex'} flex-1 min-w-0`}
+          style={selectedId ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
           {selectedId
             ? <Thread key={selectedId} convId={selectedId} onBack={() => setSelectedId(null)} panel={panel} setPanel={setPanel}
                 onApproved={c => { setPrefill({ name: nameOf(c), phone: c.contact_phone }); setStarting(true) }} />

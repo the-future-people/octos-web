@@ -15,6 +15,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import usePhone from '../../hooks/usePhone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getServices, calculatePrice, createJob, getCustomers, getPromise, createProforma, issueProforma,
   getProformaDetail, reviseProforma } from '../../api/bm'
@@ -182,6 +183,9 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const [lateReason,    setLateReason]    = useState('')
   const [successJob,    setSuccessJob]    = useState(null)
   const [selected,      setSelected]      = useState(null)
+  // A phone shows one thing at a time: the services, the one being set up, or the cart (18 Nov 2026).
+  const phone = usePhone()
+  const [cartOpen,      setCartOpen]      = useState(false)
   const [selQty,        setSelQty]        = useState(1)
   const [selPages,      setSelPages]      = useState(1)
   const [selRingSize,   setSelRingSize]   = useState(null)
@@ -919,7 +923,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     return (
       <fieldset className="flex flex-col items-center">
         <legend className="text-[13px] font-bold mb-1.5 mx-auto text-center">Ring size</legend>
-        <div className="grid grid-cols-[repeat(7,66px)] gap-1.5">
+        <div className="grid grid-cols-4 sm:grid-cols-[repeat(7,66px)] gap-1.5">
           {(field.options || []).map(mm => {
             const on = parseInt(mm) === chosen
             return (
@@ -971,7 +975,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       {(versionsOf[selected.variant_of || selected.id] || []).length > 1 && (
         <fieldset className="flex flex-col items-center">
           <legend className="text-[13px] font-bold mb-1.5 mx-auto text-center">One side or both sides?</legend>
-          <div className="grid grid-cols-[repeat(2,190px)] gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-[repeat(2,190px)] gap-2">
             {versionsOf[selected.variant_of || selected.id].map(v => {
               const on = selected.id === v.id
               return (
@@ -995,7 +999,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       {isPassport(selected) && (
         <fieldset className="flex flex-col items-center">
           <legend className={`${LABEL} mx-auto text-center`}>Output</legend>
-          <div className="flex gap-2 w-[388px]">
+          <div className="flex gap-2 w-full sm:w-[388px]">
             {[['PRINT', 'Print'], ['PRINT_DIGITAL', 'Print + digital'], ['DIGITAL', 'Digital only']].map(([v, t]) => (
               <button key={v} type="button" onClick={() => setSelOutputMode(v)}
                       className={`flex-1 h-8 text-xs font-bold rounded-lg border ${selOutputMode === v ? 'bg-zinc-900 text-white border-transparent' : 'bg-white border-black/15'}`}>
@@ -1250,11 +1254,12 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
   const SCALE = 0.963
 
   const modal = createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-3 sm:p-5 animate-fadeIn">
-      <div className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1280px]"
-           style={{ zoom: SCALE, height: `${Math.round(screenH * 0.94 / SCALE)}px` }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-0 sm:p-5 animate-fadeIn">
+      <div className="relative bg-[var(--panel)] sm:rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden animate-slideUp max-w-[1280px]"
+           style={phone ? { height: '100dvh', paddingTop: 'env(safe-area-inset-top)' }
+                        : { zoom: SCALE, height: `${Math.round(screenH * 0.94 / SCALE)}px` }}>
 
-        <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-black/[0.07] shrink-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-6 py-3 border-b border-black/[0.07] shrink-0">
           <div className="flex items-center gap-3">
             <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white grid place-items-center"><Icon kind="plus" size={16} /></span>
             <span className="text-[17px] font-bold">{revise ? `Revise ${source?.proforma_number || 'proforma'}` : proforma ? 'New Proforma' : 'New Job'}</span>
@@ -1279,11 +1284,50 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
           </div>
         )}
 
-        <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[300px_1fr_280px] animate-unfold">
-          <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
-          <div className="p-4 overflow-y-auto min-h-0">{editor}</div>
-          <div className="p-3.5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
-        </div>
+        {phone ? (
+          // One pane at a time, and the cart as a bar along the bottom.
+          <div key={jobType} className="flex-1 min-h-0 flex flex-col animate-unfold">
+            {selected ? (
+              <div className="flex-1 overflow-y-auto min-h-0 p-4">
+                <button type="button" onClick={() => setSelected(null)}
+                        className="mb-3 inline-flex items-center gap-1 h-8 pr-2 text-[13px] font-semibold text-[var(--text-2)]">
+                  <span aria-hidden="true">‹</span> All services
+                </button>
+                {editor}
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 p-4 flex flex-col">{serviceList}</div>
+            )}
+            <button type="button" onClick={() => setCartOpen(true)}
+                    className="shrink-0 mx-3 mb-3 h-14 px-4 rounded-2xl bg-zinc-900 text-white flex items-center gap-3"
+                    style={{ marginBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}>
+              <Icon kind="cart" size={18} />
+              <span className="text-[14px] font-semibold">
+                {cart.length ? `Cart · ${cart.length} item${cart.length > 1 ? 's' : ''}` : 'Cart is empty'}
+              </span>
+              <span className="ml-auto text-[15px] font-bold tabular-nums">{fmt(cartTotal)}</span>
+              <span aria-hidden="true" className="text-white/60 text-lg leading-none">›</span>
+            </button>
+            {cartOpen && (
+              <div className="absolute inset-0 z-10 bg-[#fafaf9] flex flex-col animate-slideUp"
+                   style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                <div className="flex items-center gap-2 px-3 h-14 border-b border-black/[0.07] shrink-0">
+                  <button type="button" onClick={() => setCartOpen(false)}
+                          className="inline-flex items-center gap-1 h-9 px-2 text-[14px] font-semibold">
+                    <span aria-hidden="true">‹</span> Add more
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 p-4">{cartPanel}</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div key={jobType} className="flex-1 min-h-0 grid grid-cols-[300px_1fr_280px] animate-unfold">
+            <div className="p-4 border-r border-black/[0.07] min-h-0 flex flex-col">{serviceList}</div>
+            <div className="p-4 overflow-y-auto min-h-0">{editor}</div>
+            <div className="p-3.5 bg-[#fafaf9] border-l border-black/[0.07] min-h-0">{cartPanel}</div>
+          </div>
+        )}
       </div>
     </div>,
     document.body,

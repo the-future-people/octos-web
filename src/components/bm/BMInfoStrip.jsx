@@ -102,7 +102,8 @@ export default function BMInfoStrip({ user }) {
   const arrow = 'absolute top-0 bottom-0 w-8 grid place-items-center bg-[var(--panel)] text-[var(--text-3)] hover:text-[var(--text)] transition-colors'
 
   return (
-    <div className="bg-[var(--panel)] border-b border-[var(--border)] shrink-0">
+    // Not on phones (18 Nov 2026): the screen's height is better spent on the page.
+    <div className="hidden sm:block bg-[var(--panel)] border-b border-[var(--border)] shrink-0">
       <div className="max-w-6xl mx-auto relative">
         <div
           ref={scrollRef}
