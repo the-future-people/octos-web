@@ -187,7 +187,7 @@ export default function InvoicesTab() {
 
 // ── Invoice Create Modal — 4-step wizard ─────────────────────────────────────
 
-function InvoiceCreateModal({ onClose, onSuccess }) {
+export function InvoiceCreateModal({ onClose, onSuccess }) {
   const { user } = useAuth()
   const [step, setStep] = useState(1)
 

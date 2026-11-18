@@ -65,7 +65,10 @@ export function useJobFile(jobId) {
   })
   const makeInvoice = useMutation({
     mutationFn: () => createInvoice({
-      job_id: jobId, invoice_type: 'PROFORMA', delivery_channel: 'DOWNLOAD',
+      // A tax invoice for the job (18 Nov 2026): PROFORMA and DOWNLOAD are not
+      // choices the server takes, so the button always failed. Quotes are
+      // proformas now, in their own list.
+      job_id: jobId, invoice_type: 'TAX', delivery_channel: 'WHATSAPP',
       bill_to_name: file?.owner?.name || '', bill_to_phone: file?.owner?.phone || '',
       bill_to_email: '', bill_to_company: '', bm_note: '',
     }),

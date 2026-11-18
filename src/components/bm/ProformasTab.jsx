@@ -11,6 +11,8 @@ import { useAuth } from '../../context/AuthContext'
 import { mayDiscount } from '../../api/discounts'
 import InvoicesTab from './InvoicesTab'
 import { saveFile } from '../../api/saveFile'
+import usePhone from '../../hooks/usePhone'
+import InvoicesPhone from './InvoicesPhone'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -63,7 +65,13 @@ const FILTERS = [
  * separate lists and different enough that folding them into one table
  * would compromise both.
  */
-export default function ProformasTab({ onOpenDetail }) {
+export default function ProformasTab(props) {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <InvoicesPhone />
+  return <ProformasComputer {...props} />
+}
+
+function ProformasComputer({ onOpenDetail }) {
   const queryClient = useQueryClient()
   const [docTab, setDocTab] = useState('proformas')
   const [showCreate, setShowCreate] = useState(false)
