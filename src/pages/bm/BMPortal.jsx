@@ -137,10 +137,10 @@ export default function BMPortal() {
           />
 
           {/* Main */}
-          <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Phones: the page stops above the bottom bar, so nothing scrolls behind it (18 Nov 2026). */}
+          <main className="flex-1 flex flex-col overflow-hidden min-w-0 pb-[calc(62px+env(safe-area-inset-bottom))] sm:pb-0">
             <BMInfoStrip user={user} />
-            {/* Room at the bottom on phones for the bottom bar. */}
-            <div className="flex-1 overflow-y-auto pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:pb-0">
+            <div className="flex-1 overflow-y-auto pb-4 sm:pb-0">
               <div key={activeSection} className="animate-pageFade">
 <ErrorBoundary key={activeSection} onBack={() => setActiveSection('overview')}>{renderContent()}</ErrorBoundary>
               </div>

@@ -99,16 +99,19 @@ function Work({ tint, icon, title, detail, value, urgent, onClick }) {
   )
 }
 
-function Fact({ icon, top, bottom, children }) {
+// One short word per fact (Khofi, 18 Nov 2026): "Accra", not "Accra Metropolitan"
+// cut off; "South", not "Southern Belt". The full name shows on a long press.
+const COMPASS = { northern: 'North', southern: 'South', eastern: 'East', western: 'West' }
+const short = name => {
+  const word = (name || '').trim().split(/\s+/)[0]
+  return COMPASS[word.toLowerCase()] || word || '—'
+}
+
+function Fact({ icon, title, children }) {
   return (
-    <div className="flex-1 min-w-0 flex items-center gap-1.5 px-2 [&+&]:border-l [&+&]:border-black/[0.06] last:flex-[1.2]">
-      <Svg d={icon} size={18} width={1.9} className="text-[#3A3A3C] shrink-0" />
-      {children || (
-        <span className="min-w-0 leading-[17px]">
-          <span className="block text-[12px] font-medium text-[#1C1C1E] truncate">{top}</span>
-          <span className="block text-[12px] font-semibold text-[#1C1C1E] truncate">{bottom}</span>
-        </span>
-      )}
+    <div title={title} className="flex-auto min-w-0 flex items-center justify-center gap-1.5 px-1 [&+&]:border-l [&+&]:border-black/[0.06]">
+      <Svg d={icon} size={17} width={1.9} className="text-[#3A3A3C] shrink-0" />
+      <span className="min-w-0 flex items-center text-[13.5px] font-semibold text-[#1C1C1E] whitespace-nowrap">{children}</span>
     </div>
   )
 }
@@ -164,18 +167,17 @@ export default function OverviewPhone({ stats, revenue, workload, loading, onNav
 
       {stranded && <div className="px-4 mt-3 empty:hidden">{stranded}</div>}
 
-      <div className="mx-4 mt-3.5 h-[56px] rounded-[16px] bg-white flex items-center shadow-[0_3px_12px_rgba(17,24,39,0.05)]
+      <div className="mx-4 mt-3.5 h-[46px] rounded-[16px] bg-white flex items-center shadow-[0_3px_12px_rgba(17,24,39,0.05)]
         border border-black/[0.03]">
-        <Fact icon={I.pin} top={branch.region_name || '—'} bottom="Region" />
-        <Fact icon={I.layers} top={branch.belt_name || '—'} bottom="Belt" />
-        <Fact icon={I.calendar} top={now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} bottom={String(now.getFullYear())} />
-        <Fact icon={I.gauge}>
-          <span className="min-w-0 leading-[17px]">
-            <span className="block text-[11px] text-[#6E6E73] whitespace-nowrap">Floor load</span>
-            <span className="inline-block mt-0.5 px-2 py-[1px] rounded-full text-[12px] font-bold"
-              style={{ background: floorPill[0], color: floorPill[1] }}>
-              {floor?.state === 'closed' ? 'Closed' : floor?.percent != null ? `${floor.percent}%` : '—'}
-            </span>
+        <Fact icon={I.pin} title={branch.region_name ? `${branch.region_name} region` : 'Region'}>{short(branch.region_name)}</Fact>
+        <Fact icon={I.layers} title={branch.belt_name ? `${branch.belt_name} belt` : 'Belt'}>{short(branch.belt_name)}</Fact>
+        <Fact icon={I.calendar} title={now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}>
+          {now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+        </Fact>
+        <Fact icon={I.gauge} title="Floor load: machine work waiting, against the time left today">
+          Load
+          <span className="ml-1 shrink-0 px-1.5 py-[1px] rounded-full text-[12px] font-bold" style={{ background: floorPill[0], color: floorPill[1] }}>
+            {floor?.state === 'closed' ? 'Closed' : floor?.percent != null ? `${floor.percent}%` : '—'}
           </span>
         </Fact>
       </div>

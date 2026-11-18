@@ -130,9 +130,8 @@ export default function BMBottomBar({ sections, active, onNavigate }) {
   return (
     <>
       <nav aria-label="Pages"
-        className="octos-bottombar ios sm:hidden fixed inset-x-3 z-40 flex px-1 rounded-[26px] !bg-white/95
-          backdrop-blur-xl shadow-[0_8px_30px_rgba(17,24,39,0.12)] border border-black/[0.04]"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}>
+        className="octos-bottombar ios sm:hidden fixed inset-x-0 bottom-0 z-40 flex px-1 !bg-white border-t border-black/[0.08]"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {primary.map(item => (
           <Tab key={item.id} icon={item.id === 'overview' ? HOME_ICON : ICONS[item.icon]} label={item.label} on={active === item.id && !more}
             onClick={() => go(item.id)}
