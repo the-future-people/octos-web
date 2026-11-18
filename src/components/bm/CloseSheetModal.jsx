@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { closeSheet } from '../../api/bm'
 import { resolveSignOffItem } from '../../api/attendant'
 import client from '../../api/client'
+import usePhone from '../../hooks/usePhone'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -95,8 +96,26 @@ function AttendantItem({ item, sheetId }) {
   )
 }
 
+// The phone's section title and its round tick (18 Nov 2026).
+function PhoneTitle({ children, extra }) {
+  return (
+    <div className="px-5 pt-6 pb-2 flex items-end justify-between gap-3">
+      <h2 className="m-0 text-[20px] leading-[25px] font-bold text-[#111]">{children}</h2>{extra}
+    </div>
+  )
+}
+function PhoneTick({ on }) {
+  return (
+    <span className="w-[22px] h-[22px] rounded-full grid place-items-center shrink-0"
+      style={on ? { background: '#22C55E', color: '#FFFFFF' } : { border: '2px solid #D1D1D6' }}>
+      {on && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+    </span>
+  )
+}
+
 export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
   const queryClient = useQueryClient()
+  const phone = usePhone()
   const [floats, setFloats] = useState({})
   const [notes,  setNotes]  = useState('')
   const [ack,    setAck]    = useState(false)
@@ -168,6 +187,249 @@ export default function CloseSheetModal({ sheetId, onClose, onSuccess }) {
       })),
       bm_notes: notes,
     })
+  }
+
+  // ── The phone (18 Nov 2026), in the Overview's look ─────────────
+  // One page: what must be true to close, the day's money and jobs, each
+  // cashier and attendant, anything to note, tomorrow's floats with − and +,
+  // and a switch for the Branch Manager's word. Close sits at the foot.
+  if (phone) {
+    const RED = '#D70015'
+    const card = 'mx-4 rounded-[16px] bg-white border border-black/[0.04] shadow-[0_3px_12px_rgba(17,24,39,0.05)]'
+    const conditions = [
+      ['Cashier signed off', allSignedOff], ['Attendants signed off', attendantsSignedOff],
+      ['Tomorrow’s floats set', floatsValid], ['You have checked the report', ack],
+    ]
+    const notable = [
+      ...(jobs.pending_list || []).map(j => ({ key: `p${j.id}`, kind: 'Waiting for payment', title: `${j.job_number} · ${j.title}`, sub: j.intake_by_name, amount: j.estimated_cost, tone: '#B45309' })),
+      ...pettyList.map(p => ({ key: `c${p.id}`, kind: 'Petty cash', title: p.reason, sub: `${p.recorded_by_name} · ${fmtTime(p.created_at)}`, amount: p.amount, tone: RED })),
+      ...creditList.map((c, i) => ({ key: `k${i}`, kind: 'On credit', title: `${c.job_number} · ${c.customer_name}`, sub: c.title, amount: c.estimated_cost, tone: '#7C3AED' })),
+    ]
+    const stepFloat = (id, d) => {
+      const v = Math.min(100, Math.max(20, (parseFloat(getFloat(id)) || 100) + d))
+      setFloat(id, String(v))
+    }
+    const dateWords = meta.date ? new Date(`${meta.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+
+    return createPortal(
+      <div className="ios fixed inset-0 z-[9999] flex flex-col animate-slideUp" style={{ background: '#F6F6F8' }}>
+        <div className="ios-bar shrink-0" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="h-[50px] px-2 grid grid-cols-[1fr_auto_1fr] items-center">
+            <button type="button" onClick={onClose} className="justify-self-start text-[17px] text-[#D70015] px-2">Cancel</button>
+            <span className="text-[16px] font-semibold text-[#111]">End of day</span><span />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pb-6">
+          <div className="px-4 pt-3">
+            <h1 className="m-0 text-[26px] leading-[32px] font-extrabold tracking-[-0.02em] text-[#111]">{dateWords}</h1>
+            <div className="text-[14px] text-[#6E6E73] tabular-nums">{meta.sheet_number} · {meta.branch}</div>
+          </div>
+
+          {isLoading && !eod ? (
+            <div className="px-4 pt-4 space-y-3 animate-pulse" aria-hidden="true">
+              {[0, 1, 2].map(i => <div key={i} className="h-[120px] rounded-[16px] bg-black/[0.05]" />)}
+            </div>
+          ) : (<>
+            {/* What must be true to close */}
+            <div className={`${card} mt-4 divide-y divide-black/[0.06]`}>
+              {conditions.map(([label, on]) => (
+                <div key={label} className="flex items-center gap-3 px-4 py-2.5">
+                  <PhoneTick on={on} /><span className={`text-[15px] ${on ? 'text-[#1C1C1E]' : 'text-[#B91C1C] font-medium'}`}>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* The money */}
+            <PhoneTitle>Money</PhoneTitle>
+            <div className={card}>
+              <div className="px-4 pt-3.5 pb-3">
+                <div className="text-[13px] font-medium text-[#6E6E73]">Collected</div>
+                <div className="text-[30px] leading-[36px] font-extrabold tracking-[-0.02em] tabular-nums text-[#111]">{fmt(revenue.total)}</div>
+              </div>
+              <div className="grid grid-cols-3 border-t border-black/[0.06]">
+                {[['Cash', revenue.cash, '#15803D'], ['MoMo', revenue.momo, '#B45309'], ['Card', revenue.pos, '#2563EB']].map(([label, v, dot], i) => (
+                  <div key={label} className={`px-3.5 py-2.5 min-w-0 ${i ? 'border-l border-black/[0.06]' : ''}`}>
+                    <span className="flex items-center gap-1.5 text-[12.5px] text-[#6E6E73]"><span className="w-2 h-2 rounded-full" style={{ background: dot }} />{label}</span>
+                    <span className="block mt-0.5 text-[14.5px] font-semibold tabular-nums truncate">{fmt(v)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-black/[0.06] divide-y divide-black/[0.06]">
+                {[['Credit given', revenue.credit_issued], ['Credit paid back', revenue.credit_settled], ['Petty cash out', revenue.petty_cash_out], ['Cash in the till', revenue.net_cash_in_till, true]].map(([label, v, strong]) => (
+                  <div key={label} className="flex items-center justify-between px-4 py-2.5">
+                    <span className={`text-[15px] ${strong ? 'font-semibold' : ''}`}>{label}</span>
+                    <span className={`tabular-nums ${strong ? 'text-[16px] font-bold' : 'text-[15px] font-semibold'}`}>{fmt(v)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* The jobs */}
+            <PhoneTitle>Jobs</PhoneTitle>
+            <div className={`${card} grid grid-cols-4`}>
+              {[['Total', jobs.total, '#111'], ['Done', jobs.completed, '#111'],
+                ['Pending', jobs.pending_payment, jobs.pending_payment > 0 ? RED : '#111'], ['Cancelled', jobs.cancelled, '#111']].map(([label, v, tone], i) => (
+                <div key={label} className={`px-3 py-3 ${i ? 'border-l border-black/[0.06]' : ''}`}>
+                  <div className="text-[12px] text-[#6E6E73]">{label}</div>
+                  <div className="text-[22px] leading-[28px] font-bold tabular-nums" style={{ color: tone }}>{v ?? '—'}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* The cashiers */}
+            <PhoneTitle>Cashiers</PhoneTitle>
+            {cashierActivity.length === 0 ? <p className="m-0 mx-5 text-[14.5px] text-[#8A8A8E]">No cashier activity today.</p> : (
+              <div className="space-y-3">
+                {cashierActivity.map(c => {
+                  const off = parseFloat(c.variance || 0) !== 0
+                  return (
+                    <div key={c.cashier_id} className={card}>
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <PhoneTick on={c.is_signed_off} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[15.5px] font-semibold truncate">{c.cashier_name}</span>
+                          <span className="block text-[12.5px]" style={{ color: c.is_signed_off ? '#8A8A8E' : '#B91C1C' }}>
+                            {c.is_signed_off ? `Signed off · ${c.transaction_count} payments` : 'Not signed off yet'}
+                          </span>
+                        </span>
+                        <span className="text-[15.5px] font-bold tabular-nums">{fmt(c.total_collected)}</span>
+                      </div>
+                      <div className="border-t border-black/[0.06] divide-y divide-black/[0.06]">
+                        {[['Opening float', c.opening_float], ['Cash expected', c.expected_cash], ['Cash counted', c.closing_cash]].map(([label, v]) => (
+                          <div key={label} className="flex justify-between px-4 py-2 text-[14.5px]"><span className="text-[#3A3A3C]">{label}</span><span className="font-semibold tabular-nums">{fmt(v)}</span></div>
+                        ))}
+                        <div className="flex justify-between px-4 py-2 text-[14.5px]">
+                          <span className="font-semibold">{off ? 'Difference' : 'Balanced'}</span>
+                          <span className="font-bold tabular-nums" style={{ color: off ? RED : '#15803D' }}>{fmt(c.variance)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* The attendants */}
+            <PhoneTitle>Attendants</PhoneTitle>
+            {attendantSignoffs.length === 0 ? <p className="m-0 mx-5 text-[14.5px] text-[#8A8A8E]">No attendant recorded jobs today.</p> : (
+              <div className={`${card} divide-y divide-black/[0.06]`}>
+                {attendantSignoffs.map(a => {
+                  const b = a.buckets || {}
+                  return (
+                    <div key={a.attendant_id} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <PhoneTick on={a.is_signed_off} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[15.5px] font-semibold truncate">{a.attendant_name}</span>
+                          <span className="block text-[12.5px]" style={{ color: !a.is_signed_off ? '#B91C1C' : a.is_auto ? '#B45309' : '#8A8A8E' }}>
+                            {!a.is_signed_off ? 'Not signed off yet' : a.is_auto ? `Signed off by Octos at ${fmtTime(a.signed_off_at)}` : `Signed off at ${fmtTime(a.signed_off_at)}`}
+                          </span>
+                        </span>
+                      </div>
+                      {a.is_signed_off && (
+                        <div className="mt-1.5 pl-[34px] text-[12.5px] text-[#8A8A8E]">
+                          {b.recorded_total ?? 0} recorded · {b.paid ?? 0} paid · {b.handed_to_production ?? 0} to production · {b.unpaid_instant ?? 0} unpaid
+                        </div>
+                      )}
+                      {a.handover_note && <div className="mt-1.5 pl-[34px] text-[13px] text-[#3A3A3C]">“{a.handover_note}”</div>}
+                      {a.open_items?.length > 0 && (
+                        <div className="mt-2.5 space-y-2">{a.open_items.map(item => <AttendantItem key={item.id} item={item} sheetId={sheetId} />)}</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Anything to note */}
+            <PhoneTitle>To note</PhoneTitle>
+            {notable.length === 0 ? (
+              <p className="m-0 mx-5 text-[14.5px] text-[#8A8A8E]">Nothing waiting for payment, no petty cash and no credit sales.</p>
+            ) : (
+              <div className={`${card} divide-y divide-black/[0.06]`}>
+                {notable.map(n => (
+                  <div key={n.key} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[12px] font-semibold" style={{ color: n.tone }}>{n.kind}</span>
+                      <span className="block text-[15px] truncate">{n.title}</span>
+                      {n.sub && <span className="block text-[12.5px] text-[#8A8A8E] truncate">{n.sub}</span>}
+                    </span>
+                    <span className="text-[15px] font-semibold tabular-nums">{fmt(n.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {inventory.length > 0 && (<>
+              <PhoneTitle>Stock used</PhoneTitle>
+              <div className={`${card} divide-y divide-black/[0.06]`}>
+                {inventory.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <span className="min-w-0"><span className="block text-[15px] truncate">{item.consumable}</span>
+                      <span className="block text-[12.5px] text-[#8A8A8E]">Used {item.consumed} {item.unit}</span></span>
+                    <span className="text-[15px] font-bold tabular-nums" style={{ color: item.closing <= 0 ? RED : item.is_low ? '#B45309' : '#111' }}>{item.closing} left</span>
+                  </div>
+                ))}
+              </div>
+            </>)}
+
+            {/* Notes */}
+            <PhoneTitle>Your notes</PhoneTitle>
+            <div className="mx-4">
+              <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything worth remembering about today"
+                className="w-full px-3.5 py-3 text-[16px] rounded-[16px] bg-white border border-black/[0.06] outline-none resize-none" />
+            </div>
+
+            {/* Tomorrow's floats */}
+            <PhoneTitle extra={<span className="text-[12.5px] text-[#8A8A8E]">GHS 20–100, in fives</span>}>Tomorrow’s float</PhoneTitle>
+            {branchCashiers.length === 0 ? <p className="m-0 mx-5 text-[14.5px] text-[#8A8A8E]">No active cashiers.</p> : (
+              <div className={`${card} divide-y divide-black/[0.06]`}>
+                {branchCashiers.map(c => {
+                  const v = parseFloat(getFloat(c.cashier_id))
+                  const valid = !isNaN(v) && v >= 20 && v <= 100 && v % 5 === 0
+                  return (
+                    <div key={c.cashier_id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <span className="text-[15.5px] truncate">{c.cashier_name}</span>
+                      <div className={`flex items-center h-[40px] rounded-[12px] overflow-hidden shrink-0 ${valid ? 'bg-[#F2F2F4]' : 'bg-[#FFF2F2]'}`}>
+                        <button type="button" onClick={() => stepFloat(c.cashier_id, -5)} aria-label="Five less" className="w-10 h-full text-[20px] text-[#1C1C1E]">−</button>
+                        <input type="number" inputMode="numeric" value={getFloat(c.cashier_id)} onChange={e => setFloat(c.cashier_id, e.target.value)}
+                          aria-label={`Opening float for ${c.cashier_name}`}
+                          className="w-[64px] h-full text-center text-[16px] font-semibold tabular-nums bg-transparent outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                          style={{ color: valid ? '#111' : '#B91C1C' }} />
+                        <button type="button" onClick={() => stepFloat(c.cashier_id, 5)} aria-label="Five more" className="w-10 h-full text-[20px] text-[#1C1C1E]">+</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* The Branch Manager's word, as an iOS switch */}
+            <div className={`${card} mt-6 px-4 py-3.5 flex items-start gap-3`}>
+              <p className="m-0 flex-1 text-[14px] leading-[20px] text-[#3A3A3C]">
+                I, <b className="text-[#111]">{meta.opened_by || 'the Branch Manager'}</b>, have checked this report and it is a true account of today at <b className="text-[#111]">{meta.branch}</b>.
+              </p>
+              <button type="button" role="switch" aria-checked={ack} onClick={() => setAck(a => !a)} aria-label="I have checked the report"
+                className="relative w-[51px] h-[31px] rounded-full shrink-0 transition-colors" style={{ background: ack ? '#34C759' : '#E5E5EA' }}>
+                <span className="absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.2)] transition-[left]"
+                  style={{ left: ack ? 22 : 2 }} />
+              </button>
+            </div>
+          </>)}
+        </div>
+
+        <div className="shrink-0 bg-white border-t border-black/[0.08] px-4 pt-2.5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 10px)' }}>
+          {error && <p className="m-0 mb-2 text-[14px] text-[#B91C1C]">{error}</p>}
+          <button type="button" onClick={handleClose} disabled={!canClose || isPending}
+            className="w-full h-[50px] rounded-[16px] text-[16px] font-semibold disabled:text-[#8A8A8E]"
+            style={canClose ? { background: 'linear-gradient(135deg,#EF1C2C 0%,#C8000F 100%)', color: '#FFFFFF' } : { background: '#E5E5EA' }}>
+            {isPending ? 'Closing…' : canClose ? 'Close the day sheet' : `${conditions.filter(([, on]) => !on).length} thing${conditions.filter(([, on]) => !on).length === 1 ? '' : 's'} left before closing`}
+          </button>
+        </div>
+      </div>,
+      document.body,
+    )
   }
 
   const modal = (

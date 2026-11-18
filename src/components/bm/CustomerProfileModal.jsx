@@ -194,7 +194,7 @@ function CreditPanel({ data }) {
 
 // ── Edit form ─────────────────────────────────────────────────────────────────
 
-function EditForm({ customer, onCancel, onSaved }) {
+export function EditForm({ customer, onCancel, onSaved }) {
   const [form, setForm]   = useState({
     title:               customer.title          ?? 'MR',
     first_name:          customer.first_name     ?? '',

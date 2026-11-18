@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { getCustomers, getCreditAccountsBM, getWalletBalancesBM } from '../../api/bm'
 import NewCustomerModal from './NewCustomerModal'
 import CustomerProfileModal from './CustomerProfileModal'
+import usePhone from '../../hooks/usePhone'
+import CustomersPhone from './CustomersPhone'
 
 function timeAgo(dateStr) {
   if (!dateStr) return '—'
@@ -205,6 +207,12 @@ function CreditRow({ account, suspended = false }) {
 
 
 export default function Customers() {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <CustomersPhone />
+  return <CustomersComputer />
+}
+
+function CustomersComputer() {
   const [tab,             setTab]             = useState('all')
   const [search,          setSearch]          = useState('')
   const [page,            setPage]            = useState(1)
