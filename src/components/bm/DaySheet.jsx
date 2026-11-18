@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { getTodaySummary, getLockStatus, getEODPrediction } from '../../api/bm'
 import CloseSheetModal from './CloseSheetModal'
 import client from '../../api/client'
+import usePhone from '../../hooks/usePhone'
+import DaySheetPhone from './DaySheetPhone'
 
 function HourlyChart({ data, height = 140 }) {
   const canvasRef = useRef(null)
@@ -98,11 +100,13 @@ function fmt(amount) {
   return `GHS ${parseFloat(amount || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 }
 
-function pct(val) {
-  return `${parseFloat(val || 0).toFixed(1)}%`
+export default function DaySheet() {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <DaySheetPhone />
+  return <DaySheetComputer />
 }
 
-export default function DaySheet() {
+function DaySheetComputer() {
   const [showCloseModal, setShowCloseModal] = useState(false)
 
   const { data: summary, isLoading } = useQuery({
