@@ -17,6 +17,14 @@ import { createCustomer, lookupCustomer, getCustomers } from '../../api/bm'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 import PhoneInput from '../shared/PhoneInput'
 import { invalidateAfterCustomerRegistered } from '../../api/invalidations'
+import usePhone from '../../hooks/usePhone'
+
+// The phone's look (18 Nov 2026): white grouped cards, 16px text so iOS
+// never zooms into a field.
+const P_SECTION = 'px-5 pt-5 pb-1.5 text-[13px] font-semibold uppercase tracking-[0.04em] text-[#8A8A8E]'
+const P_CARD = 'mx-4 rounded-[16px] bg-white border border-black/[0.04] shadow-[0_3px_12px_rgba(17,24,39,0.05)] overflow-hidden'
+const P_FIELD = 'w-full h-[48px] px-4 bg-transparent text-[16px] text-[#1C1C1E] outline-none placeholder:text-[#A1A1AA]'
+const P_PHONE = '[&_input]:!text-[16px] [&_input]:!py-3 [&>div]:!rounded-[12px] [&>div]:!bg-[#F2F2F4] [&>div]:!border-transparent'
 
 const LABEL = 'block text-[11px] font-semibold text-[var(--text-2)] mb-1'
 const INPUT = `w-full px-3 py-2.5 text-sm bg-[var(--bg)] border border-[var(--border)] rounded-xl
@@ -77,6 +85,7 @@ const nameOf = c => (c.customer_type === 'INDIVIDUAL'
  */
 export default function NewCustomerModal({ onClose, onSuccess, onUseExisting }) {
   const queryClient = useQueryClient()
+  const phone = usePhone()
   const [form, setForm] = useState(BLANK)
   const [phoneCheck, setPhoneCheck] = useState({ valid: false, problem: '' })
   const [altCheck, setAltCheck] = useState({ valid: true, problem: '', text: '' })
@@ -165,7 +174,161 @@ export default function NewCustomerModal({ onClose, onSuccess, onUseExisting }) 
 
   const close = () => { resetLookup(); onClose() }
 
-  const modal = createPortal(
+  // ── The phone (18 Nov 2026), in the Overview's look ─────────────
+  // The same form, as an iOS sheet: the kind of customer as a switch, then
+  // white grouped cards (the number first, who they are, anything optional),
+  // and Register in red at the foot, with "another after this" as a switch.
+  const phoneSheet = phone && createPortal(
+    <form onSubmit={submit} className="ios fixed inset-0 z-[9999] flex flex-col animate-slideUp" style={{ background: '#F6F6F8' }}>
+      <div className="ios-bar shrink-0" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="h-[50px] px-2 grid grid-cols-[1fr_auto_1fr] items-center">
+          <button type="button" onClick={close} className="justify-self-start text-[17px] text-[#D70015] px-2">Cancel</button>
+          <span className="text-[16px] font-semibold text-[#111]">New customer</span><span />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pb-6">
+        {justDone && (
+          <div className="mx-4 mt-3 px-3.5 py-2.5 rounded-[14px] bg-[#E8F8EE] text-[14px] text-[#15803D] font-medium">
+            {justDone} registered. Ready for the next one.
+          </div>
+        )}
+
+        {/* The kind of customer */}
+        <div className="mx-4 mt-3 p-[3px] rounded-[12px] bg-black/[0.06] flex" role="radiogroup" aria-label="Kind of customer">
+          {TYPES.map(t => {
+            const on = form.customer_type === t.value
+            return (
+              <button key={t.value} type="button" role="radio" aria-checked={on} onClick={() => set('customer_type', t.value)}
+                className={`flex-1 h-[36px] rounded-[9px] inline-flex items-center justify-center gap-1.5 text-[14px] font-semibold
+                  ${on ? 'bg-white text-[#111] shadow-[0_2px_6px_rgba(0,0,0,0.10)]' : 'text-[#3A3A3C]'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">{t.icon}</svg>
+                {t.value === 'INDIVIDUAL' ? 'Person' : t.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* The number first: checked as it is typed */}
+        <div className={P_SECTION}>Their number</div>
+        <div className={`${P_CARD} px-4 py-3`}>
+          <PhoneInput key={`p${formKey}`} value={form.phone} onChange={onPhone} autoFocus className={P_PHONE} />
+          {phoneStatus === 'checking' && <p className="m-0 mt-2 text-[13px] text-[#8A8A8E]">Checking whether they’re already here…</p>}
+          {phoneStatus?.found === false && <p className="m-0 mt-2 text-[13px] font-semibold text-[#15803D]">New number: carry on</p>}
+          {phoneStatus?.found && (
+            <div className="mt-3 px-3.5 py-3 rounded-[14px] bg-[#FFF2F2]">
+              <div className="text-[12.5px] font-semibold text-[#B91C1C]">Already registered</div>
+              <div className="text-[15.5px] font-semibold text-[#1C1C1E] truncate">{nameOf(phoneStatus.customer)}</div>
+              <button type="button" onClick={() => { if (onUseExisting) onUseExisting(phoneStatus.customer); close() }}
+                className="mt-2.5 w-full h-[40px] rounded-[12px] bg-[#1C1C1E] text-white text-[15px] font-semibold">
+                {onUseExisting ? 'Use this customer' : 'No need to register'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Who they are */}
+        <div className={P_SECTION}>{isIndividual ? 'Who they are' : `The ${orgWord.toLowerCase()}`}</div>
+        <div className={`${P_CARD} divide-y divide-black/[0.06]`}>
+          {!isIndividual && (
+            <>
+              <input value={form.company_name} onChange={e => set('company_name', e.target.value)} aria-label={`${orgWord} name`}
+                placeholder={`${orgWord} name`} className={P_FIELD} />
+              <input value={form.address} onChange={e => set('address', e.target.value)} aria-label="Address" placeholder="Address" className={P_FIELD} />
+              {form.customer_type === 'INSTITUTION' && (
+                <select value={form.institution_subtype} onChange={e => set('institution_subtype', e.target.value)} aria-label="Kind of institution"
+                  className={`${P_FIELD} ${form.institution_subtype ? '' : 'text-[#8A8A8E]'}`}>
+                  <option value="">Kind of institution (optional)</option>
+                  <option value="SCHOOL">School</option><option value="UNIVERSITY">University</option>
+                  <option value="HOSPITAL">Hospital</option><option value="GOVERNMENT">Government</option>
+                  <option value="NGO">NGO</option><option value="CHURCH">Church</option><option value="OTHER">Other</option>
+                </select>
+              )}
+            </>
+          )}
+          {!isIndividual && <div className="px-4 pt-3 pb-1 text-[12.5px] font-semibold text-[#8A8A8E]">Contact person</div>}
+          <div className="flex items-center">
+            <select value={form.title} onChange={e => setTitle(e.target.value)} aria-label="Title"
+              className="h-[48px] pl-4 pr-1 bg-transparent text-[16px] text-[#1C1C1E] outline-none border-r border-black/[0.06]">
+              <option value="MR">Mr</option><option value="MRS">Mrs</option><option value="MS">Ms</option>
+              <option value="DR">Dr</option><option value="PROF">Prof</option><option value="OTHER">Other</option>
+            </select>
+            <input value={form.first_name} onChange={e => set('first_name', e.target.value)} aria-label="First name" placeholder="First name" className={P_FIELD} />
+          </div>
+          <input value={form.last_name} onChange={e => set('last_name', e.target.value)} aria-label="Last name" placeholder="Last name (optional)" className={P_FIELD} />
+          {isIndividual && (
+            <div className="flex items-center justify-between px-4 py-2">
+              <span className="text-[16px] text-[#1C1C1E]">Gender</span>
+              <div className="p-[2px] rounded-[9px] bg-black/[0.06] flex" role="radiogroup" aria-label="Gender">
+                {[['MALE', 'Male'], ['FEMALE', 'Female']].map(([v, t]) => (
+                  <button key={v} type="button" role="radio" aria-checked={form.gender === v} onClick={() => { set('gender', v); setGenderTouched(true) }}
+                    className={`h-[30px] px-4 rounded-[7px] text-[14px] font-semibold ${form.gender === v ? 'bg-white text-[#111] shadow-[0_1px_4px_rgba(0,0,0,0.10)]' : 'text-[#3A3A3C]'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Anything optional */}
+        <div className={P_SECTION}>Optional</div>
+        <div className={`${P_CARD} divide-y divide-black/[0.06]`}>
+          <div className="px-4 py-2.5">
+            <div className="text-[12.5px] text-[#8A8A8E] mb-1.5">Second number</div>
+            <PhoneInput key={`s${formKey}`} value={form.secondary_phone} placeholder="054 123 4567" className={P_PHONE}
+              onChange={(number, meta) => { set('secondary_phone', meta.text?.trim() ? number : ''); setAltCheck(meta) }} />
+          </div>
+          <input type="email" value={form.email} onChange={e => set('email', e.target.value)} aria-label="Email" placeholder="Email" className={P_FIELD} />
+          {isIndividual && (
+            <label className="flex items-center justify-between gap-3 px-4 h-[48px]">
+              <span className="text-[16px] text-[#1C1C1E]">Date of birth</span>
+              <input type="date" value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)}
+                max={new Date().toISOString().slice(0, 10)} className="bg-transparent text-[16px] text-[#1C1C1E] outline-none text-right" />
+            </label>
+          )}
+          {isIndividual && (affiliation ? (
+            <div className="flex items-center justify-between gap-3 px-4 h-[48px]">
+              <span className="min-w-0"><span className="block text-[12.5px] text-[#8A8A8E]">Works with</span>
+                <span className="block text-[16px] font-semibold truncate">{affiliation.company_name || affiliation.full_name}</span></span>
+              <button type="button" onClick={() => setAffiliation(null)} className="text-[15px] font-semibold text-[#D70015]">Remove</button>
+            </div>
+          ) : (
+            <div>
+              <input value={affQuery} onChange={e => searchAff(e.target.value)} aria-label="Works with" placeholder="Works with a business or institution" className={P_FIELD} />
+              {affResults.map(c => (
+                <button key={c.id} type="button" onClick={() => { setAffiliation(c); setAffQuery(''); setAffResults([]) }}
+                  className="w-full px-4 py-2.5 text-left border-t border-black/[0.06] active:bg-black/[0.04]">
+                  <span className="block text-[15.5px] font-semibold truncate">{c.company_name || c.full_name}</span>
+                  <span className="block text-[12.5px] text-[#8A8A8E]">{c.phone}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+          <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} aria-label="Notes"
+            placeholder="Notes: “always wants matte”…" className="w-full px-4 py-3 text-[16px] bg-transparent outline-none resize-none placeholder:text-[#A1A1AA]" />
+        </div>
+      </div>
+
+      <div className="shrink-0 bg-white border-t border-black/[0.08] px-4 pt-2.5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 10px)' }}>
+        {error && <p className="m-0 mb-2 text-[14px] text-[#B91C1C]">{error}</p>}
+        <label className="flex items-center justify-between mb-2.5">
+          <span className="text-[15px] text-[#1C1C1E]">Register another after this</span>
+          <button type="button" role="switch" aria-checked={another} onClick={() => setAnother(a => !a)}
+            className="relative w-[51px] h-[31px] rounded-full shrink-0 transition-colors" style={{ background: another ? '#34C759' : '#E5E5EA' }}>
+            <span className="absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.2)] transition-[left]" style={{ left: another ? 22 : 2 }} />
+          </button>
+        </label>
+        <button type="submit" disabled={isPending} className="w-full h-[50px] rounded-[16px] text-white text-[16px] font-semibold disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg,#EF1C2C 0%,#C8000F 100%)' }}>
+          {isPending ? 'Registering…' : 'Register customer'}
+        </button>
+      </div>
+    </form>,
+    document.body,
+  )
+
+  const modal = phone ? phoneSheet : createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 animate-fadeIn">
       <form onSubmit={submit}
             className="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-slideUp">

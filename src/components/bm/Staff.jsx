@@ -13,6 +13,8 @@ import {
 } from '../../api/profile'
 import StaffAvatar from '../shared/StaffAvatar'
 import { NumberTiles, PeriodSwitch, PhotoButtons, fmtJoined } from '../shared/ProfileBits'
+import usePhone from '../../hooks/usePhone'
+import StaffPhone from './StaffPhone'
 
 const DOT = { active: '#5DCAA5', idle: '#B4B2A9' }
 
@@ -112,7 +114,7 @@ function StaffCard({ member, onEdit }) {
 }
 
 // The Branch Manager changes someone's photo or phone.
-function StaffEditor({ member, period, onClose }) {
+function StaffEditor({ member, onClose }) {
   const queryClient = useQueryClient()
   const [phone, setPhone] = useState(member.phone || '')
   const [email, setEmail] = useState(member.email || '')
@@ -254,6 +256,12 @@ function Section({ title, count, muted, children }) {
 }
 
 export default function Staff() {
+  // Phones get their own page (18 Nov 2026).
+  if (usePhone()) return <StaffPhone />
+  return <StaffComputer />
+}
+
+function StaffComputer() {
   const [period, setPeriod] = useState('week')
   const [editing, setEditing] = useState(null)
   const { data, isLoading, isError } = useQuery({
