@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { downloadBranchStatement } from '../../api/bm'
 import { saveFile } from '../../api/saveFile'
-import { GREEN, AMBER, MON, MONTHS, RED, api, card, dayMonth, errorOf, isoOf, list, money, num, short } from './reportsPhone'
+import { GREEN, AMBER, MON, MONTHS, RED, api, card, dayMonth, errorOf, isoOf, list, money, num, short } from './reportsKit'
 import { Bars, Chevron, Empty, Field, Figures, Pushed, RedButton, Skeleton, Stepper, Title } from './ReportsPhoneUI'
 
 const rateTone = r => (r >= 95 ? GREEN : r >= 80 ? AMBER : RED)

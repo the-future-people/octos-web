@@ -130,7 +130,10 @@ export default function Overview({ onNavigate }) {
   const isPostClose      = !canCreateJobs && sheetOpen
 
   const stats   = statsData || {}
-  const revenue = summaryData?.revenue || {}
+  // The summary sends total and cash; total_collected and total_cash were
+  // read instead, so the Revenue tile never showed a figure (18 Nov 2026).
+  const rev     = summaryData?.revenue || {}
+  const revenue = { ...rev, total_collected: rev.total_collected ?? rev.total, total_cash: rev.total_cash ?? rev.cash }
 
   // Workload glow helpers
   const pendingCount = workload?.pending_payment ?? 0

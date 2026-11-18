@@ -5,7 +5,7 @@
 // month or year stepper, a row of figures, and a small bar chart.
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { RED, RED_FILL } from './reportsPhone'
+import { RED, RED_FILL } from './reportsKit'
 
 export const Svg = ({ d, size = 18, width = 2, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={width}

@@ -10,11 +10,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { getServices } from '../../api/bm'
-import { useAuth } from '../../context/AuthContext'
 import client from '../../api/client'
 import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 import CostsPanel from './CostsPanel'
 import { saveServiceCost, saveBulkPrices } from '../../api/discounts'
+import usePhone from '../../hooks/usePhone'
+import CataloguePhone from './CataloguePhone'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -33,7 +34,7 @@ const perUnit = unit => `per ${UNIT_LABEL[unit] || (unit || 'piece').replace(/^P
 const VIEW_KEY = 'octos.catalogue.view'
 
 // ── Edit Pricing Modal ────────────────────────────────────────────────────────
-function EditPricingModal({ service, pricing, branchId, onClose }) {
+function EditPricingModal({ service, pricing, onClose }) {
   const queryClient = useQueryClient()
   const [basePrice,       setBasePrice]       = useState(pricing?.base_price || '')
   const [colorMultiplier, setColorMultiplier] = useState(pricing?.color_multiplier || '1.00')
@@ -142,9 +143,8 @@ function EditPricingModal({ service, pricing, branchId, onClose }) {
 }
 
 // ── Create Service Modal ──────────────────────────────────────────────────────
-function CreateServiceModal({ onClose }) {
+export function CreateServiceModal({ onClose }) {
   const queryClient = useQueryClient()
-  const { user } = useAuth()
   const [name,        setName]        = useState('')
   const [category,    setCategory]    = useState('INSTANT')
   const [unit,        setUnit]        = useState('PER_PAGE')
@@ -824,8 +824,11 @@ function useView() {
 }
 
 export default function Catalogue() {
-  const { user } = useAuth()
-  const branchId = typeof user?.branch === 'object' ? user?.branch?.id : (user?.branch || 2)
+  if (usePhone()) return <CataloguePhone />
+  return <CatalogueComputer />
+}
+
+function CatalogueComputer() {
   const [category,   setCategory]   = useState('ALL')
   const [search,     setSearch]     = useState('')
   const [view,       setView]       = useView()
@@ -995,7 +998,6 @@ export default function Catalogue() {
         <EditPricingModal
           service={editTarget.service}
           pricing={editTarget.pricing}
-          branchId={branchId}
           onClose={() => setEditTarget(null)}
         />
       )}

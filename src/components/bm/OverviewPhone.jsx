@@ -11,6 +11,7 @@ import client from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { Chevron } from '../ios/IOSList'
 import PhoneHeader from './PhoneHeader'
+import LiveToday from './LiveToday'
 
 const RED = '#D70015'
 const getPulse = () => client.get('/api/v1/jobs/pulse/').then(r => r.data)
@@ -139,6 +140,9 @@ export default function OverviewPhone({ stats, revenue, workload, loading, onNav
       </div>
 
       {stranded && <div className="px-4 mt-3 empty:hidden">{stranded}</div>}
+
+      {/* The day, live, like a widget on a home screen */}
+      <div className="px-4 mt-3"><LiveToday onOpen={() => onNavigate('daysheet')} /></div>
 
       <div className="mx-4 mt-3.5 h-[46px] rounded-[16px] bg-white flex items-center shadow-[0_3px_12px_rgba(17,24,39,0.05)]
         border border-black/[0.03]">

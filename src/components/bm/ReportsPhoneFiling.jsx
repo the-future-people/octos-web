@@ -9,7 +9,7 @@ import { saveFile } from '../../api/saveFile'
 import {
   AMBER, GREEN, MONTHS, RED, api, card, dayMonth, dayOf, errorOf, filingOpen, isSplit, isoOf, list, money, short, span,
   weekday, when,
-} from './reportsPhone'
+} from './reportsKit'
 import { Chevron, Empty, Figures, Pushed, RedButton, Sheet, Skeleton, Stepper, Svg, Tile, Title } from './ReportsPhoneUI'
 
 const CalendarIcon = () => <Svg size={18} width={1.8} d={<><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></>} />

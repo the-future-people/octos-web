@@ -1,4 +1,4 @@
-// src/components/bm/reportsPhone.js
+// src/components/bm/reportsKit.js
 //
 // What the phone's Reports & Filing shares (18 Nov 2026): the calls, the
 // date and money wording, and the one query two screens need. The calls are
