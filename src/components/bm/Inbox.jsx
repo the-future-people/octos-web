@@ -749,6 +749,13 @@ function PhotoViewer({ ms, at, setAt, title, onPdf, making }) {
   const m = ms[at]
   const src = usePhotoSrc(m)
   const close = () => setAt(null)
+  // Looking at a photo full size is opening it (20 Nov 2026): Octos then
+  // knows a person has the customer's photos and doesn't ask what they're for.
+  // Once per photo; a failure changes nothing on screen.
+  useEffect(() => {
+    if (!m?.id) return
+    client.post(`/api/v1/communications/messages/${m.id}/opened/`).catch(() => {})
+  }, [m?.id])
   useEffect(() => {
     const keys = e => {
       if (e.key === 'ArrowLeft') setAt(i => Math.max(0, i - 1))
