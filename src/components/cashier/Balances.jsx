@@ -3,12 +3,15 @@
 // and design jobs with a deposit paid and a balance owing, finished ones
 // first, so the balance is taken before the attendant hands over. Below it,
 // credit accounts and wallets, as before (CreditAccounts).
+// 21 Nov 2026: work delivered and not paid is owed too (an old proforma
+// recorded as owed), and each customer's statement opens from their row.
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import client from '../../api/client'
 import CreditAccounts from './CreditAccounts'
 import PaymentModal from './PaymentModal'
+import StatementModal from '../shared/StatementModal'
 
 const fmt = v => `GHS ${parseFloat(v || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
 const STATE = { DONE: 'Ready for pickup', IN_PRODUCTION: 'Being made', RECEIVED: 'Not started', FINISHING: 'Finishing' }
@@ -20,9 +23,11 @@ const Icon = ({ d, size = 17 }) => (
 const HOURGLASS = <><path d="M5 22h14M5 2h14" /><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22" /><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2" /></>
 const COINS = <><circle cx="8" cy="8" r="6" /><path d="M18.09 10.37A6 6 0 1 1 10.34 18" /><path d="M7 6h1v4" /></>
 const CHAT = <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+const PAGE = <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></>
 
 export default function Balances() {
   const [taking, setTaking] = useState(null)
+  const [statementFor, setStatementFor] = useState(null)
   const { data, isLoading } = useQuery({
     queryKey: ['cashierBalances'],
     queryFn: () => client.get('/api/v1/jobs/cashier/balances/').then(r => r.data),
@@ -39,10 +44,10 @@ export default function Balances() {
 
       <section className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5">
         <div className="flex flex-wrap items-center gap-2 mb-1">
-          <h3 className="flex items-center gap-2 text-[12.5px] font-extrabold tracking-wider text-amber-800"><Icon d={HOURGLASS} />DUE AT PICKUP</h3>
+          <h3 className="flex items-center gap-2 text-[12.5px] font-extrabold tracking-wider text-amber-800"><Icon d={HOURGLASS} />OWED TO US</h3>
           <span className="ml-auto font-mono text-[15px] font-bold text-amber-700">{fmt(data?.total)}</span>
         </div>
-        <p className="text-[13px] text-[var(--text-3)] mb-2">A deposit was paid; take the balance before the attendant hands it over.</p>
+        <p className="text-[13px] text-[var(--text-3)] mb-2">A deposit paid with the rest to come, or work delivered and not paid. Take a balance against the job the customer points to.</p>
         {isLoading && <div className="h-16 rounded-xl bg-[var(--bg)] animate-pulse" />}
         {!isLoading && rows.length === 0 && <p className="text-sm text-[var(--text-3)] py-4">No balances owing right now.</p>}
         {rows.map(job => (
@@ -58,17 +63,26 @@ export default function Balances() {
                 {job.job_number}{job.items_display?.length ? ` · ${job.items_display.filter(i => !i.is_addon).map(i => i.name).join(', ')}` : ''}
               </div>
             </div>
-            <div className={`text-[13px] ${job.work_state === 'DONE' ? 'font-bold text-emerald-700' : 'text-[var(--text-2)]'}`}>
-              {STATE[job.work_state] || job.work_state}
+            <div className={`text-[13px] ${job.handover_state === 'HANDED_OVER' ? 'font-bold text-red-700'
+              : job.work_state === 'DONE' ? 'font-bold text-emerald-700' : 'text-[var(--text-2)]'}`}>
+              {job.handover_state === 'HANDED_OVER' ? 'Delivered, not paid' : (STATE[job.work_state] || job.work_state)}
             </div>
             <div className="text-right">
               <div className="font-mono text-[16px] font-bold text-amber-700">{fmt(job.balance_due)}</div>
               <div className="text-[11.5px] text-[var(--text-3)]">of {fmt(job.estimated_cost)}</div>
             </div>
-            <button type="button" onClick={() => setTaking(job)}
-                    className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[var(--text)] text-white text-sm font-bold justify-self-end">
-              <Icon d={COINS} size={16} />Take balance
-            </button>
+            <div className="flex items-center gap-2 justify-self-end">
+              {job.customer && (
+                <button type="button" onClick={() => setStatementFor(job.customer)} title="Their statement"
+                        className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-2)] hover:border-[var(--border-dark)]">
+                  <Icon d={PAGE} size={16} />Statement
+                </button>
+              )}
+              <button type="button" onClick={() => setTaking(job)}
+                      className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[var(--text)] text-white text-sm font-bold">
+                <Icon d={COINS} size={16} />Take balance
+              </button>
+            </div>
           </div>
         ))}
       </section>
@@ -76,6 +90,7 @@ export default function Balances() {
       <CreditAccounts />
 
       {taking && <PaymentModal job={taking} mode="balance" onClose={() => setTaking(null)} />}
+      {statementFor && <StatementModal customerId={statementFor} onClose={() => setStatementFor(null)} />}
     </div>
   )
 }

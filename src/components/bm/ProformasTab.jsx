@@ -13,6 +13,7 @@ import InvoicesTab from './InvoicesTab'
 import { saveFile } from '../../api/saveFile'
 import usePhone from '../../hooks/usePhone'
 import InvoicesPhone from './InvoicesPhone'
+import ExpiredProformaModal from './ExpiredProformaModal'
 
 function fmt(n) {
   return `GHS ${parseFloat(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
@@ -79,6 +80,8 @@ function ProformasComputer({ onOpenDetail }) {
   const [sharing, setSharing]       = useState(null)
   // Lowering a price (17 Nov 2026): the Branch Manager and the owner.
   const [pricing, setPricing]       = useState(null)
+  // An expired one (21 Nov 2026): was the work done? Record what's owed, or renew.
+  const [settling, setSettling]     = useState(null)
   const { user } = useAuth()
   const canDiscount = mayDiscount(user)
 
@@ -324,11 +327,11 @@ function ProformasComputer({ onOpenDetail }) {
                       View job
                     </button>
                   )}
-                  {p.status === 'EXPIRED' && (
-                    <button onClick={() => setShowCreate(true)}
+                  {(p.status === 'EXPIRED' || lapsed(p)) && (
+                    <button onClick={() => setSettling(p)}
                       className="px-2.5 py-1 text-[10px] font-bold border border-[var(--border)]
                         rounded-lg hover:border-[var(--border-dark)] transition-colors whitespace-nowrap">
-                      Re-quote
+                      Work done?
                     </button>
                   )}
                 </div>
@@ -343,6 +346,11 @@ function ProformasComputer({ onOpenDetail }) {
         // so a proforma is priced exactly as the job it becomes.
         <NewJobModal proforma onClose={() => setShowCreate(false)}
           onSuccess={(p, problem) => { if (p) setSharing(p); if (problem) setError(problem) }} />
+      )}
+
+      {settling && (
+        <ExpiredProformaModal proforma={settling} onClose={() => setSettling(null)}
+          onRenewed={p => { if (p) setSharing(p) }} />
       )}
 
       {pricing && (

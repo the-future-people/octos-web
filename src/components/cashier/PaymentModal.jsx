@@ -241,7 +241,9 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
               <div>
                 <div className="text-[11.5px] font-extrabold tracking-wider text-[var(--text-2)]">TO COLLECT</div>
                 {balanceMode
-                  ? <div className="text-xs text-[var(--text-3)]">{fmt(job.amount_paid)} deposit paid of {fmt(total)} · this settles it</div>
+                  ? <div className="text-xs text-[var(--text-3)]">{parseFloat(job.amount_paid || 0) > 0
+                      ? `${fmt(job.amount_paid)} deposit paid of ${fmt(total)} · this settles it`
+                      : `Delivered, not paid · this settles ${job.job_number}`}</div>
                   : production && <div className="text-xs text-[var(--text-3)]">{deposit}% of {fmt(total)} · balance {fmt(total - amountDue)} at pickup</div>}
                 {saved > 0 && (
                   <div className="text-xs font-semibold text-emerald-700">

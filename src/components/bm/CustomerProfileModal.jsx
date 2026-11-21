@@ -1,9 +1,10 @@
 // src/components/bm/CustomerProfileModal.jsx
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getCustomerDetail, getJobs } from '../../api/bm'
+import { getCustomerDetail, getJobs, getStatement } from '../../api/bm'
 import client from '../../api/client'
 import LinksPanel from './LinksPanel'
+import StatementModal from '../shared/StatementModal'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -364,6 +365,37 @@ const TABS = ['Profile', 'Job History']
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
+// What they owe us (21 Nov 2026): the same figures as their statement and
+// the cashier's Balances. Shown only when something is owed.
+function OwesPanel({ customerId }) {
+  const [open, setOpen] = useState(false)
+  const { data } = useQuery({
+    queryKey: ['statement', customerId],
+    queryFn: () => getStatement(customerId).then(r => r.data),
+  })
+  if (!data || parseFloat(data.total) <= 0) return null
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Owes us</p>
+          <p className="font-mono text-xl font-black text-[var(--text)] mt-1">{fmt(data.total)}</p>
+          <p className="text-xs text-[var(--text-3)] mt-0.5">
+            {[parseFloat(data.owed_total) > 0 && `From before ${fmt(data.owed_total)}`,
+              parseFloat(data.current_total) > 0 && `New work ${fmt(data.current_total)}`].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <button onClick={() => setOpen(true)}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel)]
+            text-[var(--text-2)] hover:text-[var(--text)] hover:border-[var(--border-dark)] transition-colors">
+          Statement
+        </button>
+      </div>
+      {open && <StatementModal customerId={customerId} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
 export default function CustomerProfileModal({ customerId, onClose }) {
   const queryClient         = useQueryClient()
   const [tab, setTab]       = useState('Profile')
@@ -510,6 +542,7 @@ export default function CustomerProfileModal({ customerId, onClose }) {
                           <Row label="Email"     value={customer.email} />
                           <Row label="Address"   value={customer.address} />
                         </div>
+                        <OwesPanel customerId={customer.id} />
                         <LinksPanel customer={customer} />
                         <CreditPanel data={creditData} />
                         <NotesPanel customerId={customer.id} initialNotes={customer.notes} />

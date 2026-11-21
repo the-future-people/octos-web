@@ -45,6 +45,24 @@ export const convertProforma   = (id, payload) =>
 export const getProformaPdf    = (id) =>
   client.get(`/api/v1/jobs/proformas/${id}/pdf/`, { responseType: 'blob' })
 
+// An expired proforma (21 Nov 2026): the work was done (record what's owed),
+// or it wasn't (renew at today's prices).
+export const recordOwedProforma = (id, payload) =>
+  client.post(`/api/v1/jobs/proformas/${id}/record-owed/`, payload)
+
+export const renewProforma      = (id) =>
+  client.post(`/api/v1/jobs/proformas/${id}/renew/`)
+
+// A customer's statement: owed from before, new work, total (21 Nov 2026).
+export const getStatement      = (customerId) =>
+  client.get(`/api/v1/finance/customers/${customerId}/statement/`)
+
+export const getStatementPdf   = (customerId) =>
+  client.get(`/api/v1/finance/customers/${customerId}/statement/pdf/`, { responseType: 'blob' })
+
+export const sendStatement     = (customerId) =>
+  client.post(`/api/v1/finance/customers/${customerId}/statement/send/`)
+
 export const getWorkload      = () =>
   client.get('/api/v1/jobs/workload/')
 

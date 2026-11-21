@@ -20,6 +20,7 @@ import PhoneHeader from './PhoneHeader'
 import NewJobModal from './NewJobModal'
 import DiscountPanel from './DiscountPanel'
 import { InvoiceCreateModal } from './InvoicesTab'
+import ExpiredProformaModal from './ExpiredProformaModal'
 
 const RED = '#D70015'
 const PAGE = 20
@@ -179,6 +180,7 @@ function Proformas({ onError, creating, setCreating }) {
   const [revising, setRevising] = useState(null)
   const [pricing, setPricing] = useState(null)
   const [sharing, setSharing] = useState(null)
+  const [settling, setSettling] = useState(null)       // an expired one: record what's owed, or renew (21 Nov 2026)
   const list = useList(['proformas-phone', filter], page => getProformas({ status: filter || undefined, page, page_size: PAGE }).then(r => r.data))
   const rows = filter === 'open' ? list.rows.filter(p => !lapsed(p)) : list.rows
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['proformas-phone'] })
@@ -215,7 +217,7 @@ function Proformas({ onError, creating, setCreating }) {
       p.status === 'ISSUED' && !p.is_expired && !lapsed(p) && { label: 'Revise', onClick: () => setRevising(p.id) },
       live && mayDiscount(user) && { label: 'Lower the price', onClick: () => setPricing(p) },
       !live && { label: 'Download the PDF', onClick: () => pdf(p) },
-      (p.status === 'EXPIRED' || lapsed(p)) && { label: 'Quote again', onClick: () => setCreating(true) },
+      (p.status === 'EXPIRED' || lapsed(p)) && { label: 'Was the work done?', strong: true, onClick: () => setSettling(p) },
     ].filter(Boolean)
   }
 
@@ -284,6 +286,8 @@ function Proformas({ onError, creating, setCreating }) {
         ]} />}
       {accepting && <AcceptSheet p={accepting} busy={accept.isPending} onClose={() => setAccepting(null)}
         onAccept={terms => accept.mutate({ id: accepting.id, agreed_terms: terms })} />}
+      {settling && <ExpiredProformaModal proforma={settling} onClose={() => setSettling(null)}
+        onRenewed={p => { refresh(); if (p) setSharing(p) }} />}
       {pricing && <DiscountPanel kind="proforma" id={pricing.id} title={`${pricing.proforma_number} · ${pricing.customer_name || ''}`}
         onClose={() => { setPricing(null); refresh() }} />}
       {revising && <NewJobModal revise={revising} onClose={() => setRevising(null)} onSuccess={p => { refresh(); if (p) setSharing(p) }} />}
