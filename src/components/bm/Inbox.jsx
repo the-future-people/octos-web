@@ -430,6 +430,45 @@ function NewMessage({ onClose, onStarted, prefill = null }) {
 }
 
 // ── One message ─────────────────────────────────────────────────────────
+// Links in a message (24 Nov 2026): Adodo sent three Adobe "shared document"
+// links. On her phone they showed as cards with a PDF icon; here they were
+// plain text nobody could click, and the PDFs are not attached: they live
+// behind the link. Every link can now be clicked, and a shared document
+// gets a card saying where it is, so the attendant knows to open it.
+const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'])/g
+const SHARED = [
+  [/(^|\.)acrobat\.adobe\.com$/, 'Adobe Acrobat'],
+  [/(^|\.)(drive|docs)\.google\.com$/, 'Google Drive'],
+  [/(^|\.)(dropbox\.com|db\.tt)$/, 'Dropbox'],
+  [/(^|\.)(onedrive\.live\.com|1drv\.ms|sharepoint\.com)$/, 'OneDrive'],
+  [/(^|\.)(wetransfer\.com|we\.tl)$/, 'WeTransfer'],
+  [/(^|\.)(canva\.com|canva\.link)$/, 'Canva'],
+]
+const hostOf = url => { try { return new URL(url).hostname.toLowerCase() } catch { return '' } }
+const sharedPlace = url => (SHARED.find(([re]) => re.test(hostOf(url))) || [])[1] || ''
+const sharedLinks = text => [...new Set((String(text || '').match(URL_RE) || []).filter(sharedPlace))]
+
+function Linked({ text }) {
+  const parts = String(text || '').split(URL_RE)
+  return parts.map((part, i) => (i % 2
+    ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline break-all" style={{ color: '#0B57D0' }}>{part}</a>
+    : part))
+}
+
+function SharedDocCard({ url, tint }) {
+  const place = sharedPlace(url)
+  return (
+    <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg border border-black/5" style={{ background: tint }}>
+      <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour('PDF') }}>LINK</span>
+      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="font-bold text-[13px] truncate">Shared document · {place}</span>
+        <span className="text-[11.5px] text-[var(--text-3)]">Not attached: open the link to see or download it.</span>
+      </span>
+      <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0 px-3 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</a>
+    </div>
+  )
+}
+
 function FileCard({ m, tint }) {
   const b = badge(m.media_name, m.media_mime, m.message_type)
   return (
@@ -471,7 +510,7 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
         <span aria-hidden="true">📝</span>
         <span className="min-w-0">
           <b style={{ color: C.noteMeta }}>{(m.sent_by_name || 'Staff').split(' ')[0]}:</b>{' '}
-          <span className="whitespace-pre-line">{m.body && m.body !== m.media_name ? m.body : ''}</span>
+          <span className="whitespace-pre-line break-words"><Linked text={m.body && m.body !== m.media_name ? m.body : ''} /></span>
           {m.media_file && <> <button type="button" onClick={() => openFile(m)} className="underline">{m.media_name || 'file'}</button></>}
         </span>
         <span className="shrink-0 text-[10px] opacity-70">{clock(m.created_at)}</span>
@@ -505,7 +544,8 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
             )}
             {photo && <Photo m={m} />}
             {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
-            {text && <span className={`whitespace-pre-line leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}>{text}</span>}
+            {sharedLinks(text).map(url => <SharedDocCard key={url} url={url} tint="rgba(255,255,255,.75)" />)}
+            {text && <span className={`whitespace-pre-line break-words leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}><Linked text={text} /></span>}
             <span className={`self-end text-[10.5px] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`} style={{ color: theme.meta }}>
               {clock(m.created_at)} <Ticks msg={m} read={theme.read} />
             </span>
@@ -835,7 +875,7 @@ function EmailMessage({ m, conv, open, onToggle, reports }) {
         </button>
         <span className="shrink-0 text-xs text-[#444746] flex items-center gap-1">{when}</span>
       </div>
-      {text && <div className="mt-3 pl-[42px] text-[13.5px] leading-relaxed whitespace-pre-line">{text}</div>}
+      {text && <div className="mt-3 pl-[42px] text-[13.5px] leading-relaxed whitespace-pre-line break-words"><Linked text={text} /></div>}
       {hasFile(m) && <div className="mt-3 pl-[42px]">{isPhoto(m) && m.media_file ? <Photo m={m} /> : <FileCard m={m} tint="#FFFFFF" />}</div>}
       {reports && m.report && <div className="mt-2 pl-[42px]"><Report report={m.report} /></div>}
     </article>
