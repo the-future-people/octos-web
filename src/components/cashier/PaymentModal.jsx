@@ -1,12 +1,14 @@
 // src/components/cashier/PaymentModal.jsx
 // Taking payment (redesigned 12 Nov 2026): one customer, one amount, one
 // confirmed action. Same rules as before, which the server also enforces:
-// wallet redeem only when the balance covers it; change into the wallet only
-// with the customer's consent (capped server-side at GHS 200); split is exactly
-// two legs; a MoMo reference is 11 digits; deposit 70% or 100%.
+// wallet redeem only when the balance covers it; split is exactly two legs; a
+// MoMo reference is 11 digits; deposit 70% or 100%.
 // New: who it is for (record, chat or walk-in), Card (POS) with its approval
-// code, quick cash amounts and live change, the receipt phone pre-filled, and
-// the WhatsApp receipt sent on confirm for those who want it.
+// code, live change, the receipt phone pre-filled, and the WhatsApp receipt
+// sent on confirm for those who want it.
+// 24 Nov 2026 (Khofi): the quick cash amounts (Exact, GHS 5, 10, 20) and the
+// choice to put the change in the wallet are gone, to see how the counter
+// does without them. Change is always given as cash.
 
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -35,10 +37,6 @@ const ICON = {
   check: <path d="M20 6 9 17l-5-5" />,
   x: <><path d="M18 6 6 18" /><path d="M6 6l12 12" /></>,
 }
-// Exact, then the next three cedi notes a customer is likely to hand over.
-const NOTES = [5, 10, 20, 50, 100, 200]
-const quickCash = due => [due, ...NOTES.filter(n => n > due).slice(0, 3)]
-
 // Each choice keeps one colour everywhere (13 Nov 2026).
 const TAG_TONES = {
   'Colour': 'bg-pink-50 text-pink-800 border-pink-200',
@@ -70,8 +68,6 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
   const [splitAmount1, setSplitAmount1] = useState('')
   const [splitRef1, setSplitRef1] = useState('')
   const [splitMethod2, setSplitMethod2] = useState('CASH')
-  const [changeAction, setChangeAction] = useState('CASH')        // CASH | WALLET
-  const [walletConsented, setWalletConsented] = useState(false)
   const [phone, setPhone] = useState(localPhone(job?.contact_phone))
   const [sendWa, setSendWa] = useState(!!job?.from_chat)
   const [extras, setExtras] = useState(false)
@@ -92,7 +88,6 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
   // JobListSerializer exposes the FK as `customer`, not `customer_id`.
   const walletBalance = parseFloat(job?.customer_wallet_balance || 0)
   const canRedeemWallet = !!job?.customer && walletBalance >= amountDue && amountDue > 0
-  const canAddToWallet = !!job?.customer
   const walletWhy = !job?.customer ? 'no customer record' : walletBalance <= 0 ? 'nothing held' : `only ${fmt(walletBalance)} held`
   const split2Amount = Math.max(0, amountDue - parseFloat(splitAmount1 || 0)).toFixed(2)
 
@@ -116,7 +111,7 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
   })
 
   const ready = (() => {
-    if (method === 'CASH') return cash !== '' && !short && !(change > 0 && changeAction === 'WALLET' && !walletConsented)
+    if (method === 'CASH') return cash !== '' && !short
     if (method === 'MOMO') return /^\d{11}$/.test(momoRef)
     if (method === 'POS') return posCode.trim().length > 0
     if (method === 'WALLET') return canRedeemWallet
@@ -142,12 +137,7 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
     }
     if (method === 'CASH') {
       body.cash_tendered = given.toFixed(2)
-      if (change > 0 && changeAction === 'WALLET') {
-        body.wallet_credit_amount = change.toFixed(2)
-        body.wallet_consent = true      // change_given omitted: the server applies the GHS 200 cap
-      } else {
-        body.change_given = change.toFixed(2)
-      }
+      body.change_given = change.toFixed(2)
     }
     if (method === 'MOMO') body.momo_reference = momoRef
     if (method === 'POS') body.pos_approval_code = posCode.trim()
@@ -167,7 +157,7 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
     if (method === 'CASH' && cash === '') return 'Enter the cash received'
     if (method === 'CASH' && short) return `${fmt(amountDue - given)} short of the amount`
     let t = `Confirm ${fmt(amountDue)} ${WORD[method]}`
-    if (method === 'CASH' && change > 0) t += changeAction === 'WALLET' ? ` · ${fmt(change)} to their wallet` : ` · give ${fmt(change)} change`
+    if (method === 'CASH' && change > 0) t += ` · give ${fmt(change)} change`
     if (sendWa) t += ' · WhatsApp receipt'
     return t
   })()
@@ -296,14 +286,6 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
                 <input id="cash-in" type="number" min="0" step="0.01" inputMode="decimal" value={cash}
                        onChange={e => setCash(e.target.value)} placeholder="0.00"
                        className="w-full h-11 px-3 border-2 border-[var(--text)] rounded-xl font-mono text-[18px] font-bold outline-none" />
-                <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {quickCash(amountDue).map(v => (
-                    <button key={v} type="button" onClick={() => setCash(Number(v).toFixed(2))}
-                            className="h-7 px-2.5 rounded-full border border-black/15 bg-white font-mono text-[12px] font-bold">
-                      {v === amountDue ? 'Exact' : `GHS ${v}`}
-                    </button>
-                  ))}
-                </div>
               </div>
               <div className={`rounded-xl px-4 py-3 ${short ? 'bg-red-50' : 'bg-emerald-50'}`}>
                 <div className={`text-[11.5px] font-extrabold tracking-wider ${short ? 'text-red-800' : 'text-emerald-800'}`}>
@@ -313,22 +295,6 @@ export default function PaymentModal({ job, onClose, mode = 'payment' }) {
                   {fmt(short ? amountDue - given : change)}
                 </div>
               </div>
-              {change > 0 && canAddToWallet && (
-                <div className="col-span-2 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => { setChangeAction('CASH'); setWalletConsented(false) }}
-                            className={`h-9 rounded-xl text-[13px] font-bold border ${on(changeAction === 'CASH')}`}>Give as cash</button>
-                    <button type="button" onClick={() => setChangeAction('WALLET')}
-                            className={`h-9 rounded-xl text-[13px] font-bold border ${on(changeAction === 'WALLET')}`}>Add to their wallet</button>
-                  </div>
-                  {changeAction === 'WALLET' && (
-                    <label className="flex items-start gap-2 px-3 py-2.5 bg-[var(--bg)] border border-[var(--border)] rounded-xl text-xs text-[var(--text-2)] cursor-pointer">
-                      <input type="checkbox" checked={walletConsented} onChange={e => setWalletConsented(e.target.checked)} className="mt-0.5" />
-                      <span>I confirmed with {job.for_whom || job.customer_name} that they want {fmt(change)} saved to their wallet instead of cash change.</span>
-                    </label>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
