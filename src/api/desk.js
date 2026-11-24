@@ -14,6 +14,21 @@ export const holdDeskJob   = (id, outcome, note) =>
   client.post(`/api/v1/jobs/${id}/desk/problem/`, { outcome, note }).then(r => r.data)
 export const resumeDeskJob = id => client.post(`/api/v1/jobs/${id}/desk/resume/`).then(r => r.data)
 
+// Pays at the counter (24 Nov 2026): Octos took the order on WhatsApp and the
+// customer pays when they collect. A pickup code; printed ahead for customers
+// we know, otherwise when they arrive. Not collected by closing, it waits on
+// the shelf for a week, then Octos cancels it.
+export const markHere      = id => client.post(`/api/v1/jobs/${id}/desk/here/`).then(r => r.data)
+export const sendToCashier = id => client.post(`/api/v1/jobs/${id}/desk/cashier/`).then(r => r.data)
+export const getShelf      = q => client.get('/api/v1/jobs/desk/shelf/', { params: { q } }).then(r => r.data)
+
+// Needs an attendant's hands now: nobody has it, and it isn't a print-on-
+// arrival order whose customer hasn't come, or one already printed.
+export const needsHands = j =>
+  !j.taken_by && !(j.counter && ((!j.counter.print_ahead && !j.counter.here) || j.work_state === 'DONE'))
+
+export const money = v => `GHS ${Number(v || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
 // One query, shared by the Work tab, the arrival alert and the menu badge,
 // so all three always agree. The branch socket refreshes it the moment a
 // job lands or moves ('deskQueue'); the interval is only the safety net.

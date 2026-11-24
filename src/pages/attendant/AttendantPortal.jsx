@@ -17,7 +17,7 @@ import HandoverNotes       from '../../components/attendant/HandoverNotes'
 import AttendantCollect    from '../../components/attendant/AttendantCollect'
 import AttendantWork       from '../../components/attendant/AttendantWork'
 import DeskArrival         from '../../components/attendant/DeskArrival'
-import { deskQuery }       from '../../api/desk'
+import { deskQuery, needsHands } from '../../api/desk'
 import ClaimStrip          from '../../components/attendant/ClaimStrip'
 import SignOffBanner       from '../../components/attendant/SignOffBanner'
 import AttendantSignOffWizard from '../../components/attendant/AttendantSignOffWizard'
@@ -138,7 +138,7 @@ export default function AttendantPortal() {
   const reminder = useReminders()
   // Front-desk work: shared with the Work tab and the arrival alert.
   const { data: desk } = useQuery(deskQuery)
-  const waitingWork = (desk?.jobs || []).filter(j => !j.taken_by).length
+  const waitingWork = (desk?.jobs || []).filter(needsHands).length
   // The inbox's badge on the menu: unread chats, and chats that need a person.
   const badge = useInboxBadge()
 

@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  LATE_MINUTES, chime, clock, deskQuery, errorText, minutesSince, takeDeskJob,
+  LATE_MINUTES, chime, clock, deskQuery, errorText, minutesSince, needsHands, takeDeskJob,
 } from '../../api/desk'
 
 // Re-draw every 15 seconds so "waiting 6 min" and the red state keep up.
@@ -38,7 +38,8 @@ export default function DeskArrival({ busy, onTaken }) {
   const queryClient = useQueryClient()
   const { data } = useQuery(deskQuery)
   const [problem, setProblem] = useState('')
-  const waiting = (data?.jobs || []).filter(j => !j.taken_by)
+  // A print-on-arrival order alerts when its customer arrives, not before (24 Nov 2026).
+  const waiting = (data?.jobs || []).filter(needsHands)
   const job = waiting[0]
   const late = job ? minutesSince(job.landed_at) >= LATE_MINUTES : false
 
@@ -78,6 +79,8 @@ export default function DeskArrival({ busy, onTaken }) {
   if (!job) return null
 
   const more = waiting.length - 1
+  const counter = job.counter
+  const heading = counter?.here ? `HERE NOW · CODE ${counter.code}` : counter ? `PAYS AT THE COUNTER · ${counter.code}` : 'NEW FRONT-DESK JOB'
   const promise = job.promise ? clock(job.promise) : null
   const tone = late
     ? { band: 'bg-[#B42318]', text: 'text-white', soft: 'text-white/80' }
@@ -107,7 +110,7 @@ export default function DeskArrival({ busy, onTaken }) {
             <span className="relative w-2.5 h-2.5 rounded-full bg-white" />
           </span>
           <span className="text-[11px] font-black tracking-wider shrink-0">
-            {late ? 'NOBODY HAS TAKEN THIS' : 'NEW FRONT-DESK JOB'}
+            {late ? 'NOBODY HAS TAKEN THIS' : heading}
           </span>
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
             {job.title} · {job.customer}{promise ? ` · promised ${promise}` : ''}
@@ -127,7 +130,7 @@ export default function DeskArrival({ busy, onTaken }) {
       <div className="w-full max-w-md bg-[var(--panel)] rounded-2xl shadow-2xl overflow-hidden">
         <div className={`${tone.band} ${tone.text} px-5 py-3 flex items-center justify-between`}>
           <span className="text-[11px] font-black tracking-wider">
-            {late ? `NOBODY HAS TAKEN THIS · ${minutesSince(job.landed_at)} MIN` : 'NEW FRONT-DESK JOB'}
+            {late ? `NOBODY HAS TAKEN THIS · ${minutesSince(job.landed_at)} MIN` : heading}
           </span>
           <span className={`text-[12px] ${tone.soft}`}>{job.source}</span>
         </div>
@@ -163,7 +166,7 @@ export default function DeskArrival({ busy, onTaken }) {
           </ul>
 
           <div className="mt-2 flex items-center justify-between text-[12px] text-[var(--text-3)]">
-            <span>{job.files.length} file{job.files.length === 1 ? '' : 's'} · paid online</span>
+            <span>{job.files.length} file{job.files.length === 1 ? '' : 's'} · {counter ? `pays at the counter · code ${counter.code}` : 'paid online'}</span>
             <span>{waitedText(job.landed_at)}</span>
           </div>
 
