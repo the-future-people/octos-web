@@ -226,6 +226,9 @@ const I = {
   send: p => <Svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></Svg>,
   clip: p => <Svg {...p}><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" /></Svg>,
   photo: p => <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 8" /></Svg>,
+  doc: p => <Svg {...p}><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></Svg>,
+  video: p => <Svg {...p}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3" /></Svg>,
+  camera: p => <Svg {...p}><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></Svg>,
   panel: p => <Svg {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Svg>,
   back: p => <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>,
   check: p => <Svg {...p}><path d="m5 12 5 5L20 7" /></Svg>,
@@ -1226,6 +1229,56 @@ function Panel({ conv, actions, files, onClose, reports, onToggleReports }) {
   )
 }
 
+// ── Attaching: photo, document or video (25 Nov 2026) ─────────────────
+// Pick what you're sending, and the file goes to the customer that way: a
+// photo shows as a picture (WhatsApp shrinks it), a document arrives exactly
+// as it is (full quality, for artwork to print), a video plays in the chat.
+// Dropped or pasted files start as their kind would; each can be switched.
+const VIDEO_OK = f => ['video/mp4', 'video/3gpp'].includes(f.type) && f.size <= 16 * 1024 * 1024
+const firstWay = f => (f.type.startsWith('image/') ? 'photo' : f.type.startsWith('video/') ? 'video' : 'document')
+const ATTACH = [
+  { key: 'photo', label: 'Photo', note: 'Shows in the chat as a picture. WhatsApp shrinks it a little.', accept: 'image/*', icon: 'photo', bg: '#EFF8FF', fg: '#175CD3' },
+  { key: 'document', label: 'Document', note: 'Sent as a file, exactly as it is. For artwork, PDFs and anything to print.', accept: '', icon: 'doc', bg: '#FBEAEA', fg: '#B30000' },
+  { key: 'video', label: 'Video', note: 'Plays in the chat. MP4, up to 16 MB.', accept: 'video/*', icon: 'video', bg: '#F4F3FF', fg: '#5925DC' },
+  { key: 'camera', label: 'Camera', note: 'Take a picture now and send it as a photo.', accept: 'image/*', icon: 'camera', bg: '#ECFDF3', fg: '#067647', phoneOnly: true },
+]
+
+function AttachMenu({ phone, onPick, className }) {
+  return (
+    <div className={className} role="menu" aria-label="Attach">
+      {ATTACH.filter(a => phone || !a.phoneOnly).map(a => {
+        const Icon = I[a.icon]
+        return (
+          <button key={a.key} type="button" role="menuitem" onClick={() => onPick(a)}
+            className="w-full flex items-center gap-3 p-2.5 rounded-[10px] text-left hover:bg-black/[0.04] active:bg-black/[0.06]">
+            <span className="w-10 h-10 shrink-0 rounded-[10px] grid place-items-center" style={{ background: a.bg, color: a.fg }}><Icon size={19} /></span>
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-[14px] font-bold text-[var(--text)]">{a.label}</span>
+              {!phone && <span className="text-[12px] text-[var(--text-3)] leading-snug">{a.note}</span>}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// How one chip goes: Photo | Document for a picture, Video | Document for a video.
+function WaySwitch({ chip, onChange }) {
+  const f = chip.file
+  const options = f.type.startsWith('image/') ? [['photo', 'Photo'], ['document', 'Document']]
+    : f.type.startsWith('video/') ? [['video', 'Video'], ['document', 'Document']] : null
+  if (!options) return <span className="h-6 px-2 rounded-md bg-black/[0.06] inline-flex items-center text-[11px] font-bold text-[var(--text-2)]">Document</span>
+  return (
+    <span role="group" aria-label={`Send ${f.name} as`} className="inline-flex p-[2px] rounded-md bg-black/[0.06] gap-px">
+      {options.map(([way, label]) => (
+        <button key={way} type="button" onClick={() => onChange(way)} aria-pressed={chip.as === way}
+          className={`h-6 px-2 rounded text-[11px] ${chip.as === way ? 'bg-white shadow-sm font-bold text-[var(--text)]' : 'font-semibold text-[var(--text-3)]'}`}>{label}</button>
+      ))}
+    </span>
+  )
+}
+
 // ── The open chat ───────────────────────────────────────────────────────
 function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) {
   const queryClient = useQueryClient()
@@ -1244,6 +1297,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
   const toggleReports = () => setReports(on => { try { localStorage.setItem('octos.reports', on ? 'off' : 'on') } catch { /* private */ } return !on })
   const scroller = useRef(null)
   const filePick = useRef(null)
+  const pickAs = useRef(null)          // how the files being picked will go
+  const [attachOpen, setAttachOpen] = useState(false)
   const box = useRef(null)
   const [emojis, setEmojis] = useState(false)
   // Email: which messages are unfolded; the newest always is.
@@ -1291,7 +1346,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
     mutationFn: () => {
       if (!chips.length) return client.post(`/api/v1/communications/${convId}/reply/`, { body: reply, is_internal_note: asNote, reply_to: replyTo?.id || null })
       const form = new FormData()
-      chips.forEach(f => form.append('attachments', f))
+      chips.forEach(c => { form.append('attachments', c.file); form.append('send_as', c.as) })
       form.append('body', reply)
       form.append('is_internal_note', asNote ? 'true' : 'false')
       if (replyTo) form.append('reply_to', String(replyTo.id))
@@ -1302,12 +1357,27 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
     onError: err => setError(err?.response?.data?.detail || 'Could not send. Try again.'),
   })
 
-  const addFiles = list => {
+  const addFiles = (list, way) => {
     const files = Array.from(list || [])
     const big = files.filter(f => f.size > MAX_FILE)
     if (big.length) setError(`${big.map(f => f.name).join(', ')} is over 16 MB.`)
-    setChips(c => [...c, ...files.filter(f => f.size <= MAX_FILE)])
+    // The menu's choice where it fits the file (a PDF picked under Photo still goes as a document).
+    const fits = (f, w) => (w === 'document') || (w === 'photo' && f.type.startsWith('image/')) || (w === 'video' && f.type.startsWith('video/'))
+    setChips(c => [...c, ...files.filter(f => f.size <= MAX_FILE).map(f => ({ file: f, as: way && fits(f, way) ? way : firstWay(f) }))])
   }
+  // A choice from the attach menu: the picker for that kind of file.
+  const pick = a => {
+    setAttachOpen(false)
+    setPlus(false)
+    const input = filePick.current
+    if (!input) return
+    pickAs.current = a.key === 'camera' ? 'photo' : a.key
+    input.accept = a.accept
+    if (a.key === 'camera') input.setAttribute('capture', 'environment')
+    else input.removeAttribute('capture')
+    input.click()
+  }
+  const onPicked = e => { addFiles(e.target.files, pickAs.current); pickAs.current = null; e.target.value = '' }
 
   if (isLoading || !conv) {
     return <div className="flex-1 p-6 space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-12 bg-[var(--bg)] rounded-xl animate-pulse" />)}</div>
@@ -1348,15 +1418,20 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
             )
   const chipsBlock = chips.length > 0 && (
               <div className="flex gap-2 flex-wrap">
-                {chips.map((f, i) => {
+                {chips.map((chip, i) => {
+                  const f = chip.file
                   const b = badge(f.name, f.type)
+                  const note = chip.as === 'video' && !VIDEO_OK(f) ? 'goes as a document: WhatsApp plays MP4 up to 16 MB'
+                    : chip.as === 'document' && f.type.startsWith('image/') ? 'full quality, not shrunk' : ''
                   return (
-                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-lg border border-black/10 bg-[#FAFAF9]">
+                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-lg border border-black/10 bg-[#FAFAF9] max-w-full">
                       {f.type.startsWith('image/')
-                        ? <img src={URL.createObjectURL(f)} alt="" className="w-8 h-8 rounded object-cover" />
-                        : <span className="w-8 h-8 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>}
-                      <span className="flex flex-col"><span className="text-xs font-semibold max-w-[180px] truncate">{f.name}</span><span className="text-[10.5px] text-[var(--text-3)]">{size(f.size)}</span></span>
-                      <button type="button" onClick={() => setChips(c => c.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="w-6 h-6 grid place-items-center rounded hover:bg-black/5"><I.close size={13} /></button>
+                        ? <img src={URL.createObjectURL(f)} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                        : <span className="w-8 h-8 shrink-0 rounded grid place-items-center text-[9px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>}
+                      <span className="flex flex-col min-w-0"><span className="text-xs font-semibold max-w-[180px] truncate">{f.name}</span>
+                        <span className="text-[10.5px] text-[var(--text-3)]">{size(f.size)}{note ? ` · ${note}` : ''}</span></span>
+                      {!asNote && <WaySwitch chip={chip} onChange={way => setChips(c => c.map((x, j) => (j === i ? { ...x, as: way } : x)))} />}
+                      <button type="button" onClick={() => setChips(c => c.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`} className="w-6 h-6 shrink-0 grid place-items-center rounded hover:bg-black/5"><I.close size={13} /></button>
                     </span>
                   )
                 })}
@@ -1388,7 +1463,6 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
   const who = taken ? `${conv.assigned_to_name || 'A person'} is answering` : needsYou(conv) ? 'Octos asked for a person' : 'Octos is answering'
   function onPlus(key) {
     setPlus(false)
-    if (key === 'file') filePick.current?.click()
     if (key === 'note') setAsNote(n => !n)
     if (key === 'emoji') setEmojis(true)
   }
@@ -1419,15 +1493,15 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
         )}
         {whatsapp && !windowOpen && !asNote ? closedBlock : (
           <div className="flex items-end gap-2 relative">
-            <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+            <input ref={filePick} type="file" multiple className="hidden" onChange={onPicked} />
             <button type="button" onClick={() => setPlus(v => !v)} aria-label="Attach, note or emoji" aria-expanded={plus}
               className="w-[38px] h-[38px] shrink-0 rounded-full grid place-items-center bg-black/[0.06]" style={{ color: theme.header.title }}>
               <I.plus size={22} />
             </button>
             {plus && (
               <div className="absolute bottom-[46px] left-0 z-30 w-[240px] rounded-[14px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] overflow-hidden">
+                <AttachMenu phone onPick={pick} className="p-1.5 border-b border-black/[0.07]" />
                 {[
-                  ['file', <I.photo key="p" size={19} />, 'Photo or file'],
                   ['note', <I.lock key="l" size={19} />, asNote ? 'Reply to the customer' : 'Note, staff only'],
                   ['emoji', <I.smile key="s" size={19} />, 'Emoji'],
                 ].map(([key, icon, label], i) => (
@@ -1574,9 +1648,16 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
             {chipsBlock}
             {whatsapp && !windowOpen && !asNote ? closedBlock : (
             <div className="flex items-end gap-2">
-              <input ref={filePick} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-              <button type="button" onClick={() => filePick.current?.click()} aria-label="Attach photos or documents" title="Attach photos or documents"
-                className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.clip size={18} /></button>
+              <input ref={filePick} type="file" multiple className="hidden" onChange={onPicked} />
+              <div className="relative">
+                <button type="button" onClick={() => { setAttachOpen(v => !v); setEmojis(false) }} aria-label="Attach a photo, document or video" title="Attach a photo, document or video"
+                  aria-expanded={attachOpen} aria-haspopup="menu"
+                  className={`w-[38px] h-[38px] shrink-0 rounded-lg border bg-white grid place-items-center ${attachOpen ? 'border-[var(--text)] text-[var(--text)]' : 'border-[var(--border)] text-[var(--text-2)]'}`}><I.clip size={18} /></button>
+                {attachOpen && (
+                  <AttachMenu onPick={pick}
+                    className="absolute bottom-[46px] left-0 z-30 w-[330px] p-1.5 rounded-[14px] border border-[var(--border)] bg-white shadow-xl" />
+                )}
+              </div>
               <div className="relative">
                 <button type="button" onClick={() => setEmojis(v => !v)} aria-label="Add an emoji" title="Add an emoji" aria-expanded={emojis}
                   className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.smile size={18} /></button>
