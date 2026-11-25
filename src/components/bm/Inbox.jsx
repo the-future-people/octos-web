@@ -191,7 +191,7 @@ function Photo({ m }) {
 }
 // Octos's mark (public/octos-mark.svg), beside its name wherever it speaks.
 const OctosMark = ({ s = 14 }) => <img src="/octos-mark.svg" alt="" width={s} height={s} className="inline-block shrink-0" />
-const hasFile = m => !!(m.media_file || m.media_id || MEDIA.includes(m.message_type))
+const hasFile = m => !!(m.media_file || m.media_id || MEDIA.includes(m.message_type) || m.file_keep?.deleted)
 const isPhoto = m => (m.media_mime || '').startsWith('image/') || m.message_type === 'IMAGE'
 function badge(name, mime, type) {
   const ext = (name || '').includes('.') ? name.split('.').pop() : ''
@@ -469,15 +469,200 @@ function SharedDocCard({ url, tint }) {
   )
 }
 
+// ── Customer files: Keep and Delete (25 Nov 2026) ─────────────────
+// Customer files are deleted 14 days after they arrive, unless kept. Keep:
+// the customer asked us to save it. Delete: with a reason; never while a job
+// of theirs is open, unless you're the BM (an attendant asks Khofi). A
+// deleted file leaves its record in the chat: name, pages, size, who, why.
+const keepFile = (id, keep) => client.post(`/api/v1/communications/messages/${id}/keep/`, { keep }).then(r => r.data)
+const getChatFiles = id => client.get(`/api/v1/communications/${id}/files/`).then(r => r.data)
+const deleteChatFiles = (id, body) => client.post(`/api/v1/communications/${id}/files/delete/`, body).then(r => r.data)
+const askToUnlock = (id, body) => client.post(`/api/v1/communications/${id}/files/unlock/`, body).then(r => r.data)
+const shortDay = iso => new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+const problemText = (e, fallback) => e?.response?.data?.detail || fallback
+const BinIcon = ({ s = 14 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+)
+const LockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+)
+const KeepIcon = ({ filled }) => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z" /></svg>
+)
+
+function useKeep(m) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: keep => keepFile(m.id, keep),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['conversation', m.conversation] }),
+  })
+}
+
+// The line under a customer file: kept by whom, or the day it goes.
+function KeepLine({ info }) {
+  if (info?.kept) {
+    return (
+      <span className="self-start inline-flex items-center gap-1 h-[20px] px-2 rounded-full text-[10.5px] font-bold"
+        style={{ background: '#EFF8FF', border: '1px solid #B2DDFF', color: '#175CD3' }}>
+        <KeepIcon filled /> Kept · {info.kept.by}, {shortDay(info.kept.at)}
+      </span>
+    )
+  }
+  if (info?.deletes_on) return <span className="text-[11px] text-[var(--text-3)]">Deleted {shortDay(info.deletes_on)}</span>
+  return null
+}
+
+// Keep and the bin, beside Open.
+function FileControls({ m, onDelete }) {
+  const keep = useKeep(m)
+  const kept = !!m.file_keep?.kept
+  return (
+    <>
+      <button type="button" onClick={() => keep.mutate(!kept)} disabled={keep.isPending}
+        title={kept ? 'Kept for the customer. Press to give it back its 14 days.' : 'The customer asked us to save it'}
+        className="px-2.5 py-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1 disabled:opacity-60"
+        style={kept ? { background: '#EFF8FF', border: '1px solid #B2DDFF', color: '#175CD3' } : { background: '#FFFFFF', border: '1px solid #D4D4D4', color: '#080808' }}>
+        <KeepIcon filled={kept} />{kept ? 'Kept' : 'Keep'}
+      </button>
+      {m.file_keep?.locked
+        ? <button type="button" onClick={onDelete} aria-label={`Delete locked: ${m.file_keep.locked}`} title={`Locked: ${m.file_keep.locked}`}
+            className="w-[28px] h-[26px] rounded-md grid place-items-center text-[#8A8A8A]"
+            style={{ background: '#F5F5F5', border: '1px dashed #D4D4D4' }}>
+            <LockIcon />
+          </button>
+        : <button type="button" onClick={onDelete} aria-label="Delete this file" title="Delete this file"
+            className="w-[28px] h-[26px] rounded-md grid place-items-center text-[var(--text-2)]"
+            style={{ background: '#FFFFFF', border: '1px solid #D4D4D4' }}>
+            <BinIcon />
+          </button>}
+    </>
+  )
+}
+
+// What's left when a file is deleted: the record, never the content.
+function DeletedFileCard({ m, tint }) {
+  const d = m.file_keep.deleted
+  const facts = [m.media_pages && `${m.media_pages} page${m.media_pages === 1 ? '' : 's'}`, m.media_size && size(m.media_size),
+    d.sha256 && `fingerprint ${d.sha256.slice(0, 4)}…${d.sha256.slice(-4)}`].filter(Boolean).join(', ')
+  return (
+    <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg" style={{ background: tint, border: '1px dashed #D4D4D4' }}>
+      <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[var(--text-3)]" style={{ border: '1.5px dashed #BDBDBD' }}><BinIcon s={16} /></span>
+      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="font-bold text-[13px] truncate text-[var(--text-2)]">{m.media_name || 'File'} · deleted</span>
+        {facts && <span className="text-[11.5px] text-[var(--text-3)]">{facts}</span>}
+        <span className="text-[11.5px] text-[var(--text-3)]">
+          {d.by === 'Octos' ? `Deleted by Octos after 14 days, ${shortDay(d.at)}` : `By ${d.by}, ${shortDay(d.at)} · "${d.reason}"`}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+function FilesDialog({ m, onClose }) {
+  const queryClient = useQueryClient()
+  const { data, isLoading, isError } = useQuery({ queryKey: ['chatFiles', m.conversation], queryFn: () => getChatFiles(m.conversation) })
+  const [picked, setPicked] = useState(() => new Set([m.id]))
+  const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
+  const done = () => {
+    queryClient.invalidateQueries({ queryKey: ['conversation', m.conversation] })
+    queryClient.invalidateQueries({ queryKey: ['chatFiles', m.conversation] })
+  }
+  const remove = useMutation({ mutationFn: () => deleteChatFiles(m.conversation, { ids: [...picked], reason, note }), onSuccess: () => { done(); onClose() } })
+  const ask = useMutation({ mutationFn: () => askToUnlock(m.conversation, { ids: [...picked], reason, note }) })
+  const files = data?.files || []
+  const toggle = id => setPicked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const ready = picked.size > 0 && reason && (reason !== 'other' || note.trim())
+  const locked = data?.locked && !data?.may_unlock
+  const failed = remove.error || ask.error
+
+  return createPortal(
+    <div className="fixed inset-0 z-[300] bg-black/50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-labelledby="files-dialog-title" onClick={onClose}>
+      <div className="w-full max-w-[460px] bg-[var(--panel)] rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-1">
+          <h2 id="files-dialog-title" className="text-[18px] font-extrabold text-[var(--text)]">{locked ? 'Locked for now' : 'Delete their files?'}</h2>
+          <p className="mt-1 text-[13px] text-[var(--text-2)] leading-snug">
+            {locked
+              ? `${data.locked}. Files on an open job are what we print from, and our proof of what was sent. It unlocks once the job is collected, or Khofi can let you delete it now.`
+              : "They're removed from our storage for good. A record stays: names, pages, size and who deleted them."}
+          </p>
+          {data?.locked && data?.may_unlock && (
+            <p className="mt-2 rounded-lg px-3 py-2 text-[12px] font-semibold" style={{ background: C.amberSoft, color: C.amberText }}>
+              {data.locked}. As a manager you can delete them anyway.
+            </p>
+          )}
+        </div>
+        {isLoading && <div className="px-5 py-4 text-[13px] text-[var(--text-3)]">Loading their files…</div>}
+        {isError && <div className="px-5 py-4 text-[13px]" style={{ color: C.redText }}>Their files didn't load. Close and try again.</div>}
+        {data && (
+          <>
+            <div className="px-5 pt-3 flex flex-col gap-2 max-h-[220px] overflow-y-auto">
+              {files.map(f => (
+                <label key={f.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-[var(--border)] text-[13px] cursor-pointer">
+                  <input type="checkbox" checked={picked.has(f.id)} onChange={() => toggle(f.id)} className="w-[18px] h-[18px] accent-black" />
+                  <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{f.name}</span>
+                  <span className="text-[12px] text-[var(--text-3)] shrink-0">{f.pages ? `${f.pages} page${f.pages === 1 ? '' : 's'}` : ''}{f.kept ? ' · kept' : ''}</span>
+                </label>
+              ))}
+            </div>
+            <div className="px-5 pt-4">
+              <div className="text-[12px] font-bold text-[var(--text-2)] mb-1.5">Why?</div>
+              <div className="flex flex-wrap gap-1.5">
+                {data.reasons.map(r => (
+                  <button key={r.value} type="button" onClick={() => setReason(r.value)}
+                    className={`h-8 px-3 rounded-full text-[12.5px] font-semibold border ${reason === r.value ? 'bg-[#18181B] text-white border-[#18181B]' : 'bg-white text-[#080808] border-[#D4D4D4]'}`}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {reason === 'other' && (
+                <input value={note} onChange={e => setNote(e.target.value)} maxLength={150} placeholder="In a few words"
+                  aria-label="Why, in a few words"
+                  className="mt-2 w-full h-11 px-3 rounded-xl border border-[var(--border)] bg-[var(--panel)] text-[16px] outline-none focus:border-[var(--text)]" />
+              )}
+            </div>
+            <p className="mx-5 mt-3 rounded-lg bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--text-2)]">
+              Khofi is told about every deletion.{reason === 'asked' ? ' Octos tells the customer it\'s done.' : ''}
+            </p>
+          </>
+        )}
+        {failed && <p className="mx-5 mt-2 text-[12.5px] font-semibold" style={{ color: C.redText }}>{problemText(failed, 'That did not go through. Try again.')}</p>}
+        {ask.isSuccess && <p className="mx-5 mt-2 text-[12.5px] font-semibold text-[#067647]">Asked. Khofi will answer on his line, and the files go if he says yes.</p>}
+        <div className="px-5 pt-4 pb-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-[#D4D4D4] bg-white text-[14px] font-bold text-[#080808]">
+            {ask.isSuccess ? 'Close' : 'Cancel'}
+          </button>
+          {locked
+            ? <button type="button" disabled={!ready || ask.isPending || ask.isSuccess} onClick={() => ask.mutate()}
+                className="h-11 px-4 rounded-xl bg-[#18181B] text-white text-[14px] font-bold disabled:opacity-50">
+                {ask.isPending ? 'Asking…' : 'Ask Khofi'}
+              </button>
+            : <button type="button" disabled={!ready || remove.isPending} onClick={() => remove.mutate()}
+                className="h-11 px-4 rounded-xl text-white text-[14px] font-bold disabled:opacity-50" style={{ background: '#B42318' }}>
+                {remove.isPending ? 'Deleting…' : `Delete ${picked.size} file${picked.size === 1 ? '' : 's'}`}
+              </button>}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 function FileCard({ m, tint }) {
+  const [deleting, setDeleting] = useState(false)
+  if (m.file_keep?.deleted) return <DeletedFileCard m={m} tint={tint} />
   const b = badge(m.media_name, m.media_mime, m.message_type)
+  const customerFile = !!m.file_keep && !!m.media_file
   return (
     <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg border border-black/5" style={{ background: tint }}>
       <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
         {m.media_file
-          ? <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
+          ? <>
+              <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
+              {customerFile && <KeepLine info={m.file_keep} />}
+            </>
           : m.media_info?.failed ? (
             <span className="text-[11.5px] font-semibold" style={{ color: C.redText }}>
               This file couldn’t be saved. Ask the customer to send it again.
@@ -491,10 +676,25 @@ function FileCard({ m, tint }) {
           )}
       </span>
       {m.media_file && (
-        <span className="flex gap-1.5 shrink-0">
+        <span className="flex gap-1.5 shrink-0 items-center">
           <button type="button" onClick={() => openFile(m)} className="px-3 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
+          {customerFile && <FileControls m={m} onDelete={() => setDeleting(true)} />}
         </span>
       )}
+      {deleting && <FilesDialog m={m} onClose={() => setDeleting(false)} />}
+    </div>
+  )
+}
+
+// A customer's photo: the same Keep and bin, under the picture.
+function PhotoControls({ m }) {
+  const [deleting, setDeleting] = useState(false)
+  if (!m.file_keep || m.file_keep.deleted) return null
+  return (
+    <div className="flex items-center gap-1.5 px-1 pt-1">
+      <KeepLine info={m.file_keep} />
+      <span className="ml-auto flex gap-1.5"><FileControls m={m} onDelete={() => setDeleting(true)} /></span>
+      {deleting && <FilesDialog m={m} onClose={() => setDeleting(false)} />}
     </div>
   )
 }
@@ -543,6 +743,7 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
               </div>
             )}
             {photo && <Photo m={m} />}
+            {photo && <PhotoControls m={m} />}
             {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
             {sharedLinks(text).map(url => <SharedDocCard key={url} url={url} tint="rgba(255,255,255,.75)" />)}
             {text && <span className={`whitespace-pre-line break-words leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}><Linked text={text} /></span>}
