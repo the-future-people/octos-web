@@ -483,8 +483,8 @@ const problemText = (e, fallback) => e?.response?.data?.detail || fallback
 const BinIcon = ({ s = 14 }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
 )
-const LockIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+const LockIcon = ({ s = 14 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
 )
 const KeepIcon = ({ filled }) => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z" /></svg>
@@ -508,6 +508,14 @@ function KeepLine({ info }) {
       </span>
     )
   }
+  if (info?.locked) {
+    // "On job FP-WLB-2026-06212, not collected yet" → "On a job, not collected yet": the dialog names the job.
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold min-w-0" style={{ color: '#93370D' }}>
+        <LockIcon s={11} /><span className="truncate">{info.locked.replace(/^On job \S+, /, 'On a job, ')}</span>
+      </span>
+    )
+  }
   if (info?.deletes_on) return <span className="text-[11px] text-[var(--text-3)]">Deleted {shortDay(info.deletes_on)}</span>
   return null
 }
@@ -520,7 +528,7 @@ function FileControls({ m, onDelete }) {
     <>
       <button type="button" onClick={() => keep.mutate(!kept)} disabled={keep.isPending}
         title={kept ? 'Kept for the customer. Press to give it back its 14 days.' : 'The customer asked us to save it'}
-        className="px-2.5 py-1 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1 disabled:opacity-60"
+        className="h-[26px] px-2.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1 disabled:opacity-60"
         style={kept ? { background: '#EFF8FF', border: '1px solid #B2DDFF', color: '#175CD3' } : { background: '#FFFFFF', border: '1px solid #D4D4D4', color: '#080808' }}>
         <KeepIcon filled={kept} />{kept ? 'Kept' : 'Keep'}
       </button>
@@ -653,16 +661,16 @@ function FileCard({ m, tint }) {
   if (m.file_keep?.deleted) return <DeletedFileCard m={m} tint={tint} />
   const b = badge(m.media_name, m.media_mime, m.message_type)
   const customerFile = !!m.file_keep && !!m.media_file
+  // 25 Nov 2026 (Khofi): the buttons sit in a footer under the file, so the
+  // name gets the card's full width and wraps instead of being cut.
   return (
-    <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg border border-black/5" style={{ background: tint }}>
+    <div className="w-full max-w-[400px] min-w-0 rounded-lg border border-black/5 overflow-hidden" style={{ background: tint }}>
+      <div className="flex items-start gap-2.5 p-2.5 pb-2">
       <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[11px] font-extrabold text-white" style={{ background: badgeColour(b) }}>{b}</span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="font-bold text-[13px] truncate">{m.media_name || 'File'}</span>
+        <span className="font-bold text-[13px] leading-snug line-clamp-2 [overflow-wrap:anywhere]" title={m.media_name || 'File'}>{m.media_name || 'File'}</span>
         {m.media_file
-          ? <>
-              <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
-              {customerFile && <KeepLine info={m.file_keep} />}
-            </>
+          ? <span className="text-[11.5px] text-[var(--text-3)]">{fileInfo(m)}</span>
           : m.media_info?.failed ? (
             <span className="text-[11.5px] font-semibold" style={{ color: C.redText }}>
               This file couldn’t be saved. Ask the customer to send it again.
@@ -675,11 +683,15 @@ function FileCard({ m, tint }) {
             </span>
           )}
       </span>
+      </div>
       {m.media_file && (
-        <span className="flex gap-1.5 shrink-0 items-center">
-          <button type="button" onClick={() => openFile(m)} className="px-3 py-1 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
-          {customerFile && <FileControls m={m} onDelete={() => setDeleting(true)} />}
-        </span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-t border-black/[0.06] bg-white">
+          <span className="min-w-0 flex">{customerFile && <KeepLine info={m.file_keep} />}</span>
+          <span className="ml-auto flex gap-1.5 shrink-0 items-center">
+            <button type="button" onClick={() => openFile(m)} className="h-[26px] px-3 rounded-md bg-zinc-900 text-white text-[11.5px] font-semibold">Open</button>
+            {customerFile && <FileControls m={m} onDelete={() => setDeleting(true)} />}
+          </span>
+        </div>
       )}
       {deleting && <FilesDialog m={m} onClose={() => setDeleting(false)} />}
     </div>
