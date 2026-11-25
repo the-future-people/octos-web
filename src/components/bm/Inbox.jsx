@@ -556,7 +556,7 @@ function DeletedFileCard({ m, tint }) {
     <div className="flex items-center gap-2.5 w-full max-w-[400px] min-w-0 p-2 rounded-lg" style={{ background: tint, border: '1px dashed #D4D4D4' }}>
       <span className="w-10 h-12 shrink-0 rounded-md grid place-items-center text-[var(--text-3)]" style={{ border: '1.5px dashed #BDBDBD' }}><BinIcon s={16} /></span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="font-bold text-[13px] truncate text-[var(--text-2)]">{m.media_name || 'File'} · deleted</span>
+        <span className="font-bold text-[13px] truncate text-[var(--text-2)]">{m.media_name || (isPhoto(m) ? 'Photo' : 'File')} · deleted</span>
         {facts && <span className="text-[11.5px] text-[var(--text-3)]">{facts}</span>}
         <span className="text-[11.5px] text-[var(--text-3)]">
           {d.by === 'Octos' ? `Deleted by Octos after 14 days, ${shortDay(d.at)}` : `By ${d.by}, ${shortDay(d.at)} · "${d.reason}"`}
@@ -566,10 +566,10 @@ function DeletedFileCard({ m, tint }) {
   )
 }
 
-function FilesDialog({ m, onClose }) {
+function FilesDialog({ m, ids, onClose }) {
   const queryClient = useQueryClient()
   const { data, isLoading, isError } = useQuery({ queryKey: ['chatFiles', m.conversation], queryFn: () => getChatFiles(m.conversation) })
-  const [picked, setPicked] = useState(() => new Set([m.id]))
+  const [picked, setPicked] = useState(() => new Set(ids || [m.id]))
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
   const done = () => {
@@ -893,7 +893,7 @@ function LinkCustomer({ conv }) {
 // opens the viewer: arrows (and the arrow keys) to move through them, and to
 // open or save each on its own.
 const ALBUM_GAP_MS = 3 * 60 * 1000
-const plainPhoto = m => isPhoto(m) && kindOf(m) === 'customer' && !(m.body && m.body !== m.media_name) && !m.reply_preview
+const plainPhoto = m => isPhoto(m) && kindOf(m) === 'customer' && !(m.body && m.body !== m.media_name) && !m.reply_preview && !m.file_keep?.deleted
 
 function groupPhotos(messages) {
   const items = []
@@ -951,9 +951,50 @@ function Thumb({ m }) {
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
 }
 
+// Keep and the bin for a whole album (25 Nov 2026): the photos go or stay together.
+function AlbumControls({ ms }) {
+  const queryClient = useQueryClient()
+  const [deleting, setDeleting] = useState(false)
+  const files = ms.filter(x => x.media_file && x.file_keep && !x.file_keep.deleted)
+  const kept = files.length > 0 && files.every(x => x.file_keep.kept)
+  const keepAll = useMutation({
+    mutationFn: keep => Promise.all(files.map(x => keepFile(x.id, keep))),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['conversation', ms[0].conversation] }),
+  })
+  if (!files.length) return null
+  const first = files[0]
+  return (
+    <>
+      <button type="button" onClick={() => keepAll.mutate(!kept)} disabled={keepAll.isPending}
+        title={kept ? 'Kept for the customer. Press to give them back their 14 days.' : 'The customer asked us to save these'}
+        className="h-8 px-2.5 rounded-lg text-[12px] font-semibold inline-flex items-center gap-1 disabled:opacity-60"
+        style={kept ? { background: '#EFF8FF', border: '1px solid #B2DDFF', color: '#175CD3' } : { background: '#FFFFFF', border: '1px solid #D4D4D4', color: '#080808' }}>
+        <KeepIcon filled={kept} />{kept ? 'Kept' : 'Keep'}
+      </button>
+      <button type="button" onClick={() => setDeleting(true)} aria-label={first.file_keep.locked ? `Delete locked: ${first.file_keep.locked}` : 'Delete these photos'}
+        title={first.file_keep.locked ? `Locked: ${first.file_keep.locked}` : 'Delete these photos'}
+        className="w-8 h-8 rounded-lg grid place-items-center"
+        style={first.file_keep.locked ? { background: '#F5F5F5', border: '1px dashed #D4D4D4', color: '#8A8A8A' } : { background: '#FFFFFF', border: '1px solid #D4D4D4', color: 'var(--text-2)' }}>
+        {first.file_keep.locked ? <LockIcon /> : <BinIcon />}
+      </button>
+      {deleting && <FilesDialog m={first} ids={files.map(x => x.id)} onClose={() => setDeleting(false)} />}
+    </>
+  )
+}
+
+// What the album's photos have in common: all kept, locked, or the day they go.
+function albumKeepInfo(ms) {
+  const files = ms.filter(x => x.media_file && x.file_keep && !x.file_keep.deleted)
+  if (!files.length) return null
+  if (files.every(x => x.file_keep.kept)) return files[0].file_keep
+  const { kept, ...rest } = files[0].file_keep        // eslint-disable-line no-unused-vars
+  return rest
+}
+
 function Album({ ms, conv, who, first, initials, theme = THEME.WHATSAPP }) {
   const [at, setAt] = useState(null)
   const [making, setMaking] = useState(false)
+  const keepInfo = albumKeepInfo(ms)
   const shown = ms.slice(0, 4)
   const more = ms.length - 4
   const ready = ms.filter(x => x.media_file)
@@ -982,14 +1023,16 @@ function Album({ ms, conv, who, first, initials, theme = THEME.WHATSAPP }) {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 px-0.5">
-            <span className="flex-1 text-xs text-[var(--text-2)]">{ms.length} photos{ready.length < ms.length ? `, ${ms.length - ready.length} still arriving` : ''}</span>
+          <div className="flex flex-wrap items-center justify-end gap-2 px-0.5">
+            <span className="flex-1 text-xs text-[var(--text-2)] whitespace-nowrap">{ms.length} photos{ready.length < ms.length ? `, ${ms.length - ready.length} still arriving` : ''}</span>
             <button type="button" onClick={makePdf} disabled={making || !ready.length}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#080808] text-white text-[12.5px] font-semibold disabled:opacity-60">
               {making && <span className="w-3 h-3 rounded-full border-2 border-white/35 border-t-white animate-spin" aria-hidden="true" />}
               {making ? 'Making the PDF…' : 'Open as one PDF'}
             </button>
+            <AlbumControls ms={ms} />
           </div>
+          {keepInfo && <div className="flex px-0.5"><KeepLine info={keepInfo} /></div>}
           <span className="self-end text-[10.5px] px-1" style={{ color: theme.meta }}>{clock(ms[ms.length - 1].created_at)}</span>
         </div>
       </div>
