@@ -22,6 +22,7 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousDa
 import client from '../../api/client'
 import { getCustomers, getLockStatus } from '../../api/bm'
 import NewJobModal from './NewJobModal'
+import QuotePanel, { QuoteCard, QuoteIcon } from './QuotePanel'
 import { useInboxCounts } from '../../hooks/useInboxBadge'
 import usePhone from '../../hooks/usePhone'
 import PhoneHeader from './PhoneHeader'
@@ -744,7 +745,7 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
           ? <img src="/octos-tile.svg" alt="" width={30} height={30} className="block rounded-full" />
           : <span className="w-[30px] h-[30px] rounded-full bg-[#080808] text-white text-[10.5px] font-bold grid place-items-center">{initials}</span>)}
       </span>
-      <div className={`max-w-[66%] min-w-0 flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`}>
+      <div className={`${m.quote ? 'max-w-[88%]' : 'max-w-[66%]'} min-w-0 flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`}>
         {first && <span className="text-[11px] font-bold px-1.5" style={{ color: theme.who }}>{who}</span>}
         <div className={`flex items-center gap-1.5 min-w-0 max-w-full ${mine ? 'flex-row-reverse' : ''}`}>
           <div className={`min-w-0 flex flex-col gap-1 ${photo ? 'p-1' : 'px-2.5 py-1.5'}`}
@@ -760,8 +761,10 @@ function Bubble({ m, who, first, initials, onReply, reports, theme = THEME.WHATS
             {photo && <Photo m={m} />}
             {photo && <PhotoControls m={m} />}
             {file && !photo && <FileCard m={m} tint="rgba(255,255,255,.75)" />}
-            {sharedLinks(text).map(url => <SharedDocCard key={url} url={url} tint="rgba(255,255,255,.75)" />)}
-            {text && <span className={`whitespace-pre-line break-words leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}><Linked text={text} /></span>}
+            {/* A quote sent from the inbox: a card that follows its order (25 Nov 2026). */}
+            {m.quote && <QuoteCard q={m.quote} body={text} />}
+            {!m.quote && sharedLinks(text).map(url => <SharedDocCard key={url} url={url} tint="rgba(255,255,255,.75)" />)}
+            {text && !m.quote && <span className={`whitespace-pre-line break-words leading-relaxed text-[13.5px] ${photo ? 'px-1.5' : ''}`}><Linked text={text} /></span>}
             <span className={`self-end text-[10.5px] flex items-center gap-1 ${photo ? 'px-1.5 pb-0.5' : ''}`} style={{ color: theme.meta }}>
               {clock(m.created_at)} <Ticks msg={m} read={theme.read} />
             </span>
@@ -1299,6 +1302,8 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
   const filePick = useRef(null)
   const pickAs = useRef(null)          // how the files being picked will go
   const [attachOpen, setAttachOpen] = useState(false)
+  // The Quote panel (25 Nov 2026): beside the chat, in place of the details.
+  const [quoting, setQuoting] = useState(false)
   const box = useRef(null)
   const [emojis, setEmojis] = useState(false)
   // Email: which messages are unfolded; the newest always is.
@@ -1465,6 +1470,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
     setPlus(false)
     if (key === 'note') setAsNote(n => !n)
     if (key === 'emoji') setEmojis(true)
+    if (key === 'quote') setQuoting(true)
   }
   const phoneComposer = (
     <div style={{ background: theme.composer.background }}>
@@ -1502,6 +1508,7 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
               <div className="absolute bottom-[46px] left-0 z-30 w-[240px] rounded-[14px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] overflow-hidden">
                 <AttachMenu phone onPick={pick} className="p-1.5 border-b border-black/[0.07]" />
                 {[
+                  ['quote', <QuoteIcon key="q" size={19} />, 'Quote'],
                   ['note', <I.lock key="l" size={19} />, asNote ? 'Reply to the customer' : 'Note, staff only'],
                   ['emoji', <I.smile key="s" size={19} />, 'Emoji'],
                 ].map(([key, icon, label], i) => (
@@ -1658,6 +1665,13 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
                     className="absolute bottom-[46px] left-0 z-30 w-[330px] p-1.5 rounded-[14px] border border-[var(--border)] bg-white shadow-xl" />
                 )}
               </div>
+              {whatsapp && !asNote && (
+                <button type="button" onClick={() => { setQuoting(q => !q); setAttachOpen(false); setEmojis(false) }}
+                  aria-expanded={quoting} title="Build a quote and send it here"
+                  className={`h-[38px] px-3 shrink-0 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-bold ${quoting ? 'border-[1.5px] border-[#080808] bg-[#F5F5F5] text-[#080808]' : 'border border-[var(--border)] bg-white text-[var(--text-2)]'}`}>
+                  <QuoteIcon size={16} />Quote
+                </button>
+              )}
               <div className="relative">
                 <button type="button" onClick={() => setEmojis(v => !v)} aria-label="Add an emoji" title="Add an emoji" aria-expanded={emojis}
                   className="w-[38px] h-[38px] shrink-0 rounded-lg border border-[var(--border)] bg-white grid place-items-center text-[var(--text-2)]"><I.smile size={18} /></button>
@@ -1689,7 +1703,14 @@ function Thread({ convId, onBack, panel, setPanel, onApproved, phone = false }) 
         )}
       </section>
 
-      {panel && (
+      {quoting && (
+        <div className={phone ? 'fixed inset-0 z-[60] flex bg-white' : wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}
+          style={phone ? { paddingTop: 'env(safe-area-inset-top)' } : undefined}>
+          <QuotePanel conv={conv} name={nameOf(conv)} messages={messages} phone={phone}
+            onClose={() => setQuoting(false)} onSent={() => { setQuoting(false); refresh() }} />
+        </div>
+      )}
+      {panel && !quoting && (
         <div className={wide ? 'flex' : 'absolute right-0 top-0 bottom-0 z-30 flex shadow-2xl'}
           style={phone ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', background: 'var(--panel)' } : undefined}>
           <Panel conv={conv} files={files} onClose={wide ? null : () => setPanel(false)}
