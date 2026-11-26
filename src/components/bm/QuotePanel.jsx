@@ -118,6 +118,7 @@ function SpecField({ field, value, onChange, placeholder }) {
   return (
     <label className={LABEL} htmlFor={id}>{field.label}
       <input id={id} type={number ? 'number' : 'text'} inputMode={number ? 'decimal' : undefined} min={number ? (field.min ?? 1) : undefined}
+        step={['width_in', 'height_in'].includes(field.key) ? 'any' : undefined}
         value={value ?? ''} placeholder={placeholder} onChange={e => onChange(e.target.value)} className={FIELD} />
     </label>
   )

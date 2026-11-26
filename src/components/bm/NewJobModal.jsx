@@ -122,10 +122,17 @@ const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.
 
 // A number typed straight in. Raw while typing (clamping each keystroke
 // turned 168 into 6), settled on leaving.
-function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter, stepper = false }) {
+// decimal: a size as measured, 2.5 or 36.75 (26 Nov 2026). It was cut to a
+// whole number as it was typed; only the money is rounded, by the server.
+function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter, stepper = false, decimal = false }) {
+  const parse = v => (decimal ? Math.round(parseFloat(v) * 100) / 100 : parseInt(v))
+  // While typing a decimal stays as typed: "2." would lose its point.
+  const typed = e => (e.target.value === '' ? '' : decimal ? e.target.value : parseInt(e.target.value))
+  const settle = e => onCommit(Math.max(min, parse(e.target.value) || min))
+  const mode = decimal ? 'decimal' : 'numeric'
   // On a phone (18 Nov 2026): − and + either side, big enough for a thumb.
   if (stepper) {
-    const n = parseInt(value) || min
+    const n = parse(value) || min
     const step = d => { const v = Math.max(min, max ? Math.min(max, n + d) : n + d); onChange(v); onCommit(v) }
     return (
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -133,9 +140,9 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
         <div className="flex items-center h-[40px] rounded-[12px] bg-[#F2F2F4] overflow-hidden shrink-0">
           <button type="button" onClick={() => step(-1)} disabled={disabled || n <= min} aria-label={`Fewer: ${label}`}
                   className="w-11 h-full grid place-items-center text-[#1C1C1E] disabled:text-black/20"><Icon kind="minus" size={18} /></button>
-          <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
-                 onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
-                 onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
+          <input id={id} type="number" inputMode={mode} step={decimal ? 'any' : undefined} min={min} max={max} disabled={disabled} value={value}
+                 onChange={e => onChange(typed(e))}
+                 onBlur={settle}
                  className="w-[56px] h-full text-center text-[17px] font-semibold tabular-nums bg-transparent outline-none
                             disabled:text-[#8A8A8E] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
           <button type="button" onClick={() => step(1)} disabled={disabled || (max && n >= max)} aria-label={`More: ${label}`}
@@ -147,9 +154,9 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
   return (
     <div className="flex flex-col items-center">
       <label htmlFor={id} className={LABEL}>{label}</label>
-      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
-             onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
-             onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
+      <input id={id} type="number" inputMode={mode} step={decimal ? 'any' : undefined} min={min} max={max} disabled={disabled} value={value}
+             onChange={e => onChange(typed(e))}
+             onBlur={settle}
              onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
              className="w-[110px] h-9 rounded-lg border border-black/20 bg-white text-center text-sm font-semibold outline-none
                         focus:border-zinc-900 disabled:bg-black/[0.03] disabled:text-[var(--text-2)]
@@ -943,7 +950,8 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     return (
       <NumberField key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
                label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`} disabled={locked}
-               onChange={put} onCommit={put} onEnter={addToCart} stepper={phone} />
+               onChange={put} onCommit={put} onEnter={addToCart} stepper={phone}
+               decimal={['width_in', 'height_in', 'width_ft', 'height_ft'].includes(field.key)} />
     )
   }
 
