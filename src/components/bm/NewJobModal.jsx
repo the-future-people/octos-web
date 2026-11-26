@@ -25,6 +25,7 @@ import JobSuccessOverlay from '../shared/JobSuccessOverlay'
 import CounterArtwork from '../shared/CounterArtwork'
 import NewCustomerModal from './NewCustomerModal'
 import client from '../../api/client'
+import { markHere, money } from '../../api/desk'
 
 const fmt = n => `GHS ${parseFloat(n || 0).toFixed(2)}`
 const TYPES = [['INSTANT', 'Instant', 'bolt'], ['PRODUCTION', 'Production', 'layers'], ['DESIGN', 'Design', 'pen']]
@@ -122,17 +123,10 @@ const nameOf = c => (c?.customer_type !== 'INDIVIDUAL' ? (c?.company_name || c?.
 
 // A number typed straight in. Raw while typing (clamping each keystroke
 // turned 168 into 6), settled on leaving.
-// decimal: a size as measured, 2.5 or 36.75 (26 Nov 2026). It was cut to a
-// whole number as it was typed; only the money is rounded, by the server.
-function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter, stepper = false, decimal = false }) {
-  const parse = v => (decimal ? Math.round(parseFloat(v) * 100) / 100 : parseInt(v))
-  // While typing a decimal stays as typed: "2." would lose its point.
-  const typed = e => (e.target.value === '' ? '' : decimal ? e.target.value : parseInt(e.target.value))
-  const settle = e => onCommit(Math.max(min, parse(e.target.value) || min))
-  const mode = decimal ? 'decimal' : 'numeric'
+function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCommit, onEnter, stepper = false }) {
   // On a phone (18 Nov 2026): − and + either side, big enough for a thumb.
   if (stepper) {
-    const n = parse(value) || min
+    const n = parseInt(value) || min
     const step = d => { const v = Math.max(min, max ? Math.min(max, n + d) : n + d); onChange(v); onCommit(v) }
     return (
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -140,9 +134,9 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
         <div className="flex items-center h-[40px] rounded-[12px] bg-[#F2F2F4] overflow-hidden shrink-0">
           <button type="button" onClick={() => step(-1)} disabled={disabled || n <= min} aria-label={`Fewer: ${label}`}
                   className="w-11 h-full grid place-items-center text-[#1C1C1E] disabled:text-black/20"><Icon kind="minus" size={18} /></button>
-          <input id={id} type="number" inputMode={mode} step={decimal ? 'any' : undefined} min={min} max={max} disabled={disabled} value={value}
-                 onChange={e => onChange(typed(e))}
-                 onBlur={settle}
+          <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
+                 onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+                 onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
                  className="w-[56px] h-full text-center text-[17px] font-semibold tabular-nums bg-transparent outline-none
                             disabled:text-[#8A8A8E] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
           <button type="button" onClick={() => step(1)} disabled={disabled || (max && n >= max)} aria-label={`More: ${label}`}
@@ -154,9 +148,9 @@ function NumberField({ id, label, value, min = 1, max, disabled, onChange, onCom
   return (
     <div className="flex flex-col items-center">
       <label htmlFor={id} className={LABEL}>{label}</label>
-      <input id={id} type="number" inputMode={mode} step={decimal ? 'any' : undefined} min={min} max={max} disabled={disabled} value={value}
-             onChange={e => onChange(typed(e))}
-             onBlur={settle}
+      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value}
+             onChange={e => onChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+             onBlur={e => onCommit(Math.max(min, parseInt(e.target.value) || min))}
              onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
              className="w-[110px] h-9 rounded-lg border border-black/20 bg-white text-center text-sm font-semibold outline-none
                         focus:border-zinc-900 disabled:bg-black/[0.03] disabled:text-[var(--text-2)]
@@ -610,6 +604,10 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     onSuccess: res => {
       invalidateAfterJobCreated(queryClient)
       setSuccessJob(res.data?.job_number || res.data?.id || '—')
+      // The waiting counter order this job replaces: cancelled now it's saved.
+      replacing.forEach(id => client.post(`/api/v1/jobs/${id}/desk/replace/`)
+        .then(() => queryClient.invalidateQueries({ queryKey: ['deskQueue'] })).catch(() => {}))
+      setReplacing([])
       // Recorded from a chat: the server linked it as it was made (17 Nov
       // 2026), so the chat shows it and the receipt can reach the customer
       // there, even one with no number.
@@ -628,6 +626,57 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
       setError(Object.values(d).flat().find(v => typeof v === 'string') || 'That job didn’t save.')
     },
   })
+
+  // Their order already waiting at the counter (26 Nov 2026): a second job
+  // was made for Fiifi's files while his pickup code 5039 still waited.
+  // Use it, or let this new job replace it once it's saved.
+  const { data: waitingAt = [] } = useQuery({
+    queryKey: ['counterWaiting', customer?.id],
+    queryFn: () => client.get('/api/v1/jobs/desk/waiting-for/', { params: { customer: customer.id } }).then(r => r.data.jobs || []),
+    enabled: !!customer?.id && !proforma,
+    staleTime: 15_000,
+  })
+  const [replacing, setReplacing] = useState([])
+  const [usingCode, setUsingCode] = useState(null)
+  const pickWaiting = job => {
+    setUsingCode(job.id)
+    markHere(job.id)
+      .then(() => { queryClient.invalidateQueries({ queryKey: ['deskQueue'] }); onClose() })
+      .catch(err => { setUsingCode(null); setError(err.response?.data?.detail || 'Could not open that order. Try again.') })
+  }
+  const waitingNote = waitingAt.length > 0 && (
+    <div className="mb-2 flex flex-col gap-2">
+      {waitingAt.map(job => {
+        const later = replacing.includes(job.id)
+        return (
+          <div key={job.id} role="status" className="rounded-xl border border-[#F1DFC0] bg-[#FFF8EC] px-3.5 py-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[14px] font-bold text-[#6B4500]">
+                {later ? `Code ${job.counter.code} will be cancelled when this job is saved`
+                       : `${(job.customer || 'They').split(' ')[0]} has an order waiting at the counter · code ${job.counter.code} · ${money(job.counter.owes)}`}
+              </span>
+              <span className="text-[12.5px] text-[#8A5A00]">{job.title}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {later ? (
+                <button type="button" onClick={() => setReplacing(r => r.filter(id => id !== job.id))}
+                        className="h-10 px-3.5 rounded-lg border border-[#E2C894] bg-white text-[14px] font-semibold">Undo</button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => pickWaiting(job)} disabled={usingCode === job.id}
+                          className="h-10 px-3.5 rounded-lg bg-zinc-900 text-white text-[14px] font-bold disabled:opacity-50">
+                    {usingCode === job.id ? 'Opening…' : `Use code ${job.counter.code}`}
+                  </button>
+                  <button type="button" onClick={() => setReplacing(r => [...r, job.id])}
+                          className="h-10 px-3.5 rounded-lg border border-[#E2C894] bg-white text-[14px] font-semibold">This new job replaces it</button>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 
   const isPending = creatingJob || savingProforma || savingRevision
   const quoting = cart.some(i => i._quoting)
@@ -788,6 +837,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         <label htmlFor="job-customer" className="text-sm font-bold">{revise ? 'For' : proforma ? 'Who is this proforma for?' : 'Who is this job for?'}</label>
         {!customer && customerTag}
       </div>
+      {waitingNote}
       {customer ? (
         <div className="flex flex-wrap items-center gap-3 px-3 py-2 rounded-xl border-2 border-zinc-900 bg-white">
           <span className="w-8 h-8 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-black shrink-0">
@@ -950,8 +1000,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
     return (
       <NumberField key={field.key} id={`spec-${field.key}`} value={value} min={field.min ?? 1} max={field.max}
                label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`} disabled={locked}
-               onChange={put} onCommit={put} onEnter={addToCart} stepper={phone}
-               decimal={['width_in', 'height_in', 'width_ft', 'height_ft'].includes(field.key)} />
+               onChange={put} onCommit={put} onEnter={addToCart} stepper={phone} />
     )
   }
 
@@ -1365,6 +1414,7 @@ export default function NewJobModal({ onClose, onSuccess, late = false, held = f
         !customer && <span className={`text-[12.5px] ${needed || proforma ? 'text-[#D70015] font-semibold' : 'text-[#8A8A8E]'}`}>
           {proforma ? 'Needed for a proforma' : needed ? 'Needed for the ready message' : 'Optional · blank is a walk-in'}
         </span>)}
+      {waitingNote}
       <div className={`${card} overflow-hidden`}>
         {customer ? (
           <>
